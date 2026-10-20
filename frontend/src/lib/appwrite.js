@@ -134,24 +134,19 @@ export const INITIAL_SETTINGS = {
   instagram: "@ATMIYA_DOSA_HUB"
 };
 
-export const INITIAL_TABLES = [
-  { id: 'T01', number: 'T01', capacity: 4, zone: 'Main Hall', status: 'occupied', current_order_id: '#ORD1041', timing: '25m' },
-  { id: 'T02', number: 'T02', capacity: 2, zone: 'Main Hall', status: 'occupied', current_order_id: '#ORD1045', timing: '42m' },
-  { id: 'T03', number: 'T03', capacity: 4, zone: 'Patio Garden', status: 'available', current_order_id: null, timing: null },
-  { id: 'T04', number: 'T04', capacity: 4, zone: 'AC Section', status: 'occupied', current_order_id: '#ORD1048', timing: '15m' },
-  { id: 'T05', number: 'T05', capacity: 6, zone: 'Family Section', status: 'available', current_order_id: null, timing: null },
-  { id: 'T06', number: 'T06', capacity: 2, zone: 'Main Hall', status: 'occupied', current_order_id: '#ORD1043', timing: '30m' },
-  { id: 'T07', number: 'T07', capacity: 4, zone: 'AC Section', status: 'occupied', current_order_id: '#ORD1047', timing: '18m' },
-  { id: 'T08', number: 'T08', capacity: 4, zone: 'Patio Garden', status: 'available', current_order_id: null, timing: null },
-  { id: 'T09', number: 'T09', capacity: 4, zone: 'Main Hall', status: 'occupied', current_order_id: '#ORD1044', timing: '36m' },
-  { id: 'T10', number: 'T10', capacity: 6, zone: 'Family Section', status: 'available', current_order_id: null, timing: null },
-  { id: 'T11', number: 'T11', capacity: 2, zone: 'AC Section', status: 'occupied', current_order_id: '#ORD1046', timing: '10m' },
-  { id: 'T12', number: 'T12', capacity: 4, zone: 'Patio Garden', status: 'available', current_order_id: null, timing: null },
-  { id: 'T13', number: 'T13', capacity: 4, zone: 'Main Hall', status: 'available', current_order_id: null, timing: null },
-  { id: 'T14', number: 'T14', capacity: 4, zone: 'AC Section', status: 'available', current_order_id: null, timing: null },
-  { id: 'T15', number: 'T15', capacity: 6, zone: 'Family Section', status: 'available', current_order_id: null, timing: null },
-  { id: 'T16', number: 'T16', capacity: 4, zone: 'Main Hall', status: 'occupied', current_order_id: '#ORD1042', timing: '50m' }
-];
+export const INITIAL_TABLES = Array.from({ length: 16 }, (_, i) => {
+  const num = (i + 1).toString().padStart(2, '0');
+  const zones = ['Main Hall', 'AC Section', 'Family Section', 'Patio Garden'];
+  return {
+    id: `T${num}`,
+    number: `T${num}`,
+    capacity: (i % 3 === 0) ? 6 : (i % 2 === 0 ? 2 : 4),
+    zone: zones[i % zones.length],
+    status: 'available',
+    current_order_id: null,
+    timing: null
+  };
+});
 
 import { AUTHENTIC_CATEGORIES, AUTHENTIC_MENU_CARD_ITEMS } from './authenticMenuData';
 
@@ -176,259 +171,11 @@ export const clearMenuItems = () => {
   return [];
 };
 
+// Real Orders (Cleaned of all demo data - only real orders from Supabase/QR)
+export const INITIAL_ORDERS = [];
 
-// Real Orders with Payment Logic & Wait Time (Sections 2, 7 & 8 of Admin.txt)
-export const INITIAL_ORDERS = [
-  {
-    id: '#ORD1048',
-    table_number: 'T04',
-    customer_name: 'Rahul Sharma',
-    customer_phone: '9825014820',
-    order_source: 'Dine-In',
-    items: [
-      { id: 'm_mysore_masala', name: 'Mysore Masala Dosa', price: 130, qty: 2 },
-      { id: 'm_coke', name: 'Cold Drink', price: 40, qty: 1 }
-    ],
-    items_summary: '2x Mysore Masala, 1x Cold Drink',
-    subtotal: 300,
-    tax: 15,
-    discount: 0,
-    total_amount: 315,
-    status: 'Preparing',
-    tab_type: 'ongoing',
-    time: '11:32 AM',
-    placed_at: '2026-10-14T11:32:00Z',
-    payment_mode: 'UPI',
-    payment_status: 'Paid',
-    payment_verified_online: true,
-    paid_collected_by: 'UPI Gateway Direct',
-    cancel_reason: null
-  },
-  {
-    id: '#ORD1047',
-    table_number: 'T07',
-    customer_name: 'Anjali Patel',
-    customer_phone: '9898023456',
-    order_source: 'Dine-In',
-    items: [
-      { id: 'm_cheese_mysore', name: 'Cheese Mysore Dosa', price: 160, qty: 1 },
-      { id: 'm_plain_paper', name: 'Plain Paper Dosa', price: 60, qty: 2 }
-    ],
-    items_summary: '1x Cheese Mysore, 2x Plain Paper',
-    subtotal: 280,
-    tax: 14,
-    discount: 50,
-    total_amount: 244,
-    status: 'Ready',
-    tab_type: 'ongoing',
-    time: '11:18 AM',
-    placed_at: '2026-10-14T11:18:00Z',
-    payment_mode: 'UPI',
-    payment_status: 'Paid',
-    payment_verified_online: true,
-    paid_collected_by: 'UPI Gateway Direct',
-    cancel_reason: null
-  },
-  {
-    id: '#ORD1046',
-    table_number: 'T11',
-    customer_name: 'Suresh Mehta',
-    customer_phone: '9924577889',
-    order_source: 'Dine-In',
-    items: [
-      { id: 'm_gotala_dosa', name: 'Surti Gotala Dosa', price: 220, qty: 1 }
-    ],
-    items_summary: '1x Surti Gotala Dosa',
-    subtotal: 220,
-    tax: 11,
-    discount: 0,
-    total_amount: 231,
-    status: 'Cooking',
-    tab_type: 'ongoing',
-    time: '10:56 AM',
-    placed_at: '2026-10-14T10:56:00Z',
-    payment_mode: 'Cash',
-    payment_status: 'Pending',
-    payment_verified_online: false,
-    paid_collected_by: null,
-    cancel_reason: null
-  },
-  {
-    id: '#ORD1049',
-    table_number: 'Online-Zomato',
-    customer_name: 'Priya Shah (Zomato #Z8941)',
-    order_source: 'Zomato',
-    items: [
-      { id: 'm_bahubali_dosa', name: 'Bahubali Dosa', price: 298, qty: 1 },
-      { id: 'm_butter_pav_bhaji', name: 'Amul Butter Pav Bhaji', price: 80, qty: 1 }
-    ],
-    items_summary: '1x Bahubali Dosa, 1x Butter Pav Bhaji',
-    subtotal: 378,
-    tax: 19,
-    discount: 0,
-    total_amount: 397,
-    status: 'Cooking',
-    tab_type: 'ongoing',
-    time: '11:40 AM',
-    placed_at: '2026-10-14T11:40:00Z',
-    payment_mode: 'Online (Prepaid)',
-    payment_status: 'Paid',
-    payment_verified_online: true,
-    paid_collected_by: 'Zomato Merchant Settle',
-    cancel_reason: null
-  },
-  {
-    id: '#ORD1050',
-    table_number: 'Online-Swiggy',
-    customer_name: 'Ketan Patel (Swiggy #S204)',
-    order_source: 'Swiggy',
-    items: [
-      { id: 'm_paneer_mysore', name: 'Paneer Mysore Dosa', price: 128, qty: 2 }
-    ],
-    items_summary: '2x Paneer Mysore Dosa',
-    subtotal: 256,
-    tax: 13,
-    discount: 0,
-    total_amount: 269,
-    status: 'Placed',
-    tab_type: 'ongoing',
-    time: '11:44 AM',
-    placed_at: '2026-10-14T11:44:00Z',
-    payment_mode: 'Online (Prepaid)',
-    payment_status: 'Paid',
-    payment_verified_online: true,
-    paid_collected_by: 'Swiggy Pay',
-    cancel_reason: null
-  },
-  {
-    id: '#ORD1045',
-    table_number: 'T02',
-    customer_name: 'Vikram Joshi',
-    customer_phone: '9712344556',
-    order_source: 'Dine-In',
-    items: [
-      { id: 'm_mysore_masala', name: 'Mysore Masala Dosa', price: 130, qty: 2 },
-      { id: 'm_butter_pav_bhaji', name: 'Amul Butter Pav Bhaji', price: 80, qty: 1 }
-    ],
-    items_summary: '2x Mysore Masala, 1x Pav Bhaji',
-    subtotal: 340,
-    tax: 17,
-    discount: 0,
-    total_amount: 357,
-    status: 'Served',
-    tab_type: 'ongoing',
-    time: '10:42 AM',
-    placed_at: '2026-10-14T10:42:00Z',
-    payment_mode: 'Cash',
-    payment_status: 'Paid',
-    payment_verified_online: false,
-    paid_collected_by: 'Anjali Patel (Cashier)',
-    cancel_reason: null
-  },
-  {
-    id: '#ORD1043',
-    table_number: 'T06',
-    customer_name: 'Kiran Shah',
-    customer_phone: '9822099881',
-    order_source: 'Dine-In',
-    items: [
-      { id: 'm_cheese_bhurji_mysore', name: 'Cheese Bhurji Mysore', price: 230, qty: 2 }
-    ],
-    items_summary: '2x Cheese Bhurji Mysore',
-    subtotal: 460,
-    tax: 23,
-    discount: 20,
-    total_amount: 463,
-    status: 'Completed',
-    tab_type: 'completed',
-    time: '09:55 AM',
-    placed_at: '2026-10-14T09:55:00Z',
-    payment_mode: 'UPI',
-    payment_status: 'Paid',
-    payment_verified_online: true,
-    paid_collected_by: 'UPI Gateway Direct',
-    cancel_reason: null
-  }
-];
-
-// Immutable Activity Audit Log (Section 1.2 of Admin.txt)
-export const INITIAL_ACTIVITY = [
-  { 
-    id: 'act1', 
-    time: '11:42 AM', 
-    timestamp: '2026-10-14T11:42:00Z',
-    type: 'payment', 
-    employeeName: 'Anjali Patel',
-    employeeRole: 'Cashier & POS Lead',
-    tableNumber: 'T02',
-    actionType: 'PAYMENT_COLLECTED_CASH',
-    amount: 357,
-    paymentMethod: 'Cash',
-    details: 'Cash payment of ₹357 for Table 02 manually collected & confirmed by Anjali Patel',
-    text: 'Cash payment of ₹357 for Table 02 manually collected & confirmed by Anjali Patel',
-    color: 'emerald'
-  },
-  { 
-    id: 'act2', 
-    time: '11:35 AM', 
-    timestamp: '2026-10-14T11:35:00Z',
-    type: 'order', 
-    employeeName: 'System / QR Self-Order',
-    employeeRole: 'Guest Service',
-    tableNumber: 'T04',
-    actionType: 'ORDER_PLACED_QR',
-    amount: 315,
-    paymentMethod: 'UPI',
-    details: 'Order #ORD1048 placed via QR at Table 04 by Rahul Sharma (UPI Paid ₹315)',
-    text: 'Order #ORD1048 placed via QR at Table 04 by Rahul Sharma (UPI Paid ₹315)',
-    color: 'orange'
-  },
-  { 
-    id: 'act3', 
-    time: '11:20 AM', 
-    timestamp: '2026-10-14T11:20:00Z',
-    type: 'staff', 
-    employeeName: 'Darshit Rana',
-    employeeRole: 'Admin / Owner',
-    tableNumber: 'System',
-    actionType: 'CREDENTIAL_GENERATED',
-    amount: null,
-    paymentMethod: null,
-    details: 'Generated new staff login credentials for Anjali Patel (Role: Cashier)',
-    text: 'Generated new staff login credentials for Anjali Patel (Role: Cashier)',
-    color: 'indigo'
-  },
-  { 
-    id: 'act4', 
-    time: '11:18 AM', 
-    timestamp: '2026-10-14T11:18:00Z',
-    type: 'kitchen', 
-    employeeName: 'Amit Kumar',
-    employeeRole: 'Head Chef',
-    tableNumber: 'T07',
-    actionType: 'KDS_ORDER_READY',
-    amount: null,
-    paymentMethod: null,
-    details: 'Order #ORD1047 marked as Ready for pickup by Amit Kumar',
-    text: 'Order #ORD1047 marked as Ready for pickup by Amit Kumar',
-    color: 'amber'
-  },
-  { 
-    id: 'act5', 
-    time: '11:05 AM', 
-    timestamp: '2026-10-14T11:05:00Z',
-    type: 'table', 
-    employeeName: 'Riya Patel',
-    employeeRole: 'Senior Waiter',
-    tableNumber: 'T09',
-    actionType: 'TABLE_SERVED',
-    amount: null,
-    paymentMethod: null,
-    details: 'Table 09 food served and guest dining session initiated by Riya Patel',
-    text: 'Table 09 food served and guest dining session initiated by Riya Patel',
-    color: 'blue'
-  }
-];
+// Immutable Activity Audit Log (Real staff/order actions)
+export const INITIAL_ACTIVITY = [];
 
 // Staff Credentials with creation & deletion support (Section 1 of Admin.txt)
 export const INITIAL_EMPLOYEES = [
@@ -459,80 +206,11 @@ export const INITIAL_INVENTORY = [
   { id: 'inv_9', name: 'Toor Dal Sambhar Base', category: 'Gravies', currentStock: 15, unit: 'liters', minThreshold: 6, costPerUnit: 55, supplier: 'Kitchen Base Batch' }
 ];
 
-// Live Table Service Requests (Call Waiter, Water, Bill)
-export const INITIAL_SERVICE_CALLS = [
-  { id: 'srv_1', tableNumber: 'T02', type: 'WATER', label: 'Extra Water Jar', time: '11:43 AM', status: 'pending' },
-  { id: 'srv_2', tableNumber: 'T07', type: 'BILL', label: 'Bill / Payment Settle', time: '11:45 AM', status: 'pending' }
-];
+// Live Table Service Requests (Cleaned of demo requests)
+export const INITIAL_SERVICE_CALLS = [];
 
-// Permanent Customer Relationship Management (CRM) Database
-export const INITIAL_CUSTOMERS = [
-  {
-    id: 'cust_01',
-    name: 'Rahul Sharma',
-    phone: '9825014820',
-    tier: 'VIP Gold',
-    visits: 4,
-    total_spent: 1260,
-    loyalty_points: 126,
-    last_table: 'T04',
-    last_visit: 'Today, 11:32 AM',
-    favorite_dish: 'Mysore Masala Dosa',
-    notes: 'Regular guest, prefers extra crisp dosa'
-  },
-  {
-    id: 'cust_02',
-    name: 'Anjali Patel',
-    phone: '9898023456',
-    tier: 'VIP Platinum',
-    visits: 7,
-    total_spent: 2450,
-    loyalty_points: 245,
-    last_table: 'T07',
-    last_visit: 'Today, 11:18 AM',
-    favorite_dish: 'Cheese Mysore Dosa',
-    notes: 'Loyal family diner, likes mild sambhar'
-  },
-  {
-    id: 'cust_03',
-    name: 'Suresh Mehta',
-    phone: '9924577889',
-    tier: 'Silver Member',
-    visits: 3,
-    total_spent: 780,
-    loyalty_points: 78,
-    last_table: 'T11',
-    last_visit: 'Today, 10:56 AM',
-    favorite_dish: 'Surti Gotala Dosa',
-    notes: 'Prefers Jain food options'
-  },
-  {
-    id: 'cust_04',
-    name: 'Vikram Joshi',
-    phone: '9712344556',
-    tier: 'VIP Gold',
-    visits: 5,
-    total_spent: 1850,
-    loyalty_points: 185,
-    last_table: 'T02',
-    last_visit: 'Today, 10:42 AM',
-    favorite_dish: 'Amul Butter Pav Bhaji',
-    notes: 'Daily luncheon diner'
-  },
-  {
-    id: 'cust_05',
-    name: 'Kiran Shah',
-    phone: '9822099881',
-    tier: 'Silver Member',
-    visits: 2,
-    total_spent: 920,
-    loyalty_points: 92,
-    last_table: 'T06',
-    last_visit: 'Today, 09:55 AM',
-    favorite_dish: 'Cheese Bhurji Mysore',
-    notes: 'Enjoys cheese items'
-  }
-];
+// Permanent Customer Relationship Management (CRM) Database (Real guests only)
+export const INITIAL_CUSTOMERS = [];
 
 // Permanent Customer Persistence & Relations Engine
 export const saveCustomerProfile = ({ name, phone, tableNumber, orderId, orderTotal = 0, items = [], paymentMode = 'UPI' }) => {

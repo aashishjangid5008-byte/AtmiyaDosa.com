@@ -1,7 +1,7 @@
 import React from 'react';
 import { BarChart3, Printer, FileText, CheckCircle2, IndianRupee, PieChart, ShieldCheck } from 'lucide-react';
 
-export default function ReportsAnalytics({ orders }) {
+export default function ReportsAnalytics({ orders = [] }) {
   const grossSales = orders.reduce((sum, o) => sum + (o.total || o.total_amount || 0), 0);
   const totalTax = orders.reduce((sum, o) => sum + (o.tax || 0), 0);
   const totalDiscount = orders.reduce((sum, o) => sum + (o.discount || 0), 0);
@@ -9,6 +9,28 @@ export default function ReportsAnalytics({ orders }) {
 
   const cgst = totalTax / 2;
   const sgst = totalTax / 2;
+
+  // Real Tender Mode Distribution
+  const upiOrders = orders.filter(o => {
+    const m = (o.payment_mode || o.payment_method || '').toUpperCase();
+    return m.includes('UPI') || m.includes('ONLINE');
+  });
+  const cardOrders = orders.filter(o => {
+    const m = (o.payment_mode || o.payment_method || '').toUpperCase();
+    return m.includes('CARD');
+  });
+  const cashOrders = orders.filter(o => {
+    const m = (o.payment_mode || o.payment_method || '').toUpperCase();
+    return m.includes('CASH') || m.includes('COD') || (!m.includes('UPI') && !m.includes('CARD') && !m.includes('ONLINE'));
+  });
+
+  const upiSales = upiOrders.reduce((sum, o) => sum + (o.total || o.total_amount || 0), 0);
+  const cardSales = cardOrders.reduce((sum, o) => sum + (o.total || o.total_amount || 0), 0);
+  const cashSales = cashOrders.reduce((sum, o) => sum + (o.total || o.total_amount || 0), 0);
+
+  const upiPercent = grossSales > 0 ? Math.round((upiSales / grossSales) * 100) : 0;
+  const cardPercent = grossSales > 0 ? Math.round((cardSales / grossSales) * 100) : 0;
+  const cashPercent = grossSales > 0 ? Math.max(0, 100 - upiPercent - cardPercent) : 0;
 
   const handlePrintZReport = () => {
     window.print();
@@ -85,30 +107,30 @@ export default function ReportsAnalytics({ orders }) {
             <div>
               <div className="flex justify-between text-xs font-bold mb-1">
                 <span className="text-slate-800">UPI / QR Dynamic Intent (PhonePe, GPay, Paytm)</span>
-                <span className="font-mono text-slate-950 font-black">58% (₹{(grossSales * 0.58).toFixed(2)})</span>
+                <span className="font-mono text-slate-950 font-black">{upiPercent}% (₹{upiSales.toFixed(2)})</span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-                <div className="bg-emerald-500 h-3 rounded-full" style={{ width: '58%' }}></div>
+                <div className="bg-emerald-500 h-3 rounded-full transition-all duration-500" style={{ width: `${upiPercent}%` }}></div>
               </div>
             </div>
 
             <div>
               <div className="flex justify-between text-xs font-bold mb-1">
                 <span className="text-slate-800">Credit & Debit Cards (PineLabs / EDC)</span>
-                <span className="font-mono text-slate-950 font-black">32% (₹{(grossSales * 0.32).toFixed(2)})</span>
+                <span className="font-mono text-slate-950 font-black">{cardPercent}% (₹{cardSales.toFixed(2)})</span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-                <div className="bg-amber-500 h-3 rounded-full" style={{ width: '32%' }}></div>
+                <div className="bg-amber-500 h-3 rounded-full transition-all duration-500" style={{ width: `${cardPercent}%` }}></div>
               </div>
             </div>
 
             <div>
               <div className="flex justify-between text-xs font-bold mb-1">
-                <span className="text-slate-800">Cash Register In-Hand</span>
-                <span className="font-mono text-slate-950 font-black">10% (₹{(grossSales * 0.10).toFixed(2)})</span>
+                <span className="text-slate-800">Cash Register In-Hand (COD / Counter)</span>
+                <span className="font-mono text-slate-950 font-black">{cashPercent}% (₹{cashSales.toFixed(2)})</span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
-                <div className="bg-blue-500 h-3 rounded-full" style={{ width: '10%' }}></div>
+                <div className="bg-blue-500 h-3 rounded-full transition-all duration-500" style={{ width: `${cashPercent}%` }}></div>
               </div>
             </div>
           </div>

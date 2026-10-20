@@ -19,18 +19,37 @@ import {
 } from 'lucide-react';
 import { playSound } from '../../lib/sound';
 import { getTranslation } from '../../lib/translations';
+import { requestNotificationPermission, speakOrderAlert } from '../../lib/notifications';
 
 export default function KitchenPanelView({ orders, onUpdateStatus, currentLang }) {
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [stationFilter, setStationFilter] = useState('All');
   const [checkedItems, setCheckedItems] = useState({}); // { `${orderId}_${idx}`: true }
   const [showRecallModal, setShowRecallModal] = useState(false);
+  const [notificationStatus, setNotificationStatus] = useState(() => {
+    return 'Notification' in window ? Notification.permission : 'unsupported';
+  });
 
   const t = (key) => getTranslation(currentLang, key);
 
-  // Active cooking tickets vs completed tickets
-  const activeOrders = orders.filter(o => o.status === 'Preparing' || o.status === 'Cooking');
-  const bumpedOrders = orders.filter(o => o.status === 'Ready' || o.status === 'Served');
+  // Active cooking tickets vs completed tickets (Now includes PLACED orders so incoming orders show immediately!)
+  const activeOrders = orders.filter(o => {
+    const s = (o.status || '').toLowerCase();
+    return s === 'placed' || s === 'preparing' || s === 'cooking';
+  });
+  const bumpedOrders = orders.filter(o => {
+    const s = (o.status || '').toLowerCase();
+    return s === 'ready' || s === 'served' || s === 'completed';
+  });
+
+  const handleEnableNotifications = async () => {
+    const perm = await requestNotificationPermission();
+    setNotificationStatus(perm);
+    if (perm === 'granted') {
+      speakOrderAlert('Kitchen Alert Enabled');
+      playSound('success');
+    }
+  };
 
   // Categorize order by kitchen station based on items
   const matchesStation = (order, station) => {
@@ -56,7 +75,7 @@ export default function KitchenPanelView({ orders, onUpdateStatus, currentLang }
       const diff = Math.floor((Date.now() - new Date(placedAt).getTime()) / 60000);
       return Math.max(1, diff);
     }
-    return 12; // fallback average
+    return 1;
   };
 
   const toggleItemReady = (orderId, idx) => {
@@ -85,7 +104,7 @@ export default function KitchenPanelView({ orders, onUpdateStatus, currentLang }
       {/* 1. TOP HEADER & TELEMETRY */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-3xl bg-slate-900 text-white border border-slate-800 shadow-xl">
         <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 rounded-2xl bg-orange-500 text-white flex items-center justify-center font-heading shadow-md">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-heading shadow-md">
             <ChefHat className="w-6 h-6" />
           </div>
           <div>
@@ -94,20 +113,34 @@ export default function KitchenPanelView({ orders, onUpdateStatus, currentLang }
                 Kitchen Display System (KDS)
               </h2>
               <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px] font-mono border border-emerald-500/30">
-                LIVE TAWA SYNC
+                LIVE REAL-TIME SYNC
               </span>
             </div>
             <p className="text-xs text-slate-400 font-medium">
-              Real-time digital ticket dispatch, station routing, item-level prep tracking, and bump history.
+              Real-time digital ticket dispatch with instant voice alerts, table routing & mobile lock-screen push.
             </p>
           </div>
         </div>
 
         {/* Top Controls */}
-        <div className="flex items-center space-x-2.5">
+        <div className="flex items-center flex-wrap gap-2">
+          {/* Mobile & Lock Screen Alerts Permission Button */}
+          <button
+            onClick={handleEnableNotifications}
+            className={`px-3.5 py-2 rounded-xl font-bold text-xs flex items-center space-x-1.5 transition border ${
+              notificationStatus === 'granted'
+                ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-600/30'
+                : 'bg-orange-500 text-white border-orange-400 hover:bg-orange-600 animate-bounce'
+            }`}
+            title="Enable lock-screen & background alerts when orders arrive"
+          >
+            <BellRing className="w-4 h-4" />
+            <span>{notificationStatus === 'granted' ? '🔔 Phone Alerts Active' : '🔔 Enable Phone Alerts'}</span>
+          </button>
+
           <button
             onClick={() => setShowRecallModal(true)}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 transition border border-slate-700"
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 transition border border-slate-700"
           >
             <History className="w-4 h-4 text-orange-400" />
             <span>Bumped ({bumpedOrders.length})</span>
@@ -115,14 +148,14 @@ export default function KitchenPanelView({ orders, onUpdateStatus, currentLang }
 
           <button
             onClick={() => setAudioEnabled(!audioEnabled)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 border ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 border ${
               audioEnabled 
                 ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm' 
                 : 'bg-slate-800 text-slate-400 border-slate-700'
             }`}
           >
             {audioEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-            <span>{audioEnabled ? 'Chime ON' : 'Muted'}</span>
+            <span>{audioEnabled ? 'Sound ON' : 'Muted'}</span>
           </button>
         </div>
       </div>
@@ -176,6 +209,7 @@ export default function KitchenPanelView({ orders, onUpdateStatus, currentLang }
       {/* 4. ACTIVE KITCHEN TICKETS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {filteredOrders.map(order => {
+          const isPlaced = (order.status || '').toLowerCase() === 'placed';
           const elapsed = getElapsedMins(order.time, order.placed_at);
           const isUrgent = elapsed >= 15;
           const isModerate = elapsed >= 10 && elapsed < 15;
@@ -185,17 +219,30 @@ export default function KitchenPanelView({ orders, onUpdateStatus, currentLang }
             <div 
               key={order.id} 
               className={`bg-white rounded-3xl border-2 shadow-lg p-5 space-y-4 relative overflow-hidden flex flex-col justify-between transition-all ${
-                isUrgent 
-                  ? 'border-rose-400 ring-2 ring-rose-500/20' 
-                  : isModerate 
-                    ? 'border-amber-300' 
-                    : 'border-slate-200'
+                isPlaced
+                  ? 'border-orange-500 ring-4 ring-orange-500/20'
+                  : isUrgent 
+                    ? 'border-rose-400 ring-2 ring-rose-500/20' 
+                    : isModerate 
+                      ? 'border-amber-300' 
+                      : 'border-slate-200'
               }`}
             >
+              {/* Placed Alert Banner */}
+              {isPlaced && (
+                <div className="p-2.5 rounded-2xl bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 text-white font-black text-xs flex items-center justify-between shadow-md animate-pulse">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping"></span>
+                    <span>🚨 NEW ORDER ARRIVED — START MAKING!</span>
+                  </div>
+                  <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">KOT Fired</span>
+                </div>
+              )}
+
               {/* Ticket Top Header Bar */}
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center space-x-2.5">
-                  <span className={`w-3 h-3 rounded-full ${isUrgent ? 'bg-rose-500 animate-ping' : 'bg-orange-500'}`}></span>
+                  <span className={`w-3 h-3 rounded-full ${isPlaced ? 'bg-orange-500 animate-ping' : isUrgent ? 'bg-rose-500 animate-ping' : 'bg-emerald-500'}`}></span>
                   <span className="text-xl font-black text-slate-900 font-heading">
                     {order.table_number || 'Dine-In'}
                   </span>
@@ -207,11 +254,13 @@ export default function KitchenPanelView({ orders, onUpdateStatus, currentLang }
                 <div className="text-right">
                   <span className="text-xs font-mono font-black text-slate-700 block">{order.id}</span>
                   <span className={`text-[10px] font-mono font-black px-1.5 py-0.5 rounded ${
-                    isUrgent 
-                      ? 'bg-rose-100 text-rose-700 font-bold' 
-                      : 'bg-slate-100 text-slate-500 font-semibold'
+                    isPlaced
+                      ? 'bg-orange-100 text-orange-800 font-black'
+                      : isUrgent 
+                        ? 'bg-rose-100 text-rose-700 font-bold' 
+                        : 'bg-slate-100 text-slate-500 font-semibold'
                   }`}>
-                    ⏱️ {elapsed}m on tawa
+                    {isPlaced ? '⚡ Just Arrived' : `⏱️ ${elapsed}m on tawa`}
                   </span>
                 </div>
               </div>
@@ -266,19 +315,34 @@ export default function KitchenPanelView({ orders, onUpdateStatus, currentLang }
               </div>
 
               {/* Bottom Bump Bar */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center space-x-1 text-xs text-slate-400 font-mono">
                   <Clock className="w-3.5 h-3.5" />
                   <span>Placed: {order.time || '11:30 AM'}</span>
                 </div>
 
-                <button
-                  onClick={() => handleBumpOrder(order.id)}
-                  className="px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/20 flex items-center space-x-1.5 transition"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>Bump (Mark Ready)</span>
-                </button>
+                <div className="flex items-center space-x-2">
+                  {isPlaced && (
+                    <button
+                      onClick={() => {
+                        onUpdateStatus(order.id, 'Preparing');
+                        playSound('order');
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black text-xs shadow-md shadow-orange-500/25 flex items-center space-x-1 transition"
+                    >
+                      <Flame className="w-3.5 h-3.5 fill-current" />
+                      <span>Start Cooking</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => handleBumpOrder(order.id)}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/20 flex items-center space-x-1 transition"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Bump (Mark Ready)</span>
+                  </button>
+                </div>
               </div>
 
             </div>

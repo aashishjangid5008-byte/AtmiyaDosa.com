@@ -204,58 +204,194 @@ export default function ExecutiveDashboard({
     };
   }, [theme]);
 
-  // Executive Timeframe Datasets
-  const chartDatasets = {
-    hourly: {
-      title: "Today's Sales & Volume Velocity",
-      subtitle: 'Peak dinner rush recorded between 08:00 PM - 09:30 PM (21 Orders / 48 Plates)',
-      total: '₹18,450',
-      totalOrders: 74,
-      totalVolume: 168,
-      points: [
-        { label: '10 AM', revenue: 980, orders: 5, volume: 9, peakDish: 'Medu Vada & Idli', status: 'Breakfast' },
-        { label: '12 PM', revenue: 2450, orders: 11, volume: 24, peakDish: 'Pav Bhaji & Chaas', status: 'Lunch Rush' },
-        { label: '02 PM', revenue: 1680, orders: 7, volume: 16, peakDish: 'Mysore Masala Dosa', status: 'Afternoon' },
-        { label: '04 PM', revenue: 1120, orders: 4, volume: 8, peakDish: 'Cold Drink & Chaas', status: 'Snacks' },
-        { label: '06 PM', revenue: 2890, orders: 12, volume: 27, peakDish: 'Amul Butter Pav Bhaji', status: 'Early Evening' },
-        { label: '08 PM', revenue: 5640, orders: 21, volume: 48, peakDish: 'Bahubali & Jini Dosa', status: '🔥 Mega Peak Dinner' },
-        { label: '10 PM', revenue: 3690, orders: 14, volume: 36, peakDish: 'S.P. Atmiya Mysore', status: 'Late Dining' }
-      ]
-    },
-    weekly: {
-      title: 'This Week Sales & Volume Trajectory',
-      subtitle: 'Weekend surge with 236 dining tickets & ₹54,880 revenue on Sat + Sun',
-      total: '₹1,24,680',
-      totalOrders: 498,
-      totalVolume: 1120,
-      points: [
-        { label: 'Mon', revenue: 12400, orders: 48, volume: 108, peakDish: 'Mysore Masala Dosa', status: 'Steady Start' },
-        { label: 'Tue', revenue: 14200, orders: 55, volume: 124, peakDish: 'Cheese Pav Bhaji', status: 'Regular' },
-        { label: 'Wed', revenue: 13800, orders: 51, volume: 116, peakDish: 'Jini Roll Dosa', status: 'Regular' },
-        { label: 'Thu', revenue: 15600, orders: 60, volume: 135, peakDish: 'Amul Butter Pav Bhaji', status: 'Above Avg' },
-        { label: 'Fri', revenue: 19800, orders: 78, volume: 178, peakDish: 'S.P. Atmiya Mysore', status: 'Pre-Weekend' },
-        { label: 'Sat', revenue: 26400, orders: 112, volume: 256, peakDish: 'Bahubali Feast Dosa', status: '🔥 Housefull' },
-        { label: 'Sun', revenue: 28480, orders: 124, volume: 283, peakDish: 'Family Combos & Dosa', status: '👑 Record Rush' }
-      ]
-    },
-    monthly: {
-      title: 'Monthly Revenue & Volume Milestones',
-      subtitle: 'Consistent 24% month-on-month compounding growth with 1,840 dining tickets',
-      total: '₹4,86,500',
-      totalOrders: 1840,
-      totalVolume: 4180,
-      points: [
-        { label: 'Week 1', revenue: 98000, orders: 380, volume: 860, peakDish: 'Mysore Masala Dosa', status: 'Steady Start' },
-        { label: 'Week 2', revenue: 118400, orders: 440, volume: 1010, peakDish: 'Amul Butter Pav Bhaji', status: 'Growth Surge' },
-        { label: 'Week 3', revenue: 134200, orders: 510, volume: 1150, peakDish: 'Bahubali Dosa', status: 'Festive Boom' },
-        { label: 'Week 4', revenue: 142900, orders: 510, volume: 1160, peakDish: 'S.P. Atmiya Mysore', status: '👑 Month High' }
-      ]
+  // Real Data Aggregation Engine from Supabase orders & props
+  const effectiveOrders = useMemo(() => {
+    if (liveOrders && liveOrders.length > 0) return liveOrders;
+    return orders || [];
+  }, [liveOrders, orders]);
+
+  const getOrderItems = (order) => {
+    if (Array.isArray(order.order_items) && order.order_items.length > 0) {
+      return order.order_items.map(i => ({
+        name: i.item_name || i.name,
+        qty: Number(i.quantity || i.qty) || 1,
+        price: Number(i.unit_price || i.price) || 0
+      }));
     }
+    if (Array.isArray(order.items) && order.items.length > 0) {
+      return order.items.map(i => ({
+        name: i.name,
+        qty: Number(i.qty || i.quantity) || 1,
+        price: Number(i.price) || 0
+      }));
+    }
+    return [];
   };
 
-  const currentDataset = chartDatasets[timeframe];
-  const maxRevenue = Math.max(...currentDataset.points.map(p => p.revenue));
-  const maxVolume = Math.max(...currentDataset.points.map(p => p.volume || p.orders * 2.2));
+  const validOrders = useMemo(() => {
+    return effectiveOrders.filter(o => {
+      const s = (o.status || '').toUpperCase();
+      return s !== 'CANCELLED';
+    });
+  }, [effectiveOrders]);
+
+  const realTotalRevenue = useMemo(() => {
+    return validOrders.reduce((sum, o) => sum + (Number(o.total_amount || o.total) || 0), 0);
+  }, [validOrders]);
+
+  const realTotalVolume = useMemo(() => {
+    return validOrders.reduce((sum, o) => {
+      const itms = getOrderItems(o);
+      return sum + itms.reduce((isum, itm) => isum + itm.qty, 0);
+    }, 0);
+  }, [validOrders]);
+
+  const realAov = validOrders.length > 0 ? Math.round(realTotalRevenue / validOrders.length) : 0;
+
+  const activeSessionsCount = liveSessions.filter(s => s.status === 'ACTIVE').length;
+  const occupiedTablesCount = activeSessionsCount > 0 
+    ? activeSessionsCount 
+    : tables.filter(t => (t.status || '').toLowerCase() === 'occupied' || (t.status || '').toLowerCase() === 'busy').length;
+  const totalTablesCount = Math.max(tables.length, 16);
+  const occupancyPercent = totalTablesCount > 0 ? Math.round((occupiedTablesCount / totalTablesCount) * 100) : 0;
+
+  // Executive Timeframe Datasets - Realtime Database Aggregation
+  const chartDatasets = useMemo(() => {
+    // 1. Hourly Buckets
+    const hourlySlots = [
+      { key: '10 AM', label: '10 AM', minH: 0, maxH: 11, status: 'Breakfast' },
+      { key: '12 PM', label: '12 PM', minH: 11, maxH: 13, status: 'Lunch Rush' },
+      { key: '02 PM', label: '02 PM', minH: 13, maxH: 15, status: 'Afternoon' },
+      { key: '04 PM', label: '04 PM', minH: 15, maxH: 17, status: 'Snacks' },
+      { key: '06 PM', label: '06 PM', minH: 17, maxH: 19, status: 'Early Evening' },
+      { key: '08 PM', label: '08 PM', minH: 19, maxH: 21, status: '🔥 Mega Peak Dinner' },
+      { key: '10 PM', label: '10 PM', minH: 21, maxH: 24, status: 'Late Dining' }
+    ];
+
+    const hourlyPoints = hourlySlots.map(slot => {
+      const slotOrders = validOrders.filter(o => {
+        const ts = o.placed_at || o.time;
+        if (!ts) return false;
+        const d = new Date(ts);
+        const h = isNaN(d.getTime()) ? 12 : d.getHours();
+        return h >= slot.minH && h < slot.maxH;
+      });
+
+      const rev = slotOrders.reduce((sum, o) => sum + (Number(o.total_amount || o.total) || 0), 0);
+      const vol = slotOrders.reduce((sum, o) => {
+        const itms = getOrderItems(o);
+        return sum + itms.reduce((isum, itm) => isum + itm.qty, 0);
+      }, 0);
+
+      const dishCounts = {};
+      slotOrders.forEach(o => {
+        getOrderItems(o).forEach(i => {
+          dishCounts[i.name] = (dishCounts[i.name] || 0) + i.qty;
+        });
+      });
+      let topDish = '-';
+      let topCount = 0;
+      Object.entries(dishCounts).forEach(([name, count]) => {
+        if (count > topCount) {
+          topCount = count;
+          topDish = name;
+        }
+      });
+
+      return {
+        label: slot.label,
+        revenue: rev,
+        orders: slotOrders.length,
+        volume: vol,
+        peakDish: topDish,
+        status: slot.status
+      };
+    });
+
+    // 2. Weekly Buckets
+    const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const orderedWeekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const weeklyPoints = orderedWeekDays.map(dayName => {
+      const dayOrders = validOrders.filter(o => {
+        const ts = o.placed_at || o.time;
+        if (!ts) return false;
+        const d = new Date(ts);
+        if (isNaN(d.getTime())) return false;
+        return weekDays[d.getDay()] === dayName;
+      });
+      const rev = dayOrders.reduce((sum, o) => sum + (Number(o.total_amount || o.total) || 0), 0);
+      const vol = dayOrders.reduce((sum, o) => {
+        const itms = getOrderItems(o);
+        return sum + itms.reduce((isum, itm) => isum + itm.qty, 0);
+      }, 0);
+      return {
+        label: dayName,
+        revenue: rev,
+        orders: dayOrders.length,
+        volume: vol,
+        peakDish: dayOrders.length > 0 ? 'Live Order' : '-',
+        status: dayName === 'Sat' || dayName === 'Sun' ? 'Weekend' : 'Weekday'
+      };
+    });
+
+    // 3. Monthly Buckets
+    const monthlyPoints = [1, 2, 3, 4].map(w => {
+      const weekOrders = validOrders.filter(o => {
+        const ts = o.placed_at || o.time;
+        if (!ts) return false;
+        const d = new Date(ts);
+        if (isNaN(d.getTime())) return false;
+        const dom = d.getDate();
+        return dom >= (w - 1) * 7 + 1 && dom <= (w === 4 ? 31 : w * 7);
+      });
+      const rev = weekOrders.reduce((sum, o) => sum + (Number(o.total_amount || o.total) || 0), 0);
+      const vol = weekOrders.reduce((sum, o) => {
+        const itms = getOrderItems(o);
+        return sum + itms.reduce((isum, itm) => isum + itm.qty, 0);
+      }, 0);
+      return {
+        label: `Week ${w}`,
+        revenue: rev,
+        orders: weekOrders.length,
+        volume: vol,
+        peakDish: weekOrders.length > 0 ? 'Live Menu' : '-',
+        status: `Week ${w}`
+      };
+    });
+
+    return {
+      hourly: {
+        title: "Today's Sales & Volume Velocity",
+        subtitle: validOrders.length > 0 
+          ? `Recorded ${validOrders.length} orders & ${realTotalVolume} plates live in Supabase` 
+          : 'Waiting for orders. Scan table QR code to start.',
+        total: `₹${realTotalRevenue.toLocaleString('en-IN')}`,
+        totalOrders: validOrders.length,
+        totalVolume: realTotalVolume,
+        points: hourlyPoints
+      },
+      weekly: {
+        title: 'This Week Sales & Volume Trajectory',
+        subtitle: `Total weekly revenue ₹${realTotalRevenue.toLocaleString('en-IN')} across ${validOrders.length} orders`,
+        total: `₹${realTotalRevenue.toLocaleString('en-IN')}`,
+        totalOrders: validOrders.length,
+        totalVolume: realTotalVolume,
+        points: weeklyPoints
+      },
+      monthly: {
+        title: 'Monthly Revenue & Volume Milestones',
+        subtitle: `Compounded monthly sales ₹${realTotalRevenue.toLocaleString('en-IN')} from Supabase database`,
+        total: `₹${realTotalRevenue.toLocaleString('en-IN')}`,
+        totalOrders: validOrders.length,
+        totalVolume: realTotalVolume,
+        points: monthlyPoints
+      }
+    };
+  }, [validOrders, realTotalRevenue, realTotalVolume]);
+
+  const currentDataset = chartDatasets[timeframe] || chartDatasets.hourly;
+  const maxRevenue = Math.max(1, ...currentDataset.points.map(p => p.revenue));
+  const maxVolume = Math.max(1, ...currentDataset.points.map(p => p.volume || p.orders * 2.2));
   const activePointIndex = Math.min(selectedPointIndex, currentDataset.points.length - 1);
   const activePoint = currentDataset.points[activePointIndex] || currentDataset.points[0];
 
@@ -292,64 +428,77 @@ export default function ExecutiveDashboard({
     ? `${splinePath} L ${svgCoords[svgCoords.length - 1].x} 190 L ${svgCoords[0].x} 190 Z` 
     : '';
 
-  // 5. CATEGORY PIE / DONUT BREAKDOWN DATASET
-  const categoryStats = useMemo(() => [
-    { 
-      id: 'cat_mysore', 
-      name: 'Mysore Dosa', 
-      guj: 'માયસોર ઢોસા', 
-      percentage: 38, 
-      volume: 486, 
-      revenue: 63180, 
-      color: '#F59E0B', 
-      avgPlatePrice: '₹130',
-      topDish: 'Mysore Masala Dosa' 
-    },
-    { 
-      id: 'cat_fancy', 
-      name: 'Fancy Dosa', 
-      guj: 'ફેન્સી ઢોસા', 
-      percentage: 28, 
-      volume: 358, 
-      revenue: 89500, 
-      color: '#6366F1', 
-      avgPlatePrice: '₹250',
-      topDish: 'Bahubali Dosa' 
-    },
-    { 
-      id: 'cat_pavbhaji', 
-      name: 'Pav Bhaji & Pulao', 
-      guj: 'પાંઉભાજી & પુલાવ', 
-      percentage: 16, 
-      volume: 205, 
-      revenue: 18450, 
-      color: '#EC4899', 
-      avgPlatePrice: '₹90',
-      topDish: 'Amul Butter Pav Bhaji' 
-    },
-    { 
-      id: 'cat_paper', 
-      name: 'Plain Paper Dosa', 
-      guj: 'પેપર ઢોસા', 
-      percentage: 10, 
-      volume: 128, 
-      revenue: 10240, 
-      color: '#10B981', 
-      avgPlatePrice: '₹80',
-      topDish: 'Cheese Paper Dosa' 
-    },
-    { 
-      id: 'cat_chinese', 
-      name: 'Chinese & Starters', 
-      guj: 'ચાઈનીઝ & સ્ટાર્ટર્સ', 
-      percentage: 8, 
-      volume: 102, 
-      revenue: 12240, 
-      color: '#06B6D4', 
-      avgPlatePrice: '₹120',
-      topDish: 'Veg Manchurian Dry' 
-    }
-  ], []);
+  // 5. CATEGORY PIE / DONUT BREAKDOWN DATASET - REALTIME SUPABASE AGGREGATION
+  const categoryStats = useMemo(() => {
+    const catColors = ['#F59E0B', '#6366F1', '#EC4899', '#10B981', '#06B6D4', '#8B5CF6', '#F97316', '#14B8A6'];
+    const catMap = {};
+
+    (categories || []).forEach((c, idx) => {
+      catMap[c.name] = {
+        id: `cat_${c.id || idx}`,
+        name: c.name,
+        guj: c.gujarati || c.name,
+        color: catColors[idx % catColors.length],
+        volume: 0,
+        revenue: 0,
+        dishCounts: {}
+      };
+    });
+
+    const itemCatLookup = {};
+    (menuItems || []).forEach(m => {
+      itemCatLookup[m.name] = m.category || 'Other';
+      if (!catMap[m.category]) {
+        catMap[m.category] = {
+          id: `cat_${Object.keys(catMap).length}`,
+          name: m.category,
+          guj: m.category,
+          color: catColors[Object.keys(catMap).length % catColors.length],
+          volume: 0,
+          revenue: 0,
+          dishCounts: {}
+        };
+      }
+    });
+
+    validOrders.forEach(o => {
+      getOrderItems(o).forEach(i => {
+        const catName = itemCatLookup[i.name] || 'Mysore Dosa';
+        if (!catMap[catName]) {
+          catMap[catName] = {
+            id: `cat_${Object.keys(catMap).length}`,
+            name: catName,
+            guj: catName,
+            color: catColors[Object.keys(catMap).length % catColors.length],
+            volume: 0,
+            revenue: 0,
+            dishCounts: {}
+          };
+        }
+        catMap[catName].volume += i.qty;
+        catMap[catName].revenue += i.qty * i.price;
+        catMap[catName].dishCounts[i.name] = (catMap[catName].dishCounts[i.name] || 0) + i.qty;
+      });
+    });
+
+    const list = Object.values(catMap);
+    const totalVol = list.reduce((s, c) => s + c.volume, 0);
+
+    return list.map(c => {
+      let topDish = '-';
+      let maxC = 0;
+      Object.entries(c.dishCounts).forEach(([name, cnt]) => {
+        if (cnt > maxC) { maxC = cnt; topDish = name; }
+      });
+      const percentage = totalVol > 0 ? Math.round((c.volume / totalVol) * 100) : 0;
+      return {
+        ...c,
+        percentage,
+        avgPlatePrice: c.volume > 0 ? `₹${Math.round(c.revenue / c.volume)}` : '₹0',
+        topDish: topDish !== '-' ? topDish : c.name
+      };
+    }).sort((a, b) => b.volume - a.volume);
+  }, [categories, menuItems, validOrders]);
 
   const totalCategoryVolume = categoryStats.reduce((sum, c) => sum + c.volume, 0);
   const totalCategoryRevenue = categoryStats.reduce((sum, c) => sum + c.revenue, 0);
@@ -404,217 +553,53 @@ export default function ExecutiveDashboard({
 
   const activeCategoryData = categoryStats.find(c => c.id === selectedSlice) || categoryStats[0];
 
-  // 6. ALL-IN-ONE MENU ITEM COMMAND CENTER DATASET (11 ITEMS WITH LIVE EDITING & TOGGLES)
-  const defaultDishes = useMemo(() => [
-    {
-      id: 'd_01',
-      rank: 1,
-      name: 'Mysore Masala Dosa',
-      guj: 'માયસોર મસાલા ઢોસા',
-      category: 'Mysore Dosa',
-      price: 130,
-      costPrice: 42,
-      volumeQty: 342,
-      revenue: 44460,
-      prepTime: '10m',
-      rating: 4.9,
-      isAvailable: true,
-      velocity: '🚀 Super Bestseller',
-      velocityType: 'super',
-      margin: '68%',
-      recommendation: 'Top cash cow. Maintain potato masala quality and promote Amul Cheese addon.'
-    },
-    {
-      id: 'd_02',
-      rank: 2,
-      name: 'Bahubali Dosa',
-      guj: 'બાહુબલી ઢોસા (જૈન ઉપલબ્ધ)',
-      category: 'Fancy Dosa',
-      price: 298,
-      costPrice: 112,
-      volumeQty: 275,
-      revenue: 81950,
-      prepTime: '16m',
-      rating: 4.9,
-      isAvailable: true,
-      velocity: '🔥 High Velocity',
-      velocityType: 'hot',
-      margin: '62%',
-      recommendation: 'Highest revenue contributor per table. Highlight on digital table menu standee.'
-    },
-    {
-      id: 'd_03',
-      rank: 3,
-      name: 'Amul Butter Pav Bhaji',
-      guj: 'અમૂલ બટર પાંઉભાજી',
-      category: 'Pav Bhaji & Pulao',
-      price: 80,
-      costPrice: 34,
-      volumeQty: 254,
-      revenue: 20320,
-      prepTime: '8m',
-      rating: 4.8,
-      isAvailable: true,
-      velocity: '⚡ Steady Mover',
-      velocityType: 'fast',
-      margin: '58%',
-      recommendation: 'Fastest turn time (8m). Always suggest extra pav bun addon in POS.'
-    },
-    {
-      id: 'd_04',
-      rank: 4,
-      name: 'Jini Roll Dosa (Cheese)',
-      guj: 'જીની રોલ ઢોસા',
-      category: 'Fancy Dosa',
-      price: 200,
-      costPrice: 72,
-      volumeQty: 215,
-      revenue: 43000,
-      prepTime: '12m',
-      rating: 4.8,
-      isAvailable: true,
-      velocity: '⚡ Steady Mover',
-      velocityType: 'fast',
-      margin: '64%',
-      recommendation: 'Huge popularity with youths & couples. Keep grated cheese prep ready.'
-    },
-    {
-      id: 'd_05',
-      rank: 5,
-      name: 'Paneer Mysore Dosa',
-      guj: 'પનીર માયસોર ઢોસા',
-      category: 'Mysore Dosa',
-      price: 150,
-      costPrice: 52,
-      volumeQty: 188,
-      revenue: 28200,
-      prepTime: '11m',
-      rating: 4.7,
-      isAvailable: true,
-      velocity: '⚡ Steady Mover',
-      velocityType: 'fast',
-      margin: '65%',
-      recommendation: 'Strong dinner preference. Fresh malai paneer cubes drive repeat orders.'
-    },
-    {
-      id: 'd_06',
-      rank: 6,
-      name: 'Cheese Paper Dosa',
-      guj: 'ચીઝ પેપર ઢોસા',
-      category: 'Plain Paper Dosa',
-      price: 110,
-      costPrice: 32,
-      volumeQty: 142,
-      revenue: 15620,
-      prepTime: '7m',
-      rating: 4.6,
-      isAvailable: true,
-      velocity: '⚡ Steady Mover',
-      velocityType: 'steady',
-      margin: '71%',
-      recommendation: 'Highest margin dish (71%). Low labor, great breakfast & snack item.'
-    },
-    {
-      id: 'd_07',
-      rank: 7,
-      name: 'Cheese Gotala Dosa',
-      guj: 'ચીઝ ગોટાલા ઢોસા',
-      category: 'Fancy Dosa',
-      price: 240,
-      costPrice: 90,
-      volumeQty: 126,
-      revenue: 30240,
-      prepTime: '14m',
-      rating: 4.7,
-      isAvailable: true,
-      velocity: '⚡ Steady Mover',
-      velocityType: 'steady',
-      margin: '63%',
-      recommendation: 'Surat specialty favorite. High ticket booster on weekend evenings.'
-    },
-    {
-      id: 'd_08',
-      rank: 8,
-      name: 'Veg Manchurian Dry',
-      guj: 'વેજ મંચુરિયન ડ્રાય',
-      category: 'Chinese & Starters',
-      price: 130,
-      costPrice: 54,
-      volumeQty: 98,
-      revenue: 12740,
-      prepTime: '10m',
-      rating: 4.5,
-      isAvailable: true,
-      velocity: '⚡ Steady Mover',
-      velocityType: 'steady',
-      margin: '58%',
-      recommendation: 'Solid starter. Upsell with Cold Drink combo at ₹149.'
-    },
-    {
-      id: 'd_09',
-      rank: 9,
-      name: 'Chinese Bhel (Crispy)',
-      guj: 'ચાઈનીઝ ભેળ',
-      category: 'Chinese & Starters',
-      price: 100,
-      costPrice: 48,
-      volumeQty: 32,
-      revenue: 3200,
-      prepTime: '6m',
-      rating: 4.2,
-      isAvailable: false,
-      velocity: '⚠️ Low Demand / Dead Stock',
-      velocityType: 'low',
-      margin: '52%',
-      recommendation: 'Underperforming. Create combo with Soup or discount by 15% during 4-7 PM.'
-    },
-    {
-      id: 'd_10',
-      rank: 10,
-      name: 'Idli Sambhar Plate (2 Pcs)',
-      guj: 'ઈડલી સંભાર (૨ નંગ)',
-      category: 'Plain Paper Dosa',
-      price: 60,
-      costPrice: 32,
-      volumeQty: 26,
-      revenue: 1560,
-      prepTime: '4m',
-      rating: 4.1,
-      isAvailable: true,
-      velocity: '⚠️ Low Demand / Dead Stock',
-      velocityType: 'low',
-      margin: '47%',
-      recommendation: 'Morning demand is sluggish. Package with Medu Vada for a ₹75 Breakfast Special.'
-    },
-    {
-      id: 'd_11',
-      rank: 11,
-      name: 'Sweet Corn Veg Soup',
-      guj: 'સ્વીટ કોર્ન સૂપ',
-      category: 'Chinese & Starters',
-      price: 90,
-      costPrice: 58,
-      volumeQty: 18,
-      revenue: 1620,
-      prepTime: '9m',
-      rating: 4.0,
-      isAvailable: true,
-      velocity: '⚠️ Low Demand / Dead Stock',
-      velocityType: 'low',
-      margin: '36%',
-      recommendation: 'Lowest velocity dish. Replace with Hot & Sour or Manchow Soup for winter menu.'
-    }
-  ], []);
+  // 6. ALL-IN-ONE MENU ITEM COMMAND CENTER DATASET - BOUND TO SUPABASE MENU ITEMS
+  const defaultDishes = useMemo(() => {
+    if (!menuItems || menuItems.length === 0) return [];
+    
+    const salesMap = {};
+    validOrders.forEach(o => {
+      getOrderItems(o).forEach(i => {
+        salesMap[i.name] = (salesMap[i.name] || 0) + i.qty;
+      });
+    });
+
+    return menuItems.map((item, idx) => {
+      const qty = salesMap[item.name] || 0;
+      const price = Number(item.finalPrice || item.price || 0);
+      const rev = qty * price;
+      const cost = Math.round(price * 0.4);
+      const margin = price > 0 ? `${Math.round(((price - cost) / price) * 100)}%` : '60%';
+
+      return {
+        id: item.id || `dish_${idx}`,
+        rank: idx + 1,
+        name: item.name,
+        guj: item.gujarati_name || item.name,
+        category: item.category || 'Menu',
+        price: price,
+        costPrice: cost,
+        volumeQty: qty,
+        revenue: rev,
+        prepTime: item.prepTimeMins ? `${item.prepTimeMins}m` : '10m',
+        rating: 4.8,
+        isAvailable: item.is_available !== false,
+        velocity: qty > 5 ? '🚀 Super Bestseller' : qty > 0 ? '🔥 Active Mover' : 'Available',
+        velocityType: qty > 5 ? 'super' : qty > 0 ? 'hot' : 'steady',
+        margin: margin,
+        recommendation: qty > 0 ? `${qty} plates ordered. Popular choice.` : 'Ready on menu.'
+      };
+    }).sort((a, b) => b.volumeQty - a.volumeQty);
+  }, [menuItems, validOrders]);
 
   // Synchronized dishes list (allowing inline availability toggle & price edit)
-  const [itemsList, setItemsList] = useState(() => {
-    try {
-      const saved = localStorage.getItem('restaurant_dashboard_dishes');
-      return saved ? JSON.parse(saved) : defaultDishes;
-    } catch {
-      return defaultDishes;
+  const [itemsList, setItemsList] = useState(defaultDishes);
+
+  useEffect(() => {
+    if (defaultDishes.length > 0) {
+      setItemsList(defaultDishes);
     }
-  });
+  }, [defaultDishes]);
 
   // Handle Availability 1-Click Toggle
   const handleToggleItemAvailability = (itemId) => {
@@ -716,14 +701,43 @@ export default function ExecutiveDashboard({
       });
   }, [itemsList, demandTab, selectedCategory, selectedSlice, dishSearch, dishSortBy, categoryStats]);
 
-  // Hourly Peak Rush Heatmap Data
-  const rushHours = [
-    { hour: '10 AM - 12 PM', session: 'Morning Breakfast', orders: 16, plates: 33, rush: 'Medium', speed: '8m avg', load: '35%', tip: 'Idli & Medu Vada counters active' },
-    { hour: '12 PM - 03 PM', session: 'Lunch Rush', orders: 25, plates: 56, rush: 'High', speed: '11m avg', load: '65%', tip: 'Pav Bhaji & Mysore Dosa combo peak' },
-    { hour: '03 PM - 07 PM', session: 'Afternoon & Snacks', orders: 19, plates: 43, rush: 'Steady', speed: '9m avg', load: '45%', tip: 'Cold Drinks, Chaas & Light Dosa' },
-    { hour: '07 PM - 10 PM', session: '🔥 Mega Peak Dinner', orders: 54, plates: 126, rush: 'HOUSEFULL', speed: '14m avg', load: '95%', tip: 'Bahubali, Gotala, Jini Roll peak demand. 3 cooks on tawa' },
-    { hour: '10 PM - 11 PM', session: 'Late Dining & Takeout', orders: 10, plates: 21, rush: 'Low', speed: '8m avg', load: '25%', tip: 'Kitchen closing & parcel orders' },
-  ];
+  // Hourly Peak Rush Heatmap Data - Dynamically calculated from live orders
+  const rushHours = useMemo(() => {
+    const slots = [
+      { hour: '10 AM - 12 PM', session: 'Morning Breakfast', minH: 10, maxH: 12, tip: 'Idli & Medu Vada counters active' },
+      { hour: '12 PM - 03 PM', session: 'Lunch Rush', minH: 12, maxH: 15, tip: 'Pav Bhaji & Mysore Dosa combo peak' },
+      { hour: '03 PM - 07 PM', session: 'Afternoon & Snacks', minH: 15, maxH: 19, tip: 'Cold Drinks, Chaas & Light Dosa' },
+      { hour: '07 PM - 10 PM', session: '🔥 Mega Peak Dinner', minH: 19, maxH: 22, tip: 'Bahubali, Gotala, Jini Roll peak demand' },
+      { hour: '10 PM - 11 PM', session: 'Late Dining & Takeout', minH: 22, maxH: 24, tip: 'Kitchen closing & parcel orders' },
+    ];
+
+    return slots.map(s => {
+      const ords = validOrders.filter(o => {
+        const ts = o.placed_at || o.time;
+        if (!ts) return false;
+        const d = new Date(ts);
+        const h = isNaN(d.getTime()) ? 12 : d.getHours();
+        return h >= s.minH && h < s.maxH;
+      });
+      const plates = ords.reduce((sum, o) => {
+        const itms = getOrderItems(o);
+        return sum + itms.reduce((isum, itm) => isum + itm.qty, 0);
+      }, 0);
+      const rushLevel = ords.length >= 10 ? 'HOUSEFULL' : ords.length >= 5 ? 'High' : ords.length >= 2 ? 'Medium' : ords.length > 0 ? 'Active' : 'Quiet';
+      const load = Math.min(100, ords.length * 20);
+
+      return {
+        hour: s.hour,
+        session: s.session,
+        orders: ords.length,
+        plates: plates,
+        rush: rushLevel,
+        speed: '10m avg',
+        load: `${load}%`,
+        tip: ords.length > 0 ? `${ords.length} orders recorded` : s.tip
+      };
+    });
+  }, [validOrders]);
 
   // Fetch live Supabase data
   const fetchLiveSupabaseData = async () => {
@@ -770,50 +784,7 @@ export default function ExecutiveDashboard({
     };
   }, []);
 
-  const displaySessions = liveSessions.length > 0 ? liveSessions : [
-    {
-      id: 'sess_101',
-      session_code: 'SESS-20261018-001',
-      table_number: 'T-01',
-      status: 'ACTIVE',
-      customer_name: 'Amit Patel',
-      customer_phone: '+91 98250 12345',
-      total_amount: 210.00,
-      opened_at: new Date(Date.now() - 14 * 60000).toISOString(),
-      order_status: 'PREPARING',
-      payment_method: 'CASH',
-      payment_status: 'UNPAID',
-      items_summary: '1x Mysore Masala Dosa, 1x Amul Butter Pav Bhaji'
-    },
-    {
-      id: 'sess_102',
-      session_code: 'SESS-20261018-002',
-      table_number: 'T-02',
-      status: 'ACTIVE',
-      customer_name: 'Bhavin Shah',
-      customer_phone: '+91 99044 56789',
-      total_amount: 390.00,
-      opened_at: new Date(Date.now() - 8 * 60000).toISOString(),
-      order_status: 'PLACED',
-      payment_method: 'ONLINE_UPI',
-      payment_status: 'PAID',
-      items_summary: '1x Bahubali Dosa (Jain), 2x Masala Chaas'
-    },
-    {
-      id: 'sess_105',
-      session_code: 'SESS-20261018-005',
-      table_number: 'T-05',
-      status: 'ACTIVE',
-      customer_name: 'Dr. Jignesh Mehta',
-      customer_phone: '+91 98980 44556',
-      total_amount: 480.00,
-      opened_at: new Date(Date.now() - 22 * 60000).toISOString(),
-      order_status: 'SERVED',
-      payment_method: 'CASH',
-      payment_status: 'UNPAID',
-      items_summary: '2x S.P. Atmiya Mysore, 3x Butter Pav'
-    }
-  ];
+  const displaySessions = liveSessions;
 
   const handleSettleSession = async (session) => {
     if (!window.confirm(`Settle and close session for ${session.table_number || session.session_code}? Table will become clean and VACANT.`)) {
@@ -848,8 +819,8 @@ export default function ExecutiveDashboard({
   };
 
   // Target Goal Calculations
-  const currentTodaySales = 18450;
-  const targetPercent = Math.min(100, Math.round((currentTodaySales / dailyTarget) * 100));
+  const currentTodaySales = realTotalRevenue;
+  const targetPercent = dailyTarget > 0 ? Math.min(100, Math.round((currentTodaySales / dailyTarget) * 100)) : 0;
 
   return (
     <div className={`space-y-6 pb-20 font-sans transition-colors duration-200 ${palette.textPrimary}`}>
@@ -951,7 +922,7 @@ export default function ExecutiveDashboard({
             </div>
             <div className="mt-2 flex items-center text-[11px] font-bold text-emerald-600 space-x-1">
               <TrendingUp className="w-3.5 h-3.5" />
-              <span>+18.4% vs yesterday</span>
+              <span>Realtime Supabase Sync</span>
             </div>
           </div>
 
@@ -983,11 +954,11 @@ export default function ExecutiveDashboard({
             </div>
             <div className="mt-3">
               <span className="text-2xl sm:text-3xl font-black tracking-tight font-mono text-slate-900">
-                ₹249
+                ₹{realAov}
               </span>
             </div>
             <div className="mt-2 text-[11px] font-bold text-emerald-600">
-              Target ₹220+ exceeded by 13%
+              {validOrders.length > 0 ? `Calculated across ${validOrders.length} live orders` : 'Calculated live from orders'}
             </div>
           </div>
 
@@ -1001,11 +972,11 @@ export default function ExecutiveDashboard({
             </div>
             <div className="mt-3">
               <span className="text-2xl sm:text-3xl font-black tracking-tight font-mono text-slate-900">
-                3 / 10 Tables
+                {occupiedTablesCount} / {totalTablesCount} Tables
               </span>
             </div>
             <div className="mt-2 text-[11px] font-bold text-blue-600">
-              30% Current Floor Seated
+              {occupancyPercent}% Current Floor Seated
             </div>
           </div>
 
@@ -1747,8 +1718,14 @@ export default function ExecutiveDashboard({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {displaySessions.filter(s => s.status === 'ACTIVE').map(session => {
+          {displaySessions.filter(s => s.status === 'ACTIVE').length === 0 ? (
+            <div className="p-8 text-center rounded-2xl bg-slate-50 border border-dashed border-slate-200">
+              <p className="text-sm font-bold text-slate-700">All dining tables are currently clean & VACANT</p>
+              <p className="text-xs text-slate-400 mt-1">Live table sessions will appear here as soon as guests scan table QR codes.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {displaySessions.filter(s => s.status === 'ACTIVE').map(session => {
               const elapsedMinutes = Math.round((Date.now() - new Date(session.opened_at).getTime()) / 60000);
               const isOvertime = elapsedMinutes > 30;
               const isOnlinePaid = session.payment_status === 'PAID';
@@ -1831,6 +1808,7 @@ export default function ExecutiveDashboard({
               );
             })}
           </div>
+          )}
         </div>
       )}
 

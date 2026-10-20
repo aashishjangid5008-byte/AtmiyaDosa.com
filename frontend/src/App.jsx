@@ -57,6 +57,7 @@ import {
 } from './lib/supabase';
 import { getTranslation } from './lib/translations';
 import { playSound } from './lib/sound';
+import { registerServiceWorker, triggerStaffOrderNotification } from './lib/notifications';
 
 import AuthPage from './components/auth/AuthPage';
 import ExecutiveDashboard from './components/admin/ExecutiveDashboard';
@@ -136,6 +137,20 @@ export default function App() {
   useEffect(() => {
     window.addEventListener('restaurant_data_updated', loadFreshState);
     return () => window.removeEventListener('restaurant_data_updated', loadFreshState);
+  }, []);
+
+  // Register Service Worker on mount for mobile lock screen & background push notifications
+  useEffect(() => {
+    registerServiceWorker();
+
+    // Purge old mock demo orders from localStorage so only authentic Supabase orders exist
+    const cachedOrders = getLocalStore('orders', []);
+    const demoIds = new Set(['#ORD1048', '#ORD1047', '#ORD1046', '#ORD1045', '#ORD1044', '#ORD1043', '#ORD1042', '#ORD1041', '#ORD1049', '#ORD1050', 'ORD-TEST-001', 'ORD-TEST-999', 'ORD-T04-1001']);
+    const cleaned = cachedOrders.filter(o => !demoIds.has(o.id) && !demoIds.has(o.order_number));
+    if (cleaned.length !== cachedOrders.length) {
+      setLocalStore('orders', cleaned);
+      setOrders(cleaned);
+    }
   }, []);
 
   // Live Supabase Synchronization Hook (keeps QR Menu, Admin POS & Kitchen in 100% real-time sync)
@@ -257,7 +272,19 @@ export default function App() {
         // Subscribe to live order updates from Supabase Realtime
         orderChannel = supabase
           .channel('realtime:app_orders')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async () => {
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async (payload) => {
+            console.log('[SUPABASE REALTIME] Order event:', payload?.eventType);
+
+            // If a new order is placed from ANY phone/device, trigger spoken & lock-screen alert!
+            if (payload?.eventType === 'INSERT' && payload?.new) {
+              const newOrd = payload.new;
+              triggerStaffOrderNotification({
+                tableNumber: newOrd.table_number || '01',
+                orderNumber: newOrd.order_number || '',
+                customerName: newOrd.customer_name || 'Guest'
+              });
+            }
+
             const fresh = await fetchLiveOrdersFromSupabase();
             if (fresh && fresh.length > 0) {
               const mapped = fresh.map(mapDbOrderToFrontend);
@@ -452,6 +479,11 @@ export default function App() {
       color: 'orange'
     });
     playSound('order');
+    triggerStaffOrderNotification({
+      tableNumber: newOrder.table_number || '01',
+      orderNumber: newOrder.id || '',
+      customerName: newOrder.customer_name || 'Guest'
+    });
 
     // 2. DISPATCH LIVE TO SUPABASE CLOUD POSTGRESQL (table_sessions, orders, order_items, customers)
     try {
