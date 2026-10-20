@@ -1520,6 +1520,7 @@ export default function App() {
               onAddNewOrder={() => setViewMode('customer')}
               currentStaff={{ name: authUser?.name || 'Darshit Rana', role: authUser?.role || 'Admin' }}
               currentLang={currentLang}
+              theme={theme}
             />
           )}
 
@@ -1528,6 +1529,7 @@ export default function App() {
               orders={orders}
               onUpdateStatus={handleUpdateOrderStatus}
               currentLang={currentLang}
+              theme={theme}
             />
           )}
 
@@ -1548,6 +1550,7 @@ export default function App() {
                 setViewMode('customer');
               }}
               currentLang={currentLang}
+              theme={theme}
             />
           )}
 

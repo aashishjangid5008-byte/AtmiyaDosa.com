@@ -370,87 +370,86 @@ export default function CustomerMenu({
     <div className="min-h-screen bg-slate-50 font-sans pb-28 text-slate-900">
       
       {/* 1. TOP STICKY HEADER */}
-      <header className="sticky top-0 z-30 bg-white border-b border-slate-200/90 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-xs">
+        <div className="max-w-4xl mx-auto px-4 py-2.5 flex items-center justify-between gap-3">
           
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2.5 min-w-0">
             {onBackToAdmin && (
               <button 
                 onClick={onBackToAdmin}
-                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition shrink-0 cursor-pointer"
                 title="Return to Admin POS"
               >
                 <ArrowLeft className="w-4 h-4" />
               </button>
             )}
 
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center space-x-2">
-                <span className="font-black text-lg text-slate-900 font-heading">
+                <span className="font-black text-base sm:text-lg text-slate-900 font-heading truncate">
                   {restaurantSettings?.restaurantName || 'Atmiya Dosa Hub'}
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-orange-100 text-orange-950 border border-orange-300">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-orange-500/10 text-orange-600 border border-orange-500/20 shrink-0">
                   Table {currentTable}
                 </span>
               </div>
-              <p className="text-[11px] font-semibold text-slate-500">
-                {restaurantSettings?.tagline || 'Pure Veg Authentic Taste • Petlad'}
-              </p>
+              <div className="flex items-center space-x-2 text-[10px] text-slate-500 font-medium">
+                <span className="inline-flex items-center text-emerald-600 font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span>
+                  100% Pure Veg
+                </span>
+                <span>•</span>
+                <span>Petlad, Anand</span>
+              </div>
             </div>
           </div>
 
-          {/* Language Selector Dropdown */}
-          <div className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold">
-            <Globe className="w-3.5 h-3.5 text-orange-500" />
-            <select 
-              value={currentLang} 
-              onChange={(e) => onLanguageChange(e.target.value)}
-              className="bg-transparent text-slate-800 font-bold focus:outline-none cursor-pointer text-xs"
+          {/* Table Service Chips & Language Selector */}
+          <div className="flex items-center space-x-1.5 shrink-0">
+            <button
+              onClick={() => handleServiceButton('WAITER', 'Floor Waiter')}
+              className="px-2.5 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer"
+              title="Call Floor Waiter"
             >
-              <option value="en">English</option>
-              <option value="hi">हिन्दी</option>
-              <option value="gu">ગુજરાતી</option>
-              <option value="hinglish">Hinglish</option>
-            </select>
+              <BellRing className="w-3.5 h-3.5 text-orange-500" />
+              <span className="hidden sm:inline">Waiter</span>
+            </button>
+
+            <button
+              onClick={() => handleServiceButton('WATER', 'Water')}
+              className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer"
+              title="Request Water"
+            >
+              <GlassWater className="w-3.5 h-3.5 text-blue-500" />
+              <span className="hidden sm:inline">Water</span>
+            </button>
+
+            <button
+              onClick={() => handleServiceButton('BILL', 'Bill')}
+              className="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer"
+              title="Request Bill"
+            >
+              <Receipt className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="hidden sm:inline">Bill</span>
+            </button>
+
+            <div className="flex items-center space-x-1 px-2 py-1 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold">
+              <Globe className="w-3 h-3 text-orange-500" />
+              <select 
+                value={currentLang} 
+                onChange={(e) => onLanguageChange(e.target.value)}
+                className="bg-transparent text-slate-800 font-bold focus:outline-none cursor-pointer text-xs"
+              >
+                <option value="en">EN</option>
+                <option value="hi">HI</option>
+                <option value="gu">GU</option>
+                <option value="hinglish">Hinglish</option>
+              </select>
+            </div>
           </div>
 
         </div>
       </header>
-
-      {/* 2. TABLE SERVICE QUICK BUTTONS BAR */}
-      <div className="bg-slate-900 text-white px-4 py-2 border-b border-slate-800">
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-2 overflow-x-auto text-xs font-bold">
-          <span className="text-[10px] text-slate-400 uppercase tracking-wider shrink-0 font-mono">
-            Table Assistance:
-          </span>
-
-          <div className="flex items-center space-x-2 shrink-0">
-            <button
-              onClick={() => handleServiceButton('WAITER', 'Floor Waiter')}
-              className="px-3 py-1 rounded-xl bg-orange-500/20 hover:bg-orange-500 text-orange-300 hover:text-white border border-orange-500/40 transition flex items-center space-x-1"
-            >
-              <BellRing className="w-3 h-3" />
-              <span>Call Waiter</span>
-            </button>
-
-            <button
-              onClick={() => handleServiceButton('WATER', 'Drinking Water Jar')}
-              className="px-3 py-1 rounded-xl bg-blue-500/20 hover:bg-blue-500 text-blue-300 hover:text-white border border-blue-500/40 transition flex items-center space-x-1"
-            >
-              <GlassWater className="w-3 h-3" />
-              <span>Request Water</span>
-            </button>
-
-            <button
-              onClick={() => handleServiceButton('BILL', 'Check / Settle Bill')}
-              className="px-3 py-1 rounded-xl bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-white border border-emerald-500/40 transition flex items-center space-x-1"
-            >
-              <Receipt className="w-3 h-3" />
-              <span>Request Bill</span>
-            </button>
-          </div>
-        </div>
-      </div>
 
       {/* Service Toast Feedback */}
       {serviceNotice && (
@@ -466,97 +465,103 @@ export default function CustomerMenu({
         <div className="max-w-4xl mx-auto px-4 mt-3">
           <div 
             onClick={() => setShowOrderTracker(true)}
-            className="p-3 rounded-2xl bg-orange-50 border-2 border-orange-300 shadow-sm flex items-center justify-between cursor-pointer hover:bg-orange-100 transition"
+            className="p-3 rounded-2xl bg-orange-50 border border-orange-300 shadow-xs flex items-center justify-between cursor-pointer hover:bg-orange-100 transition"
           >
             <div className="flex items-center space-x-2.5">
-              <span className="w-3 h-3 rounded-full bg-orange-500 animate-ping"></span>
+              <span className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-ping"></span>
               <div>
                 <span className="text-xs font-black text-orange-950 font-heading">
                   Order {activeTableOrder.id} is Cooking!
                 </span>
                 <p className="text-[11px] text-orange-800">
-                  {activeTableOrder.items?.length || 1} items on tawa • Tap to track live status
+                  {activeTableOrder.items?.length || 1} dishes on tawa • Tap to track live status
                 </p>
               </div>
             </div>
 
-            <span className="px-3 py-1 rounded-xl bg-orange-500 text-white text-xs font-black shadow flex items-center space-x-1">
-              <span>View Tracker</span>
+            <span className="px-3 py-1 rounded-xl bg-orange-500 text-white text-xs font-black shadow-xs flex items-center space-x-1">
+              <span>Track</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </span>
           </div>
         </div>
       )}
 
-      {/* 3. MAIN CONTAINER */}
-      <main className="max-w-4xl mx-auto px-4 py-5 space-y-5">
+      {/* 2. MAIN CONTAINER */}
+      <main className="max-w-4xl mx-auto px-3 sm:px-4 py-4 space-y-4">
         
-        {/* Out-of-Stock / Cancellation Alert Banner (Section 7 of Admin.txt) */}
+        {/* Out-of-Stock / Cancellation Alert Banner */}
         {recentCancelledOrder && (
-          <div className="rounded-2xl p-4 bg-rose-50 border-2 border-rose-400 text-rose-950 shadow-md flex items-start space-x-3.5 animate-fadeIn">
-            <AlertTriangle className="w-6 h-6 text-rose-600 shrink-0 mt-0.5" />
+          <div className="rounded-2xl p-3.5 bg-rose-50 border border-rose-300 text-rose-950 shadow-xs flex items-start space-x-3">
+            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
             <div className="flex-1 text-xs">
-              <div className="font-black text-rose-800 text-sm flex items-center space-x-2">
+              <div className="font-bold text-rose-800 flex items-center space-x-2">
                 <span>Order Notice for Table {currentTable}</span>
-                <span className="px-2 py-0.5 rounded-full bg-rose-200 text-rose-800 font-mono text-[10px] font-bold">
+                <span className="px-1.5 py-0.2 rounded bg-rose-200 text-rose-800 font-mono text-[10px] font-bold">
                   {recentCancelledOrder.id}
                 </span>
               </div>
-              <p className="mt-1 font-semibold text-rose-900 leading-relaxed">
-                Your order could not be fulfilled: <span className="font-black underline bg-rose-100 px-1 py-0.5 rounded">{recentCancelledOrder.cancel_reason}</span>
+              <p className="mt-0.5 font-medium text-rose-900 leading-relaxed">
+                Your order could not be fulfilled: <span className="font-bold underline">{recentCancelledOrder.cancel_reason}</span>
               </p>
-              <p className="text-[11px] text-rose-700 mt-1 font-medium">
+              <p className="text-[10px] text-rose-700 mt-0.5">
                 Please select an alternative dish from our live menu below or notify floor staff.
               </p>
             </div>
           </div>
         )}
 
-        {/* Food Promo Hero Banner */}
-        <div className="rounded-3xl p-6 bg-gradient-to-r from-orange-600 to-amber-500 text-white shadow-md flex items-center justify-between overflow-hidden relative">
-          <div className="space-y-1 z-10 max-w-xs sm:max-w-md">
-            <span className="inline-block px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-black uppercase tracking-wider backdrop-blur-sm">
-              Touchless Live Menu
-            </span>
-            <h2 className="text-xl sm:text-2xl font-black font-heading leading-tight">
-              Order Fresh From Your Phone
-            </h2>
-            <p className="text-xs text-orange-100 font-medium">
-              Select dishes, customize Jain or extra cheese options, and send orders directly to Chef Amit.
-            </p>
-          </div>
-
-          <div className="w-20 h-20 rounded-2xl bg-white/20 backdrop-blur-md border border-white/30 flex flex-col items-center justify-center p-2 shrink-0 hidden sm:flex">
-            <div className="w-7 h-7 border-2 border-white rounded-md flex items-center justify-center p-0.5">
-              <div className="w-3.5 h-3.5 rounded-full bg-white"></div>
+        {/* Compact Hospitality Welcome Strip */}
+        <div className="rounded-2xl p-3 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-500 text-white shadow-xs flex items-center justify-between">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-7 h-7 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 text-sm">
+              🥞
             </div>
-            <span className="text-[10px] font-black uppercase tracking-wider text-white mt-1">100% Veg</span>
+            <div>
+              <p className="text-xs font-black font-heading leading-tight">
+                Authentic Gujarati & South Indian Tawa Specialties
+              </p>
+              <p className="text-[10px] text-orange-100 font-medium">
+                Freshly prepared upon ordering • Jain options available
+              </p>
+            </div>
           </div>
+          <span className="hidden sm:inline-flex px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold font-mono">
+            Pure Veg 100%
+          </span>
         </div>
 
-        {/* Search & Dietary Filters */}
-        <div className="space-y-3">
+        {/* Sticky Search & Dynamic Category Navigator */}
+        <div className="space-y-2 sticky top-[57px] z-20 bg-slate-50/95 backdrop-blur-md pt-1 pb-2">
           <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t('searchMenu')}
-              className="w-full pl-10 pr-4 py-3 rounded-2xl bg-white border border-slate-200/90 text-sm font-semibold shadow-sm focus:outline-none focus:border-orange-500"
+              placeholder="Search dishes (e.g. Mysore, Pav Bhaji, Cheese...)"
+              className="w-full pl-9 pr-8 py-2 rounded-xl bg-white border border-slate-200/90 text-xs font-medium shadow-xs focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition"
             />
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
-          {/* Dynamic Category Tabs From Live Menu */}
-          <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none">
+          {/* Dynamic Category Pill Slider */}
+          <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
             {['All', ...Array.from(new Set(menuItems.map(m => m.category).filter(Boolean)))].map(cat => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+                className={`px-3 py-1.5 rounded-full text-xs font-bold transition whitespace-nowrap shrink-0 cursor-pointer ${
                   selectedCategory === cat
-                    ? 'bg-orange-500 text-white shadow-md'
-                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                    ? 'bg-orange-500 text-white shadow-xs'
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
                 {cat}
@@ -564,22 +569,12 @@ export default function CustomerMenu({
             ))}
           </div>
 
-          {/* Quick Dietary Toggles: Veg, Jain, Spicy */}
-          <div className="flex items-center space-x-2.5 text-xs font-bold">
-            <button
-              onClick={() => setVegOnly(!vegOnly)}
-              className={`px-3 py-1.5 rounded-xl border flex items-center space-x-1.5 transition ${
-                vegOnly ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200'
-              }`}
-            >
-              <Leaf className="w-3.5 h-3.5" />
-              <span>{t('vegOnly')}</span>
-            </button>
-
+          {/* Quick Dietary Toggles: Jain & Spicy */}
+          <div className="flex items-center space-x-2 text-xs font-semibold">
             <button
               onClick={() => setJainOnly(!jainOnly)}
-              className={`px-3 py-1.5 rounded-xl border flex items-center space-x-1.5 transition ${
-                jainOnly ? 'bg-emerald-800 text-white border-emerald-800 shadow-sm' : 'bg-white text-emerald-800 border-emerald-300'
+              className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold flex items-center space-x-1.5 transition cursor-pointer ${
+                jainOnly ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
               }`}
             >
               <span>🌱 Jain (No Onion/Garlic)</span>
@@ -587,31 +582,32 @@ export default function CustomerMenu({
 
             <button
               onClick={() => setSpicyOnly(!spicyOnly)}
-              className={`px-3 py-1.5 rounded-xl border flex items-center space-x-1.5 transition ${
-                spicyOnly ? 'bg-rose-600 text-white border-rose-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200'
+              className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold flex items-center space-x-1.5 transition cursor-pointer ${
+                spicyOnly ? 'bg-rose-600 text-white border-rose-600 shadow-xs' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
               }`}
             >
-              <Flame className="w-3.5 h-3.5" />
-              <span>{t('spicyOnly')}</span>
+              <Flame className="w-3 h-3 text-rose-500 fill-rose-500" />
+              <span>Spicy Only</span>
             </button>
+
+            <span className="text-[10px] text-slate-400 font-medium ml-auto">
+              {sortedItems.length} Dishes
+            </span>
           </div>
         </div>
 
-        {/* Menu Items Grid - Ultra Pro Max Mobile-First 2-Column Instamart / Blinkit Grid */}
+        {/* Menu Items Grid - Ultra Pro Max 2-Column Mobile Grid */}
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 sm:gap-3.5">
           {sortedItems.map(item => {
             const qty = getItemCartQty(item.id);
             const currentItemPrice = item.finalPrice || item.price;
             const originalItemPrice = item.originalPrice || item.price;
-            const savings = Math.max(0, originalItemPrice - currentItemPrice);
 
             return (
               <div 
                 key={item.id} 
                 onClick={() => handleOpenCustomizer(item)}
-                className={`bg-white rounded-2xl p-2 sm:p-2.5 border shadow-2xs hover:shadow-md transition-all duration-200 flex flex-col justify-between relative group cursor-pointer ${
-                  item.hasDiscount ? 'border-rose-200 ring-1 ring-rose-400/20' : 'border-slate-100 hover:border-emerald-300'
-                }`}
+                className="bg-white rounded-2xl p-2 sm:p-2.5 border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-orange-300 transition-all duration-200 flex flex-col justify-between relative group cursor-pointer"
               >
                 {/* Top Food Visual Card (Soft Pastel Gradient & Centered Artistic Emoji / Image) */}
                 <div className={`w-full aspect-[4/3] rounded-xl relative overflow-hidden flex items-center justify-center bg-gradient-to-br ${getDishGradient(item)} border border-slate-100/80`}>
@@ -622,15 +618,15 @@ export default function CustomerMenu({
                       className="w-full h-full object-cover group-hover:scale-105 transition duration-300" 
                     />
                   ) : (
-                    <div className="flex flex-col items-center justify-center p-2 group-hover:scale-110 transition duration-300">
-                      <span className="text-3xl sm:text-4xl drop-shadow-sm select-none">
+                    <div className="flex flex-col items-center justify-center p-2 group-hover:scale-110 transition duration-300 select-none">
+                      <span className="text-3xl sm:text-4xl drop-shadow-xs">
                         {getDishEmoji(item)}
                       </span>
                     </div>
                   )}
 
-                  {/* Top-Left: Pure Veg Badge */}
-                  <div className="absolute top-1.5 left-1.5 w-4 h-4 bg-white/95 backdrop-blur-xs rounded-sm border border-emerald-600 flex items-center justify-center shadow-2xs">
+                  {/* Top-Left: Standard FSSAI Pure Veg Green Mark */}
+                  <div className="absolute top-1.5 left-1.5 w-4 h-4 bg-white/95 backdrop-blur-xs rounded-xs border border-emerald-600 flex items-center justify-center shadow-2xs">
                     <div className="w-2 h-2 rounded-full bg-emerald-600"></div>
                   </div>
 
@@ -640,7 +636,7 @@ export default function CustomerMenu({
                       <span>{item.discountPercent}% OFF</span>
                     </div>
                   ) : item.prepTimeMins ? (
-                    <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-white/90 backdrop-blur-xs text-slate-700 font-mono text-[9px] font-bold border border-slate-200/60 shadow-2xs flex items-center space-x-0.5">
+                    <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-white/95 backdrop-blur-xs text-slate-700 font-mono text-[9px] font-bold border border-slate-200/60 shadow-2xs flex items-center space-x-0.5">
                       <Clock className="w-2.5 h-2.5 text-orange-500" />
                       <span>{item.prepTimeMins}m</span>
                     </div>
@@ -662,11 +658,11 @@ export default function CustomerMenu({
                     <span className="text-[9px] font-bold uppercase tracking-wider text-orange-600 font-mono truncate block">
                       {item.category}
                     </span>
-                    <h3 className="text-xs sm:text-sm font-black text-slate-900 font-heading line-clamp-2 leading-snug group-hover:text-emerald-700 transition mt-0.5 min-h-[2rem]">
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 font-heading line-clamp-2 leading-snug group-hover:text-orange-600 transition mt-0.5 min-h-[2rem]">
                       {item.english_name || item.name}
                     </h3>
                     {item.gujarati_name && (
-                      <p className="text-[11px] font-bold text-emerald-800 truncate leading-tight mt-0.5">
+                      <p className="text-[11px] font-medium text-slate-500 truncate leading-tight mt-0.5">
                         {item.gujarati_name}
                       </p>
                     )}
@@ -685,15 +681,16 @@ export default function CustomerMenu({
                       )}
                     </div>
 
-                    {/* Instamart Add / Stepper Button */}
+                    {/* Pro ADD / Stepper Button */}
                     <div className="shrink-0">
                       {qty === 0 ? (
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleQuickAdd(item);
                           }}
-                          className="px-2.5 sm:px-3 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-600 font-black text-[11px] sm:text-xs uppercase tracking-wider shadow-2xs flex items-center space-x-1 transition active:scale-95 cursor-pointer"
+                          className="px-2.5 sm:px-3 py-1 rounded-xl bg-orange-50 hover:bg-orange-500 text-orange-600 hover:text-white border border-orange-500 font-black text-[11px] sm:text-xs uppercase tracking-wider shadow-2xs flex items-center space-x-1 transition active:scale-95 cursor-pointer"
                         >
                           <span>ADD</span>
                           <Plus className="w-3 h-3 stroke-[3]" />
@@ -701,18 +698,20 @@ export default function CustomerMenu({
                       ) : (
                         <div 
                           onClick={(e) => e.stopPropagation()}
-                          className="flex items-center space-x-1 bg-emerald-600 text-white rounded-xl px-1.5 py-0.5 shadow-xs"
+                          className="flex items-center space-x-1 bg-orange-500 text-white rounded-xl px-1.5 py-0.5 shadow-xs"
                         >
                           <button
+                            type="button"
                             onClick={() => handleRemoveFromCart(item.id)}
-                            className="w-5 h-5 rounded-lg hover:bg-emerald-700 flex items-center justify-center text-white active:scale-90 transition cursor-pointer"
+                            className="w-5 h-5 rounded-lg hover:bg-orange-600 flex items-center justify-center text-white active:scale-90 transition cursor-pointer"
                           >
                             <Minus className="w-2.5 h-2.5 stroke-[3]" />
                           </button>
                           <span className="text-xs font-black font-mono px-1">{qty}</span>
                           <button
+                            type="button"
                             onClick={() => handleQuickAdd(item)}
-                            className="w-5 h-5 rounded-lg hover:bg-emerald-700 flex items-center justify-center text-white active:scale-90 transition cursor-pointer"
+                            className="w-5 h-5 rounded-lg hover:bg-orange-600 flex items-center justify-center text-white active:scale-90 transition cursor-pointer"
                           >
                             <Plus className="w-2.5 h-2.5 stroke-[3]" />
                           </button>
@@ -728,7 +727,7 @@ export default function CustomerMenu({
 
       </main>
 
-      {/* 4. DISH CUSTOMIZATION MODAL */}
+      {/* 3. DISH CUSTOMIZATION MODAL */}
       {customizingItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-sm w-full border border-slate-200 shadow-2xl space-y-4">
@@ -744,7 +743,7 @@ export default function CustomerMenu({
               </div>
               <button 
                 onClick={() => setCustomizingItem(null)}
-                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500"
+                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -826,7 +825,7 @@ export default function CustomerMenu({
 
               <button
                 onClick={handleAddCustomizedToCart}
-                className="px-6 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black text-xs shadow-md transition"
+                className="px-6 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black text-xs shadow-md transition cursor-pointer"
               >
                 Add to Order
               </button>
@@ -836,26 +835,26 @@ export default function CustomerMenu({
         </div>
       )}
 
-      {/* 5. FLOATING BOTTOM CART BAR - INSTAMART / BLINKIT STYLE */}
+      {/* 4. FLOATING BOTTOM CART BAR - SWIGGY / BLINKIT / INSTAMART STYLE */}
       {totalCartCount > 0 && !showCartDrawer && (
-        <div className="fixed bottom-3 left-3 right-3 sm:bottom-4 sm:left-4 sm:right-4 z-40 max-w-lg mx-auto">
+        <div className="fixed bottom-3 left-3 right-3 sm:bottom-4 sm:left-4 sm:right-4 z-40 max-w-md mx-auto">
           <button
             onClick={() => setShowCartDrawer(true)}
-            className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-700 text-white font-black text-sm shadow-xl flex items-center justify-between border border-emerald-500/50 hover:brightness-105 active:scale-[0.99] transition cursor-pointer"
+            className="w-full py-3 px-4 rounded-2xl bg-slate-900 text-white font-black text-sm shadow-2xl flex items-center justify-between border border-slate-800 hover:bg-slate-950 active:scale-[0.99] transition cursor-pointer"
           >
-            <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-white font-black text-xs font-mono">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-xl bg-orange-500 text-white flex items-center justify-center font-black text-xs font-mono shadow-xs">
                 {totalCartCount}
               </div>
               <div className="text-left">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">
-                  {totalCartCount} {totalCartCount === 1 ? 'Item' : 'Items'} In Cart
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  {totalCartCount} {totalCartCount === 1 ? 'Dish' : 'Dishes'} in Cart
                 </div>
-                <div className="text-sm font-black font-mono">₹{totalAmount.toFixed(2)}</div>
+                <div className="text-sm font-black font-mono text-white">₹{totalAmount.toFixed(2)}</div>
               </div>
             </div>
 
-            <div className="flex items-center space-x-1.5 bg-white text-emerald-900 px-3.5 py-1.5 rounded-xl font-black text-xs shadow-xs uppercase tracking-wider">
+            <div className="flex items-center space-x-1.5 bg-orange-500 hover:bg-orange-600 text-white px-3.5 py-1.5 rounded-xl font-black text-xs shadow-xs uppercase tracking-wider transition">
               <span>View Cart</span>
               <ArrowRight className="w-3.5 h-3.5 stroke-[3]" />
             </div>
@@ -1048,14 +1047,14 @@ export default function CustomerMenu({
                   onClick={() => setPaymentMode('UPI')}
                   className={`p-3 rounded-2xl border-2 transition cursor-pointer flex flex-col justify-between space-y-1.5 ${
                     paymentMode === 'UPI'
-                      ? 'bg-emerald-50/60 border-emerald-500 ring-2 ring-emerald-400/20 shadow-sm'
+                      ? 'bg-orange-50/70 border-orange-500 ring-2 ring-orange-400/20 shadow-xs'
                       : 'bg-white border-slate-200 hover:border-slate-300'
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <div className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs ${
-                        paymentMode === 'UPI' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700'
+                        paymentMode === 'UPI' ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-700'
                       }`}>
                         ⚡
                       </div>
@@ -1064,16 +1063,16 @@ export default function CustomerMenu({
                       </span>
                     </div>
                     {paymentMode === 'UPI' && (
-                      <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">
+                      <span className="w-4 h-4 rounded-full bg-orange-500 text-white flex items-center justify-center text-[10px] font-bold">
                         ✓
                       </span>
                     )}
                   </div>
                   <p className="text-[10px] text-slate-500 leading-tight">
-                    Instant UPI QR (GPay, PhonePe, Paytm). Bill marked Paid immediately.
+                    Instant UPI QR (GPay, PhonePe, Paytm). Auto-verified.
                   </p>
-                  <span className="inline-block self-start px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-emerald-100 text-emerald-800">
-                    ✅ Instant Kitchen Fire
+                  <span className="inline-block self-start px-2 py-0.5 rounded-md text-[9px] font-bold uppercase bg-orange-100 text-orange-800">
+                    ⚡ Fast Kitchen Fire
                   </span>
                 </div>
 
@@ -1082,7 +1081,7 @@ export default function CustomerMenu({
                   onClick={() => setPaymentMode('Cash')}
                   className={`p-3 rounded-2xl border-2 transition cursor-pointer flex flex-col justify-between space-y-1.5 ${
                     paymentMode === 'Cash'
-                      ? 'bg-amber-50/60 border-amber-500 ring-2 ring-amber-400/20 shadow-sm'
+                      ? 'bg-amber-50/70 border-amber-500 ring-2 ring-amber-400/20 shadow-xs'
                       : 'bg-white border-slate-200 hover:border-slate-300'
                   }`}
                 >
@@ -1098,16 +1097,16 @@ export default function CustomerMenu({
                       </span>
                     </div>
                     {paymentMode === 'Cash' && (
-                      <span className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center text-xs font-bold">
+                      <span className="w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center text-[10px] font-bold">
                         ✓
                       </span>
                     )}
                   </div>
                   <p className="text-[10px] text-slate-500 leading-tight">
-                    Eat first, pay cash or card at the cashier desk before leaving.
+                    Eat first, pay cash or UPI at the cashier desk upon bill.
                   </p>
-                  <span className="inline-block self-start px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-amber-100 text-amber-900">
-                    ⚠️ Pay at Counter After Dining
+                  <span className="inline-block self-start px-2 py-0.5 rounded-md text-[9px] font-bold uppercase bg-amber-100 text-amber-900">
+                    Pay at Cashier Desk
                   </span>
                 </div>
               </div>

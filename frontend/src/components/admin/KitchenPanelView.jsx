@@ -15,13 +15,19 @@ import {
   Sparkles,
   UtensilsCrossed,
   Printer,
-  X
+  X,
+  CheckCheck
 } from 'lucide-react';
 import { playSound } from '../../lib/sound';
 import { getTranslation } from '../../lib/translations';
 import { requestNotificationPermission, speakOrderAlert } from '../../lib/notifications';
 
-export default function KitchenPanelView({ orders, onUpdateStatus, currentLang }) {
+export default function KitchenPanelView({ 
+  orders = [], 
+  onUpdateStatus, 
+  currentLang,
+  theme = 'light'
+}) {
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [stationFilter, setStationFilter] = useState('All');
   const [checkedItems, setCheckedItems] = useState({}); // { `${orderId}_${idx}`: true }
@@ -32,7 +38,15 @@ export default function KitchenPanelView({ orders, onUpdateStatus, currentLang }
 
   const t = (key) => getTranslation(currentLang, key);
 
-  // Active cooking tickets vs completed tickets (Now includes PLACED orders so incoming orders show immediately!)
+  // Theme palettes
+  const isDark = theme === 'obsidian' || theme === 'sapphire';
+  const isSapphire = theme === 'sapphire';
+  const cardBg = isDark ? (isSapphire ? 'bg-slate-900/90' : 'bg-slate-900') : 'bg-white';
+  const cardBorder = isDark ? (isSapphire ? 'border-sky-900/40' : 'border-slate-800') : 'border-slate-200/80';
+  const textPrimary = isDark ? 'text-slate-100' : 'text-slate-900';
+  const textMuted = isDark ? 'text-slate-400' : 'text-slate-500';
+
+  // Active cooking tickets vs completed tickets (Includes PLACED so incoming tickets ring immediately!)
   const activeOrders = orders.filter(o => {
     const s = (o.status || '').toLowerCase();
     return s === 'placed' || s === 'preparing' || s === 'cooking';
@@ -99,106 +113,106 @@ export default function KitchenPanelView({ orders, onUpdateStatus, currentLang }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       
       {/* 1. TOP HEADER & TELEMETRY */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-3xl bg-slate-900 text-white border border-slate-800 shadow-xl">
+      <div className="p-5 rounded-2xl bg-slate-900 text-white border border-slate-800 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-heading shadow-md">
-            <ChefHat className="w-6 h-6" />
+          <div className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center font-heading shadow-xs shrink-0">
+            <ChefHat className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h2 className="text-xl font-black font-heading text-white tracking-tight">
+              <h2 className="text-lg font-black font-heading text-white tracking-tight">
                 Kitchen Display System (KDS)
               </h2>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[10px] font-mono border border-emerald-500/30">
-                LIVE REAL-TIME SYNC
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold text-[9px] font-mono border border-emerald-500/30">
+                LIVE KOT SYNC
               </span>
             </div>
             <p className="text-xs text-slate-400 font-medium">
-              Real-time digital ticket dispatch with instant voice alerts, table routing & mobile lock-screen push.
+              Real-time ticket bump bar with instant voice dispatch and station routing.
             </p>
           </div>
         </div>
 
         {/* Top Controls */}
         <div className="flex items-center flex-wrap gap-2">
-          {/* Mobile & Lock Screen Alerts Permission Button */}
+          {/* Mobile Phone Alerts Permission Button */}
           <button
             onClick={handleEnableNotifications}
-            className={`px-3.5 py-2 rounded-xl font-bold text-xs flex items-center space-x-1.5 transition border ${
+            className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center space-x-1.5 transition border cursor-pointer ${
               notificationStatus === 'granted'
                 ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-600/30'
-                : 'bg-orange-500 text-white border-orange-400 hover:bg-orange-600 animate-bounce'
+                : 'bg-orange-500 text-white border-orange-400 hover:bg-orange-600 shadow-xs'
             }`}
-            title="Enable lock-screen & background alerts when orders arrive"
+            title="Enable lock-screen & background push notifications when orders arrive"
           >
-            <BellRing className="w-4 h-4" />
-            <span>{notificationStatus === 'granted' ? '🔔 Phone Alerts Active' : '🔔 Enable Phone Alerts'}</span>
+            <BellRing className="w-3.5 h-3.5" />
+            <span>{notificationStatus === 'granted' ? 'Alerts Active' : 'Enable Alerts'}</span>
           </button>
 
           <button
             onClick={() => setShowRecallModal(true)}
-            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 transition border border-slate-700"
+            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center space-x-1.5 transition border border-slate-700 cursor-pointer"
           >
-            <History className="w-4 h-4 text-orange-400" />
+            <History className="w-3.5 h-3.5 text-orange-400" />
             <span>Bumped ({bumpedOrders.length})</span>
           </button>
 
           <button
             onClick={() => setAudioEnabled(!audioEnabled)}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 border ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 border cursor-pointer ${
               audioEnabled 
-                ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm' 
+                ? 'bg-emerald-600 text-white border-emerald-500 shadow-xs' 
                 : 'bg-slate-800 text-slate-400 border-slate-700'
             }`}
           >
-            {audioEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            {audioEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
             <span>{audioEnabled ? 'Sound ON' : 'Muted'}</span>
           </button>
         </div>
       </div>
 
       {/* 2. KITCHEN KPI CARDS */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <span className="text-[11px] font-bold text-slate-500 uppercase">Active Kitchen Tickets</span>
-          <div className="text-2xl font-black text-slate-900 font-heading mt-0.5">{activeOrders.length}</div>
-          <span className="text-[10px] text-orange-600 font-semibold font-mono">Tawa In-Flight</span>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className={`p-4 rounded-xl ${cardBg} border ${cardBorder} shadow-xs`}>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Kitchen Tickets</span>
+          <div className={`text-xl font-black ${textPrimary} font-mono mt-0.5`}>{activeOrders.length}</div>
+          <span className="text-[10px] text-orange-500 font-medium font-mono">Tawa In-Flight</span>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <span className="text-[11px] font-bold text-slate-500 uppercase">Avg Preparation Speed</span>
-          <div className="text-2xl font-black text-emerald-600 font-heading mt-0.5 font-mono">8.4m</div>
-          <span className="text-[10px] text-emerald-600 font-semibold font-mono">Target: &lt;12m</span>
+        <div className={`p-4 rounded-xl ${cardBg} border ${cardBorder} shadow-xs`}>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Avg Preparation Speed</span>
+          <div className="text-xl font-black text-emerald-600 font-mono mt-0.5">8.4m</div>
+          <span className="text-[10px] text-emerald-600/80 font-medium font-mono">Target: &lt;12m</span>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <span className="text-[11px] font-bold text-slate-500 uppercase">Completed Today</span>
-          <div className="text-2xl font-black text-slate-900 font-heading mt-0.5">{bumpedOrders.length + 28}</div>
-          <span className="text-[10px] text-slate-400 font-semibold font-mono">Dishes Cleared</span>
+        <div className={`p-4 rounded-xl ${cardBg} border ${cardBorder} shadow-xs`}>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Completed Shift</span>
+          <div className={`text-xl font-black ${textPrimary} font-mono mt-0.5`}>{bumpedOrders.length}</div>
+          <span className="text-[10px] text-slate-400 font-medium font-mono">Dishes Cleared</span>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-rose-200 shadow-sm">
-          <span className="text-[11px] font-bold text-rose-700 uppercase">Delayed (Over 15m)</span>
-          <div className="text-2xl font-black text-rose-600 font-heading mt-0.5 font-mono">
+        <div className={`p-4 rounded-xl ${cardBg} border border-rose-200 dark:border-rose-900/60 shadow-xs`}>
+          <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">Over 15m Delayed</span>
+          <div className="text-xl font-black text-rose-600 font-mono mt-0.5">
             {activeOrders.filter(o => getElapsedMins(o.time, o.placed_at) > 15).length}
           </div>
-          <span className="text-[10px] text-rose-600/80 font-bold">Priority Attention</span>
+          <span className="text-[10px] text-rose-500 font-medium">Rush Priority</span>
         </div>
       </div>
 
       {/* 3. STATION ROUTING TABS */}
-      <div className="flex items-center space-x-2 overflow-x-auto pb-1">
+      <div className="flex items-center space-x-1.5 overflow-x-auto pb-1">
         {['All', 'Dosa Tawa Station', 'Pav Bhaji & Pulao', 'Beverages & Extras'].map(station => (
           <button
             key={station}
             onClick={() => setStationFilter(station)}
-            className={`px-4 py-2 rounded-2xl text-xs font-bold transition whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
               stationFilter === station
-                ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                ? 'bg-orange-500 text-white shadow-xs'
+                : `bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50`
             }`}
           >
             {station}
@@ -207,7 +221,7 @@ export default function KitchenPanelView({ orders, onUpdateStatus, currentLang }
       </div>
 
       {/* 4. ACTIVE KITCHEN TICKETS GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredOrders.map(order => {
           const isPlaced = (order.status || '').toLowerCase() === 'placed';
           const elapsed = getElapsedMins(order.time, order.placed_at);
@@ -218,63 +232,63 @@ export default function KitchenPanelView({ orders, onUpdateStatus, currentLang }
           return (
             <div 
               key={order.id} 
-              className={`bg-white rounded-3xl border-2 shadow-lg p-5 space-y-4 relative overflow-hidden flex flex-col justify-between transition-all ${
+              className={`${cardBg} rounded-2xl border-2 shadow-xs p-4 space-y-3.5 relative overflow-hidden flex flex-col justify-between transition-all ${
                 isPlaced
-                  ? 'border-orange-500 ring-4 ring-orange-500/20'
+                  ? 'border-orange-500 ring-2 ring-orange-500/20'
                   : isUrgent 
-                    ? 'border-rose-400 ring-2 ring-rose-500/20' 
+                    ? 'border-rose-400 dark:border-rose-600' 
                     : isModerate 
-                      ? 'border-amber-300' 
-                      : 'border-slate-200'
+                      ? 'border-amber-300 dark:border-amber-600' 
+                      : cardBorder
               }`}
             >
               {/* Placed Alert Banner */}
               {isPlaced && (
-                <div className="p-2.5 rounded-2xl bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 text-white font-black text-xs flex items-center justify-between shadow-md animate-pulse">
+                <div className="p-2.5 rounded-xl bg-orange-500 text-white font-bold text-xs flex items-center justify-between shadow-xs">
                   <div className="flex items-center space-x-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping"></span>
-                    <span>🚨 NEW ORDER ARRIVED — START MAKING!</span>
+                    <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
+                    <span>NEW ORDER — TABLE {order.table_number || 'DINE-IN'}</span>
                   </div>
-                  <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">KOT Fired</span>
+                  <span className="text-[9px] bg-white/20 px-1.5 py-0.5 rounded font-mono font-bold uppercase tracking-wider">KOT Fired</span>
                 </div>
               )}
 
               {/* Ticket Top Header Bar */}
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center space-x-2.5">
-                  <span className={`w-3 h-3 rounded-full ${isPlaced ? 'bg-orange-500 animate-ping' : isUrgent ? 'bg-rose-500 animate-ping' : 'bg-emerald-500'}`}></span>
-                  <span className="text-xl font-black text-slate-900 font-heading">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
+                <div className="flex items-center space-x-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${isPlaced ? 'bg-orange-500 animate-ping' : isUrgent ? 'bg-rose-500 animate-ping' : 'bg-emerald-500'}`}></span>
+                  <span className={`text-lg font-black font-heading ${textPrimary}`}>
                     {order.table_number || 'Dine-In'}
                   </span>
-                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-mono font-bold">
-                    {order.channel || 'Dine-In'}
+                  <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-mono font-bold">
+                    {order.order_source || order.channel || 'Dine-In'}
                   </span>
                 </div>
 
                 <div className="text-right">
-                  <span className="text-xs font-mono font-black text-slate-700 block">{order.id}</span>
-                  <span className={`text-[10px] font-mono font-black px-1.5 py-0.5 rounded ${
+                  <span className="text-xs font-mono font-bold text-slate-500 dark:text-slate-400 block">{order.id}</span>
+                  <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded inline-block mt-0.5 ${
                     isPlaced
-                      ? 'bg-orange-100 text-orange-800 font-black'
+                      ? 'bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400'
                       : isUrgent 
-                        ? 'bg-rose-100 text-rose-700 font-bold' 
-                        : 'bg-slate-100 text-slate-500 font-semibold'
+                        ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400' 
+                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                   }`}>
-                    {isPlaced ? '⚡ Just Arrived' : `⏱️ ${elapsed}m on tawa`}
+                    {isPlaced ? 'Just Arrived' : `${elapsed}m active`}
                   </span>
                 </div>
               </div>
 
               {/* Special Cooking Note if any */}
               {order.special_note && (
-                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center space-x-1.5">
-                  <Flame className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>Chef Note: {order.special_note}</span>
+                <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-amber-900 dark:text-amber-300 text-xs font-bold flex items-center space-x-1.5">
+                  <Flame className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>Note: {order.special_note}</span>
                 </div>
               )}
 
               {/* Individual Item Check-off List */}
-              <div className="space-y-2 flex-1">
+              <div className="space-y-1.5 flex-1">
                 {items.map((item, idx) => {
                   const itemKey = `${order.id}_${idx}`;
                   const isChecked = checkedItems[itemKey];
@@ -283,30 +297,30 @@ export default function KitchenPanelView({ orders, onUpdateStatus, currentLang }
                     <div 
                       key={idx}
                       onClick={() => toggleItemReady(order.id, idx)}
-                      className={`p-2.5 rounded-2xl border transition cursor-pointer flex items-center justify-between gap-2 ${
+                      className={`p-2 rounded-xl border transition cursor-pointer flex items-center justify-between gap-2 ${
                         isChecked 
-                          ? 'bg-emerald-50 border-emerald-300 text-emerald-900 opacity-60 line-through' 
-                          : 'bg-slate-50 border-slate-200 hover:bg-orange-50/50 hover:border-orange-200 text-slate-900'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 opacity-60 line-through' 
+                          : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/60 hover:border-orange-300 text-slate-900 dark:text-slate-100'
                       }`}
                     >
-                      <div className="flex items-center space-x-2.5 truncate">
-                        <span className={`w-6 h-6 rounded-lg text-xs font-mono font-black flex items-center justify-center shrink-0 ${
-                          isChecked ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-white'
+                      <div className="flex items-center space-x-2 truncate">
+                        <span className={`w-5 h-5 rounded-md text-xs font-mono font-bold flex items-center justify-center shrink-0 ${
+                          isChecked ? 'bg-emerald-600 text-white' : 'bg-slate-900 dark:bg-slate-700 text-white'
                         }`}>
                           {item.qty}x
                         </span>
-                        <span className="font-heading font-black text-xs truncate">
+                        <span className="font-heading font-bold text-xs truncate">
                           {item.name}
                         </span>
                       </div>
 
                       <div className="shrink-0">
                         {isChecked ? (
-                          <span className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center">
-                            <Check className="w-3 h-3" />
+                          <span className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center">
+                            <Check className="w-2.5 h-2.5" />
                           </span>
                         ) : (
-                          <span className="w-5 h-5 rounded-full border border-slate-300 hover:border-orange-500"></span>
+                          <span className="w-4 h-4 rounded-full border border-slate-300 dark:border-slate-600 hover:border-orange-500"></span>
                         )}
                       </div>
                     </div>
@@ -315,32 +329,32 @@ export default function KitchenPanelView({ orders, onUpdateStatus, currentLang }
               </div>
 
               {/* Bottom Bump Bar */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center space-x-1 text-xs text-slate-400 font-mono">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>Placed: {order.time || '11:30 AM'}</span>
+              <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center space-x-1 text-[11px] text-slate-400 font-mono">
+                  <Clock className="w-3 h-3" />
+                  <span>{order.time || 'Now'}</span>
                 </div>
 
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-1.5">
                   {isPlaced && (
                     <button
                       onClick={() => {
                         onUpdateStatus(order.id, 'Preparing');
                         playSound('order');
                       }}
-                      className="px-3.5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black text-xs shadow-md shadow-orange-500/25 flex items-center space-x-1 transition"
+                      className="px-2.5 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs shadow-xs flex items-center space-x-1 transition cursor-pointer"
                     >
-                      <Flame className="w-3.5 h-3.5 fill-current" />
-                      <span>Start Cooking</span>
+                      <Flame className="w-3 h-3 fill-current" />
+                      <span>Start</span>
                     </button>
                   )}
 
                   <button
                     onClick={() => handleBumpOrder(order.id)}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/20 flex items-center space-x-1 transition"
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs flex items-center space-x-1 transition cursor-pointer"
                   >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Bump (Mark Ready)</span>
+                    <Check className="w-3 h-3" />
+                    <span>Bump (Ready)</span>
                   </button>
                 </div>
               </div>
@@ -352,67 +366,71 @@ export default function KitchenPanelView({ orders, onUpdateStatus, currentLang }
 
       {/* Empty State */}
       {filteredOrders.length === 0 && (
-        <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center space-y-3 shadow-sm">
-          <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center text-2xl font-bold">
-            ✨
+        <div className={`p-12 rounded-2xl ${cardBg} border ${cardBorder} text-center space-y-2.5 shadow-xs`}>
+          <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 mx-auto flex items-center justify-center">
+            <CheckCircle2 className="w-6 h-6" />
           </div>
-          <h3 className="text-base font-black text-slate-800 font-heading">
-            Tawa & Counter Clean! All Orders Cleared
+          <h3 className={`text-sm font-bold ${textPrimary} font-heading`}>
+            All Orders Cleared
           </h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
-            Kitchen queue is currently empty for station "{stationFilter}". New tickets from QR scans or POS orders will ring here automatically.
+            Kitchen queue is currently clear for station "{stationFilter}". New incoming orders from QR scans or POS orders will fire here in real time.
           </p>
         </div>
       )}
 
       {/* 5. RECALL BUMPED ORDERS MODAL */}
       {showRecallModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-lg w-full border border-slate-200 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className={`${cardBg} rounded-2xl p-5 max-w-md w-full border ${cardBorder} shadow-2xl space-y-3.5`}>
             
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
               <div className="flex items-center space-x-2">
-                <History className="w-5 h-5 text-orange-500" />
-                <h3 className="text-base font-black text-slate-900 font-heading">
+                <History className="w-4 h-4 text-orange-500" />
+                <h3 className={`text-sm font-bold ${textPrimary} font-heading`}>
                   Recently Bumped Kitchen Orders
                 </h3>
               </div>
               <button 
                 onClick={() => setShowRecallModal(false)}
-                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-500">
-              Need to remake or double-check a dish? Click "Recall to Tawa" to restore any bumped order back to the active KDS.
+            <p className="text-xs text-slate-400">
+              Restore any bumped order back to the active kitchen queue.
             </p>
 
-            <div className="max-h-80 overflow-y-auto space-y-2.5 pr-1 divide-y divide-slate-100">
-              {bumpedOrders.map(order => (
-                <div key={order.id} className="pt-2 flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="font-heading font-black text-xs text-slate-900">
-                        {order.table_number || 'Dine-In'}
-                      </span>
-                      <span className="font-mono text-[10px] text-slate-500">({order.id})</span>
+            <div className="max-h-72 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-100 dark:divide-slate-800">
+              {bumpedOrders.length === 0 ? (
+                <div className="text-xs text-slate-400 text-center py-4">No recently bumped orders.</div>
+              ) : (
+                bumpedOrders.map(order => (
+                  <div key={order.id} className="pt-2 flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center space-x-1.5">
+                        <span className={`font-heading font-bold text-xs ${textPrimary}`}>
+                          {order.table_number || 'Dine-In'}
+                        </span>
+                        <span className="font-mono text-[10px] text-slate-400">({order.id})</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 truncate max-w-xs">
+                        {order.items_summary || order.items?.map(i => `${i.qty}x ${i.name}`).join(', ')}
+                      </p>
                     </div>
-                    <p className="text-[11px] text-slate-500 truncate max-w-xs">
-                      {order.items_summary || order.items?.map(i => `${i.qty}x ${i.name}`).join(', ')}
-                    </p>
-                  </div>
 
-                  <button
-                    onClick={() => handleRecallOrder(order.id)}
-                    className="px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-700 font-bold text-xs flex items-center space-x-1 border border-orange-200"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Recall to Tawa</span>
-                  </button>
-                </div>
-              ))}
+                    <button
+                      onClick={() => handleRecallOrder(order.id)}
+                      className="px-2.5 py-1 rounded-lg bg-orange-50 hover:bg-orange-100 dark:bg-orange-950/40 dark:hover:bg-orange-900/40 text-orange-600 dark:text-orange-400 font-bold text-[11px] flex items-center space-x-1 border border-orange-200 dark:border-orange-800/60 cursor-pointer"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Recall</span>
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
 
           </div>
