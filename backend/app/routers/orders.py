@@ -54,6 +54,28 @@ async def place_guest_order(request: Request, body: GuestOrderCreate):
     clean_table = html.escape(body.table_number.strip().upper())
     clean_customer = html.escape((body.customer_name or "Walk-in Guest").strip())
 
+    # 3b. Anti-Duplicate / Table QR Lock Check: Prevent 2nd order while an order is active in the kitchen queue
+    def _digits_of(val: str) -> str:
+        return "".join(filter(str.isdigit, str(val)))
+
+    def _is_table_match(t1: str, t2: str) -> bool:
+        d1, d2 = _digits_of(t1), _digits_of(t2)
+        if d1 and d2:
+            return d1 == d2
+        return str(t1).strip().upper() == str(t2).strip().upper()
+
+    active_order = next((
+        o for o in CANONICAL_ORDERS
+        if _is_table_match(o.get("table_number", ""), clean_table)
+        and (o.get("status") or "").lower() not in ["completed", "cancelled"]
+    ), None)
+
+    if active_order:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Table {clean_table} already has an active order ({active_order['id']}) in status '{active_order['status']}'. QR ordering is locked for this table until the current order is completed."
+        )
+
     # 4. Authoritative Server-Side Price Recalculation
     verified_subtotal = 0.0
     verified_items: List[OrderItemDetail] = []

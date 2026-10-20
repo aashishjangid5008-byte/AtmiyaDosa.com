@@ -30,7 +30,8 @@ import {
   Star,
   Award,
   Banknote,
-  CreditCard
+  CreditCard,
+  Lock
 } from 'lucide-react';
 import { getTranslation } from '../lib/translations';
 import { playSound } from '../lib/sound';
@@ -65,6 +66,7 @@ const getDishGradient = (item) => {
 export default function CustomerMenu({ 
   currentTable, 
   setCurrentTable, 
+  tables = [],
   categories, 
   menuItems, 
   orders = [],
@@ -154,17 +156,36 @@ export default function CustomerMenu({
 
   const t = (key) => getTranslation(currentLang, key);
 
-  // Active table orders (if any placed during this dining session)
+  // Robust Table & Active Order Matchers (Sections 3 & 4: Anti-Duplicate QR Lock)
+  const normalizeTable = (val) => {
+    if (!val) return '';
+    const digits = String(val).replace(/[^0-9]/g, '');
+    if (digits) return String(parseInt(digits, 10));
+    return String(val).trim().toLowerCase();
+  };
+
+  const isTableMatch = (t1, t2) => {
+    return normalizeTable(t1) === normalizeTable(t2);
+  };
+
+  const isOrderActive = (order) => {
+    if (!order) return false;
+    const st = String(order.status || '').toLowerCase().trim();
+    if (st === 'completed' || st === 'cancelled' || st === 'settled' || st === 'paid_out') {
+      return false;
+    }
+    return true;
+  };
+
+  // Active table order in the kitchen queue (Locks QR and blocks 2nd order)
   const activeTableOrder = orders.find(o => 
-    (o.table_number === currentTable || o.table_number === `Table ${currentTable}`) && 
-    o.status !== 'Completed' && 
-    o.status !== 'Cancelled'
+    isTableMatch(o.table_number, currentTable) && isOrderActive(o)
   );
 
-  // Check for any recent cancelled order for this table (Section 7 of Admin.txt)
+  // Check for any recent cancelled order for this table
   const recentCancelledOrder = orders.find(o => 
-    (o.table_number === currentTable || o.table_number === `Table ${currentTable}`) && 
-    o.status === 'Cancelled' && 
+    isTableMatch(o.table_number, currentTable) && 
+    (o.status || '').toLowerCase() === 'cancelled' && 
     o.cancel_reason
   );
 
@@ -199,6 +220,12 @@ export default function CustomerMenu({
   };
 
   const handleOpenCustomizer = (item) => {
+    if (activeTableOrder) {
+      setShowOrderTracker(true);
+      setServiceNotice(`🔒 Table ${currentTable} QR is locked. Order #${activeTableOrder.id} is active in the kitchen queue.`);
+      setTimeout(() => setServiceNotice(''), 4500);
+      return;
+    }
     setCustomizingItem(item);
     setExtraButter(false);
     setExtraCheese(false);
@@ -208,6 +235,12 @@ export default function CustomerMenu({
 
   const handleAddCustomizedToCart = () => {
     if (!customizingItem) return;
+    if (activeTableOrder) {
+      setShowOrderTracker(true);
+      setServiceNotice(`🔒 Table ${currentTable} QR is locked. Order #${activeTableOrder.id} is active in queue.`);
+      setTimeout(() => setServiceNotice(''), 4500);
+      return;
+    }
     const basePrice = Number(customizingItem.finalPrice || customizingItem.price || 0);
     let finalUnitPrice = basePrice;
     const tags = [];
@@ -235,6 +268,12 @@ export default function CustomerMenu({
   };
 
   const handleQuickAdd = (item) => {
+    if (activeTableOrder) {
+      setShowOrderTracker(true);
+      setServiceNotice(`🔒 Table ${currentTable} QR is locked. Order #${activeTableOrder.id} is active in the kitchen queue.`);
+      setTimeout(() => setServiceNotice(''), 4500);
+      return;
+    }
     const unitPrice = Number(item.finalPrice || item.price || 0);
     const existing = cart.find(i => i.id === item.id);
     if (existing) {
@@ -293,6 +332,12 @@ export default function CustomerMenu({
 
   const handleConfirmOrder = () => {
     if (cart.length === 0) return;
+
+    // Table QR Lock Check: Reject 2nd order if table has an active order in progress
+    if (activeTableOrder) {
+      setValidationError(`Table ${currentTable} already has Order #${activeTableOrder.id} active in the kitchen queue. To prevent duplicate food preparation, additional orders cannot be placed until this order is completed.`);
+      return;
+    }
 
     // Validate Customer Full Name
     const trimmedName = (customerName || '').trim();
@@ -460,29 +505,38 @@ export default function CustomerMenu({
         </div>
       )}
 
-      {/* Active Order Tracker Pill (if table has food cooking) */}
+      {/* Active Order & Table QR Lock Banner (Anti-Duplicate Guard) */}
       {activeTableOrder && (
-        <div className="max-w-4xl mx-auto px-4 mt-3">
+        <div className="max-w-4xl mx-auto px-3 sm:px-4 mt-3">
           <div 
             onClick={() => setShowOrderTracker(true)}
-            className="p-3 rounded-2xl bg-orange-50 border border-orange-300 shadow-xs flex items-center justify-between cursor-pointer hover:bg-orange-100 transition"
+            className="p-4 rounded-2xl bg-amber-50/95 border border-amber-300 text-amber-950 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-amber-100/90 transition"
           >
-            <div className="flex items-center space-x-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-ping"></span>
+            <div className="flex items-start sm:items-center space-x-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Lock className="w-5 h-5" />
+              </div>
               <div>
-                <span className="text-xs font-black text-orange-950 font-heading">
-                  Order {activeTableOrder.id} is Cooking!
-                </span>
-                <p className="text-[11px] text-orange-800">
-                  {activeTableOrder.items?.length || 1} dishes on tawa • Tap to track live status
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs sm:text-sm font-black text-amber-950 font-heading">
+                    Table {currentTable} QR Locked • Order #{activeTableOrder.id} Active
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-200 text-amber-900 border border-amber-300 animate-pulse">
+                    {activeTableOrder.status || 'Cooking'}
+                  </span>
+                </div>
+                <p className="text-[11px] sm:text-xs text-amber-800 mt-0.5">
+                  Your meal is currently cooking in the kitchen queue. To prevent duplicate orders, new orders from this QR are paused until served.
                 </p>
               </div>
             </div>
 
-            <span className="px-3 py-1 rounded-xl bg-orange-500 text-white text-xs font-black shadow-xs flex items-center space-x-1">
-              <span>Track</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </span>
+            <div className="flex items-center space-x-2 self-end sm:self-center shrink-0">
+              <span className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs flex items-center space-x-1 transition">
+                <span>View Live Order</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -683,7 +737,20 @@ export default function CustomerMenu({
 
                     {/* Pro ADD / Stepper Button */}
                     <div className="shrink-0">
-                      {qty === 0 ? (
+                      {activeTableOrder ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowOrderTracker(true);
+                          }}
+                          className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 border border-slate-300 font-bold text-[10px] sm:text-[11px] flex items-center space-x-1 transition cursor-pointer"
+                          title="Table QR is locked while current order is active in kitchen"
+                        >
+                          <Lock className="w-2.5 h-2.5 text-slate-400" />
+                          <span>IN QUEUE</span>
+                        </button>
+                      ) : qty === 0 ? (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -857,6 +924,36 @@ export default function CustomerMenu({
             <div className="flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded-xl font-black text-xs shadow-xs uppercase tracking-wider transition">
               <span>View Cart</span>
               <ArrowRight className="w-3.5 h-3.5 stroke-[3]" />
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* 5. FLOATING LIVE ORDER TRACKER BAR (When Table Has Active Order in Kitchen Queue) */}
+      {activeTableOrder && !showOrderTracker && !showCartDrawer && totalCartCount === 0 && (
+        <div className="fixed bottom-3 left-3 right-3 sm:bottom-4 sm:left-4 sm:right-4 z-40 max-w-md mx-auto">
+          <button
+            onClick={() => setShowOrderTracker(true)}
+            className="w-full py-3 px-4 rounded-2xl bg-slate-900 text-white font-black text-sm shadow-2xl flex items-center justify-between border border-slate-800 hover:bg-black active:scale-[0.99] transition cursor-pointer"
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-xl bg-orange-500 text-white flex items-center justify-center font-black text-xs font-mono shadow-xs">
+                <Clock className="w-4 h-4 animate-spin text-white" style={{ animationDuration: '4s' }} />
+              </div>
+              <div className="text-left">
+                <div className="text-xs font-bold leading-tight flex items-center space-x-1.5">
+                  <span>Order #{activeTableOrder.id} in Kitchen</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                </div>
+                <div className="text-[10px] text-slate-300 font-medium capitalize">
+                  {activeTableOrder.items?.length || 1} items • Status: {activeTableOrder.status || 'Cooking'}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-1 bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-xl text-xs font-bold transition">
+              <span>Track Food</span>
+              <ChevronRight className="w-3.5 h-3.5" />
             </div>
           </button>
         </div>
@@ -1155,72 +1252,122 @@ export default function CustomerMenu({
       )}
 
       {/* 7. LIVE ORDER PROGRESS TRACKER MODAL */}
-      {showOrderTracker && activeTableOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-sm w-full border border-slate-200 shadow-2xl space-y-4">
-            
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-base font-black text-slate-900 font-heading">
-                  Order Status: {activeTableOrder.id}
-                </h3>
-                <span className="text-xs text-slate-400 font-mono">Table {currentTable}</span>
+      {showOrderTracker && activeTableOrder && (() => {
+        const statusLower = (activeTableOrder.status || '').toLowerCase().trim();
+        const isReady = statusLower === 'ready';
+        const isServed = statusLower === 'served' || statusLower === 'completed';
+        const isCooking = statusLower === 'cooking' || statusLower === 'preparing';
+        const isPlaced = statusLower === 'placed' || statusLower === 'pending';
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-sm w-full border border-slate-200 shadow-2xl space-y-4">
+              
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h3 className="text-base font-black text-slate-900 font-heading">
+                      Order #{activeTableOrder.id}
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-orange-100 text-orange-800 border border-orange-200">
+                      {activeTableOrder.status || 'Cooking'}
+                    </span>
+                  </div>
+                  <span className="text-xs text-slate-500 font-mono">Assigned: Table {currentTable}</span>
+                </div>
+                <button 
+                  onClick={() => setShowOrderTracker(false)}
+                  className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-              <button 
+
+              {/* Dynamic 3-Step Live Progress */}
+              <div className="space-y-4 py-2">
+                {/* Step 1: Placed & KOT */}
+                <div className="flex items-start space-x-3">
+                  <div className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-xs">
+                    ✓
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-900">Order Received & KOT Fired</h4>
+                    <p className="text-[10px] text-slate-500">Sent to kitchen screen & KOT printed</p>
+                  </div>
+                </div>
+
+                {/* Step 2: Cooking */}
+                <div className="flex items-start space-x-3">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                    isReady || isServed 
+                      ? 'bg-emerald-500 text-white' 
+                      : (isCooking || isPlaced ? 'bg-orange-500 text-white animate-pulse shadow-xs' : 'bg-slate-200 text-slate-500')
+                  }`}>
+                    {isReady || isServed ? '✓' : '🍳'}
+                  </div>
+                  <div>
+                    <h4 className={`text-xs font-black ${isCooking || isPlaced ? 'text-orange-950 font-bold' : (isReady || isServed ? 'text-slate-900' : 'text-slate-400')}`}>
+                      Cooking in Kitchen
+                    </h4>
+                    <p className="text-[10px] text-slate-500">Fresh dosas and food being cooked by kitchen chefs</p>
+                  </div>
+                </div>
+
+                {/* Step 3: Served */}
+                <div className="flex items-start space-x-3">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                    isServed 
+                      ? 'bg-emerald-500 text-white' 
+                      : (isReady ? 'bg-emerald-500 text-white animate-bounce' : 'bg-slate-200 text-slate-500')
+                  }`}>
+                    {isServed ? '✓' : '🍽️'}
+                  </div>
+                  <div>
+                    <h4 className={`text-xs font-black ${isServed ? 'text-emerald-900' : (isReady ? 'text-emerald-700 font-bold' : 'text-slate-400')}`}>
+                      {isReady ? 'Food Ready! Serving to Table' : (isServed ? 'Delivered to Table' : 'Ready & Served to Table')}
+                    </h4>
+                    <p className="text-[10px] text-slate-500">Floor staff delivers directly to Table {currentTable}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Items in Active Order */}
+              {activeTableOrder.items && activeTableOrder.items.length > 0 && (
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-1.5 max-h-36 overflow-y-auto">
+                  <div className="font-bold text-slate-500 text-[10px] uppercase tracking-wider pb-1 border-b border-slate-200 flex justify-between">
+                    <span>Dishes on this Ticket</span>
+                    <span>Qty</span>
+                  </div>
+                  {activeTableOrder.items.map((it, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-slate-800">
+                      <span className="truncate pr-2 font-medium">{it.name || it.english_name}</span>
+                      <span className="font-mono font-bold text-slate-900 shrink-0">x{it.quantity || 1}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Table QR Anti-Duplicate Lock Note */}
+              <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] flex items-center space-x-2">
+                <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>QR ordering is paused for Table {currentTable} while this order is active.</span>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs flex justify-between font-mono">
+                <span className="text-slate-500">Bill Total:</span>
+                <span className="font-black text-slate-900">₹{activeTableOrder.total || activeTableOrder.total_amount}</span>
+              </div>
+
+              <button
                 onClick={() => setShowOrderTracker(false)}
-                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500"
+                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-950 text-white font-bold text-xs cursor-pointer transition"
               >
-                <X className="w-4 h-4" />
+                Close Tracker
               </button>
             </div>
-
-            {/* Stepper */}
-            <div className="space-y-4 py-2">
-              <div className="flex items-start space-x-3">
-                <div className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold shrink-0">
-                  ✓
-                </div>
-                <div>
-                  <h4 className="text-xs font-black text-slate-900">Order Received & KOT Fired</h4>
-                  <p className="text-[10px] text-slate-400">Order accepted into central kitchen queue</p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-3">
-                <div className="w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center text-xs font-bold shrink-0 animate-pulse">
-                  🍳
-                </div>
-                <div>
-                  <h4 className="text-xs font-black text-orange-950">Cooking on Tawa</h4>
-                  <p className="text-[10px] text-orange-800">Fresh dosas and gravies are currently on the stove</p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-3">
-                <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold shrink-0">
-                  🍽️
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-500">Ready & Served to Table</h4>
-                  <p className="text-[10px] text-slate-400">Floor waiter will deliver piping hot to Table {currentTable}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs flex justify-between font-mono">
-              <span>Bill Total:</span>
-              <span className="font-black text-slate-900">₹{activeTableOrder.total || activeTableOrder.total_amount}</span>
-            </div>
-
-            <button
-              onClick={() => setShowOrderTracker(false)}
-              className="w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs"
-            >
-              Close Tracker
-            </button>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 8. ORDER PLACED SUCCESS MODAL */}
       {orderSuccess && (

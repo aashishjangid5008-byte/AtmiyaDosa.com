@@ -93,13 +93,11 @@ export default function App() {
   // Global State (persisted & synchronized)
   const [settings, setSettings] = useState(() => getLocalStore('settings', INITIAL_SETTINGS));
   const [currentLang, setCurrentLang] = useState(settings?.language || 'en');
-  const [theme, setThemeState] = useState(() => {
-    const saved = getLocalStore('app_theme', 'light');
-    return (saved === 'obsidian' || !saved) ? 'light' : saved;
-  });
-  const setTheme = (newTheme) => {
-    setThemeState(newTheme);
-    setLocalStore('app_theme', newTheme);
+  // 100% Clean White Classic Theme Only (No Dark / Sapphire Mode)
+  const [theme, setThemeState] = useState('light');
+  const setTheme = () => {
+    setThemeState('light');
+    setLocalStore('app_theme', 'light');
   };
   const [tables, setTables] = useState(() => getLocalStore('tables', INITIAL_TABLES));
   const [categories, setCategories] = useState(() => getLocalStore('categories', INITIAL_CATEGORIES));
@@ -435,6 +433,25 @@ export default function App() {
   };
 
   const handlePlaceCustomerOrder = async (newOrder) => {
+    // 0. Anti-duplicate verification: ensure this table does not already have an active order in progress
+    const normalizeTbl = (val) => {
+      const digits = String(val || '').replace(/[^0-9]/g, '');
+      return digits ? String(parseInt(digits, 10)) : String(val || '').trim().toLowerCase();
+    };
+    const isOrderActive = (o) => {
+      const st = String(o?.status || '').toLowerCase().trim();
+      return st !== 'completed' && st !== 'cancelled' && st !== 'settled';
+    };
+
+    const hasActiveOrder = orders.some(o => 
+      normalizeTbl(o.table_number) === normalizeTbl(newOrder.table_number) && isOrderActive(o)
+    );
+
+    if (hasActiveOrder) {
+      alert(`⚠️ Table ${newOrder.table_number} already has an active order in the kitchen queue! Additional orders are locked until the current order is completed.`);
+      return false;
+    }
+
     // 1. Immediately update UI & local state for zero-latency customer UX
     const updated = [newOrder, ...orders];
     setOrders(updated);
@@ -946,6 +963,7 @@ export default function App() {
       <CustomerMenu
         currentTable={currentTable}
         setCurrentTable={setCurrentTable}
+        tables={tables}
         categories={categories}
         menuItems={menuItems}
         orders={orders}
@@ -972,26 +990,12 @@ export default function App() {
     );
   }
 
-  const isDark = theme !== 'light';
-  const appBgClass = theme === 'sapphire' 
-    ? 'bg-[#060B18] text-slate-100' 
-    : (theme === 'light' ? 'bg-[#F8FAFC] text-zinc-900' : 'bg-[#090D16] text-slate-100');
-  
-  const sidebarClass = theme === 'sapphire'
-    ? 'bg-[#0B1530]/95 border-indigo-900/50 text-slate-300'
-    : (theme === 'light' ? 'bg-white/95 border-zinc-200/80 text-zinc-700' : 'bg-[#0E1526]/95 border-slate-800 text-slate-300');
-
-  const headerClass = theme === 'sapphire'
-    ? 'bg-[#0B1530]/90 border-indigo-900/50 backdrop-blur-xl'
-    : (theme === 'light' ? 'bg-white/90 border-zinc-200/80 backdrop-blur-xl shadow-xs' : 'bg-[#0E1526]/90 border-slate-800/80 backdrop-blur-xl');
-
-  const navActiveStyle = theme === 'sapphire'
-    ? 'bg-indigo-600 text-white font-semibold shadow-xs'
-    : (theme === 'light' ? 'bg-slate-900 text-white font-semibold shadow-xs' : 'bg-slate-800 text-white font-semibold border border-slate-700/80 shadow-xs');
-
-  const navInactiveStyle = isDark
-    ? 'text-slate-400 hover:text-white hover:bg-slate-800/60 font-medium'
-    : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100/80 font-medium';
+  const isDark = false;
+  const appBgClass = 'bg-[#F8FAFC] text-slate-900';
+  const sidebarClass = 'bg-white border-slate-200/80 text-slate-700';
+  const headerClass = 'bg-white/95 border-slate-200/80 backdrop-blur-xl shadow-xs';
+  const navActiveStyle = 'bg-slate-900 text-white font-semibold shadow-xs';
+  const navInactiveStyle = 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium';
 
   const recentOrders = (orders || []).slice(0, 5);
   const pendingOrdersCount = (orders || []).filter(o => (o.status || '').toUpperCase() === 'PENDING').length;
@@ -1289,48 +1293,6 @@ export default function App() {
                 <span className="whitespace-nowrap">{currentTimeStr}</span>
               </div>
 
-              {/* Segmented Theme Switcher */}
-              <div className={`flex items-center p-0.5 rounded-xl border shrink-0 ${
-                isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-slate-100/90 border-slate-200'
-              }`}>
-                <button
-                  type="button"
-                  onClick={() => setTheme('light')}
-                  className={`p-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                    theme === 'light' 
-                      ? 'bg-white text-slate-900 shadow-xs' 
-                      : 'text-slate-400 hover:text-slate-700'
-                  }`}
-                  title="Light Theme"
-                >
-                  <Sun className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTheme('obsidian')}
-                  className={`p-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                    theme === 'obsidian' 
-                      ? 'bg-orange-500 text-white shadow-xs' 
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Obsidian Dark Theme"
-                >
-                  <Moon className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTheme('sapphire')}
-                  className={`p-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                    theme === 'sapphire' 
-                      ? 'bg-indigo-600 text-white shadow-xs' 
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                  title="Sapphire Blue Theme"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
               {/* Language Selector */}
               <div className={`flex items-center space-x-1 px-2 py-1.5 rounded-xl border text-xs font-semibold shrink-0 ${
                 isDark ? 'bg-slate-900/80 border-slate-800 text-slate-300' : 'bg-slate-100/90 border-slate-200 text-slate-700'
@@ -1610,6 +1572,7 @@ export default function App() {
           {activeTab === 'qr' && (
             <QRManagementView
               tables={tables}
+              orders={orders}
               restaurantSettings={settings}
               currentLang={currentLang}
             />
