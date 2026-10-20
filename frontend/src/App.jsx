@@ -46,7 +46,15 @@ import {
   addCustomerLoyaltyPoints,
   recordEmployeeActivity
 } from './lib/appwrite';
-import { supabase, RESTAURANT_ID } from './lib/supabase';
+import { 
+  supabase, 
+  RESTAURANT_ID, 
+  dispatchOrderToSupabase, 
+  updateOrderStatusInSupabase, 
+  settleTableSessionInSupabase, 
+  fetchLiveOrdersFromSupabase,
+  normalizeTableNumber
+} from './lib/supabase';
 import { getTranslation } from './lib/translations';
 import { playSound } from './lib/sound';
 
@@ -130,8 +138,49 @@ export default function App() {
     return () => window.removeEventListener('restaurant_data_updated', loadFreshState);
   }, []);
 
-  // Live Supabase Synchronization Hook (keeps QR Menu & Admin POS 100% in sync with Cloud DB)
+  // Live Supabase Synchronization Hook (keeps QR Menu, Admin POS & Kitchen in 100% real-time sync)
   useEffect(() => {
+    let orderChannel = null;
+
+    const mapDbOrderToFrontend = (dbOrd) => {
+      const isOnline = dbOrd.payment_method === 'UPI_COUNTER' || dbOrd.payment_method === 'ONLINE_RAZORPAY';
+      const statusDisplayMap = {
+        'PLACED': 'Placed',
+        'PREPARING': 'Preparing',
+        'READY': 'Ready',
+        'SERVED': 'Completed',
+        'CANCELLED': 'Cancelled'
+      };
+      const itms = (dbOrd.order_items || []).map(i => ({
+        id: i.id,
+        name: i.item_name,
+        price: parseFloat(i.unit_price) || 0,
+        qty: i.quantity || 1
+      }));
+      return {
+        id: dbOrd.order_number?.startsWith('#') ? dbOrd.order_number : `#${dbOrd.order_number}`,
+        supabase_order_id: dbOrd.id,
+        session_id: dbOrd.session_id,
+        table_number: dbOrd.table_number,
+        customer_name: dbOrd.customer_name || 'Walk-in Guest',
+        customer_phone: dbOrd.customer_phone || '',
+        items: itms,
+        items_summary: itms.map(i => `${i.qty}x ${i.name}`).join(', ') || 'Dishes',
+        subtotal: parseFloat(dbOrd.subtotal) || 0,
+        tax: parseFloat(dbOrd.tax_amount) || 0,
+        discount: parseFloat(dbOrd.discount_amount) || 0,
+        total: parseFloat(dbOrd.total_amount) || 0,
+        total_amount: parseFloat(dbOrd.total_amount) || 0,
+        status: statusDisplayMap[dbOrd.status] || dbOrd.status || 'Preparing',
+        channel: 'Dine-In QR',
+        time: dbOrd.placed_at ? new Date(dbOrd.placed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '12:00 PM',
+        payment_mode: isOnline ? 'UPI' : 'Cash',
+        payment_status: dbOrd.payment_status === 'PAID' ? 'Paid' : 'Pending Cash',
+        payment_verified_online: isOnline,
+        special_note: dbOrd.special_notes || ''
+      };
+    };
+
     async function syncFromSupabase() {
       try {
         const { data: supaCategories, error: catErr } = await supabase
@@ -188,11 +237,48 @@ export default function App() {
             setLocalStore('categories', mappedCategories);
           }
         }
+
+        // Live Orders sync from Supabase
+        const dbOrders = await fetchLiveOrdersFromSupabase();
+        if (dbOrders && dbOrders.length > 0) {
+          const mappedDbOrders = dbOrders.map(mapDbOrderToFrontend);
+          setOrders(prev => {
+            const merged = [...mappedDbOrders];
+            prev.forEach(po => {
+              if (!merged.some(mo => mo.id === po.id || (po.supabase_order_id && mo.supabase_order_id === po.supabase_order_id))) {
+                merged.push(po);
+              }
+            });
+            setLocalStore('orders', merged);
+            return merged;
+          });
+        }
+
+        // Subscribe to live order updates from Supabase Realtime
+        orderChannel = supabase
+          .channel('realtime:app_orders')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async () => {
+            const fresh = await fetchLiveOrdersFromSupabase();
+            if (fresh && fresh.length > 0) {
+              const mapped = fresh.map(mapDbOrderToFrontend);
+              setOrders(mapped);
+              setLocalStore('orders', mapped);
+            }
+          })
+          .subscribe();
+
       } catch (err) {
-        console.warn('Supabase menu sync notice:', err);
+        console.warn('Supabase initial sync notice:', err);
       }
     }
+
     syncFromSupabase();
+
+    return () => {
+      if (orderChannel) {
+        supabase.removeChannel(orderChannel);
+      }
+    };
   }, []);
 
   // Update live clock
@@ -233,11 +319,11 @@ export default function App() {
 
   // State Mutation Handlers
   const handleUpdateOrderStatus = (orderId, newStatus) => {
+    const targetOrder = orders.find(o => o.id === orderId);
     const updated = orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o);
     setOrders(updated);
     setLocalStore('orders', updated);
 
-    const targetOrder = orders.find(o => o.id === orderId);
     recordEmployeeActivity({
       employeeName: authUser?.name || 'Darshit Rana',
       employeeRole: authUser?.role || 'Admin',
@@ -249,6 +335,9 @@ export default function App() {
       color: newStatus === 'Completed' ? 'emerald' : newStatus === 'Preparing' ? 'amber' : 'orange'
     });
     playSound('order');
+
+    // Update in Supabase Cloud
+    updateOrderStatusInSupabase(targetOrder?.supabase_order_id || targetOrder?.id || orderId, newStatus);
   };
 
   const handleMarkCashPaymentDone = (orderId, staffName) => {
@@ -277,6 +366,12 @@ export default function App() {
       color: 'emerald'
     });
     playSound('success');
+
+    // Sync to Supabase Cloud
+    updateOrderStatusInSupabase(targetOrder?.supabase_order_id || targetOrder?.id || orderId, targetOrder.status || 'PLACED');
+    if (targetOrder.table_number) {
+      settleTableSessionInSupabase(targetOrder.table_number, targetOrder?.supabase_order_id || targetOrder?.id || orderId, 'Cash');
+    }
   };
 
   const handleCancelOrderWithReason = (orderId, reason, staffName) => {
@@ -303,9 +398,13 @@ export default function App() {
       color: 'rose'
     });
     playSound('alert');
+
+    // Sync Cancellation to Supabase Cloud
+    updateOrderStatusInSupabase(targetOrder?.supabase_order_id || targetOrder?.id || orderId, 'Cancelled');
   };
 
-  const handlePlaceCustomerOrder = (newOrder) => {
+  const handlePlaceCustomerOrder = async (newOrder) => {
+    // 1. Immediately update UI & local state for zero-latency customer UX
     const updated = [newOrder, ...orders];
     setOrders(updated);
     setLocalStore('orders', updated);
@@ -327,7 +426,7 @@ export default function App() {
     setTables(updatedTables);
     setLocalStore('tables', updatedTables);
 
-    // Permanently record customer profile in CRM
+    // Permanently record customer profile in local CRM
     if (newOrder.customer_phone) {
       saveCustomerProfile({
         name: newOrder.customer_name,
@@ -353,6 +452,37 @@ export default function App() {
       color: 'orange'
     });
     playSound('order');
+
+    // 2. DISPATCH LIVE TO SUPABASE CLOUD POSTGRESQL (table_sessions, orders, order_items, customers)
+    try {
+      const supaResult = await dispatchOrderToSupabase({
+        table_number: newOrder.table_number,
+        customer_name: newOrder.customer_name,
+        customer_phone: newOrder.customer_phone,
+        items: newOrder.items || [],
+        subtotal: newOrder.subtotal || 0,
+        tax: newOrder.tax || 0,
+        discount: newOrder.discount || 0,
+        total: newOrder.total || newOrder.total_amount || 0,
+        payment_mode: newOrder.payment_mode || 'Cash',
+        special_note: newOrder.special_note || '',
+        order_id: newOrder.id
+      });
+
+      if (supaResult && supaResult.sessionId) {
+        // Enrich local order record with Supabase Session ID and DB Order UUID
+        const enrichedOrders = updated.map(o => o.id === newOrder.id ? {
+          ...o,
+          supabase_order_id: supaResult.order?.id || null,
+          session_id: supaResult.sessionId,
+          session_code: supaResult.sessionCode
+        } : o);
+        setOrders(enrichedOrders);
+        setLocalStore('orders', enrichedOrders);
+      }
+    } catch (err) {
+      console.warn('[SUPABASE] Cloud sync notice:', err);
+    }
   };
 
   const handleAddCustomerPoints = (customerId, points = 100) => {
@@ -690,6 +820,9 @@ export default function App() {
       color: 'emerald'
     });
     playSound('cash');
+
+    // Settle & close session in Supabase Cloud
+    settleTableSessionInSupabase(tableNum, targetOrder?.supabase_order_id || targetOrder?.id || orderId, method);
   };
 
   const handleShiftTable = (fromTable, toTable) => {

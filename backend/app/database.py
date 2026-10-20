@@ -481,37 +481,126 @@ CANONICAL_SERVICE_CALLS: List[Dict[str, Any]] = []
 # ASYNC SUPABASE CLOUD CLIENT INTEGRATION
 # -------------------------------------------------------------------------
 
+RESTAURANT_ID = "11111111-1111-1111-1111-111111111111"
+
 async def sync_order_to_supabase(order_data: Dict[str, Any]) -> None:
-    """Asynchronously sync an order to Supabase Cloud DB if service key is present."""
-    if not settings.SUPABASE_SERVICE_ROLE_KEY:
+    """Asynchronously sync an order to Supabase Cloud DB with real-time session tracking."""
+    api_key = settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_ANON_KEY
+    if not api_key:
         return
     
-    url = f"{settings.SUPABASE_URL}/rest/v1/orders"
     headers = {
-        "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
-        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
+        "apikey": api_key,
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        "Prefer": "return=minimal"
+        "Prefer": "return=representation"
     }
-    payload = {
-        "id": order_data["id"],
-        "table_number": order_data["table_number"],
-        "customer_name": order_data.get("customer_name", "Walk-in Guest"),
-        "subtotal": float(order_data.get("subtotal", 0)),
-        "total_amount": float(order_data.get("total_amount", 0)),
-        "payment_method": order_data.get("payment_mode", "Cash"),
-        "payment_status": order_data.get("payment_status", "Pending"),
-        "status": order_data.get("status", "Placed"),
-        "placed_at": order_data.get("placed_at", datetime.now(timezone.utc).isoformat())
-    }
+    base_url = f"{settings.SUPABASE_URL}/rest/v1"
 
-    try:
-        async with httpx.AsyncClient(timeout=4.0) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-            if resp.status_code in [200, 201]:
-                print(f"[SUPABASE] Order {order_data['id']} synced to Supabase Cloud successfully.")
-    except Exception as e:
-        print(f"[SUPABASE] Cloud Order Sync notice: {str(e)}")
+    # Normalize table number to T-01 format
+    raw_tbl = str(order_data.get("table_number", "01"))
+    digits = "".join([c for c in raw_tbl if c.isdigit()])
+    table_num = f"T-{digits.zfill(2)}" if digits else "T-01"
+
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        try:
+            # 1. Resolve table_id
+            table_id = None
+            t_resp = await client.get(
+                f"{base_url}/restaurant_tables?table_number=eq.{table_num}&select=id",
+                headers=headers
+            )
+            if t_resp.status_code == 200 and t_resp.json():
+                table_id = t_resp.json()[0]["id"]
+            if not table_id:
+                table_id = "4f8bb699-0c21-40d5-8e89-6cdd06d7dd77"
+
+            # 2. Find or create ACTIVE session in table_sessions
+            session_id = None
+            sess_resp = await client.get(
+                f"{base_url}/table_sessions?table_id=eq.{table_id}&status=eq.ACTIVE&order=opened_at.desc&limit=1",
+                headers=headers
+            )
+            total_amt = float(order_data.get("total_amount") or order_data.get("total", 0.0))
+            cust_name = order_data.get("customer_name") or "Walk-in Guest"
+            cust_phone = order_data.get("customer_phone")
+
+            if sess_resp.status_code == 200 and sess_resp.json():
+                active_sess = sess_resp.json()[0]
+                session_id = active_sess["id"]
+                new_tot = float(active_sess.get("total_amount", 0.0)) + total_amt
+                await client.patch(
+                    f"{base_url}/table_sessions?id=eq.{session_id}",
+                    headers=headers,
+                    json={
+                        "total_amount": new_tot,
+                        "customer_name": cust_name,
+                        "customer_phone": cust_phone
+                    }
+                )
+            else:
+                date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+                sess_code = f"SESS-{date_str}-{table_num.replace('-', '')}-{uuid.uuid4().hex[:4].upper()}"
+                new_sess_payload = {
+                    "restaurant_id": RESTAURANT_ID,
+                    "table_id": table_id,
+                    "session_code": sess_code,
+                    "status": "ACTIVE",
+                    "customer_name": cust_name,
+                    "customer_phone": cust_phone,
+                    "total_amount": total_amt,
+                    "opened_at": datetime.now(timezone.utc).isoformat()
+                }
+                new_sess_resp = await client.post(
+                    f"{base_url}/table_sessions",
+                    headers=headers,
+                    json=new_sess_payload
+                )
+                if new_sess_resp.status_code in [200, 201] and new_sess_resp.json():
+                    session_id = new_sess_resp.json()[0]["id"]
+
+            # Mark table occupied
+            await client.patch(
+                f"{base_url}/restaurant_tables?id=eq.{table_id}",
+                headers=headers,
+                json={"status": "OCCUPIED"}
+            )
+
+            # 3. Insert order
+            pay_mode = str(order_data.get("payment_mode", "Cash")).upper()
+            pay_method = "UPI_COUNTER" if "UPI" in pay_mode or "ONLINE" in pay_mode else "CASH"
+            pay_status = "PAID" if "PAID" in str(order_data.get("payment_status", "")).upper() or pay_method == "UPI_COUNTER" else "UNPAID"
+            
+            raw_id = str(order_data.get("id", f"ORD-{uuid.uuid4().hex[:6]}"))
+            order_num = raw_id.replace("#", "")
+
+            order_payload = {
+                "restaurant_id": RESTAURANT_ID,
+                "session_id": session_id,
+                "table_id": table_id,
+                "table_number": table_num,
+                "order_number": order_num,
+                "customer_name": cust_name,
+                "customer_phone": cust_phone,
+                "subtotal": float(order_data.get("subtotal", 0.0)),
+                "tax_amount": float(order_data.get("tax", 0.0)),
+                "discount_amount": float(order_data.get("discount", 0.0)),
+                "total_amount": total_amt,
+                "payment_method": pay_method,
+                "payment_status": pay_status,
+                "status": "PLACED",
+                "special_notes": order_data.get("special_note") or "",
+                "placed_at": order_data.get("placed_at", datetime.now(timezone.utc).isoformat())
+            }
+
+            ord_resp = await client.post(f"{base_url}/orders", headers=headers, json=order_payload)
+            if ord_resp.status_code in [200, 201]:
+                print(f"[SUPABASE] Cloud Order {order_num} synced successfully with session {session_id}.")
+            else:
+                print(f"[SUPABASE] Cloud Order sync notice ({ord_resp.status_code}): {ord_resp.text}")
+
+        except Exception as e:
+            print(f"[SUPABASE] Cloud Order Sync exception: {str(e)}")
 
 # Backward-compatible alias
 sync_order_to_appwrite = sync_order_to_supabase
