@@ -854,10 +854,10 @@ export default function ExecutiveDashboard({
               <h1 className={`text-xl sm:text-2xl font-black font-heading tracking-tight ${palette.textPrimary}`}>
                 DARSHIT RANA
               </h1>
-              <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${theme === 'light' ? 'bg-slate-100 text-slate-700 border-slate-200' : 'bg-slate-800 text-slate-300 border-slate-700'}`}>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold border bg-slate-100 text-slate-700 border-slate-200">
                 Restaurant Owner & Director
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold border border-emerald-500/20 flex items-center space-x-1.5">
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold border border-emerald-200 flex items-center space-x-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>Live Cloud POS Online</span>
               </span>
@@ -905,15 +905,15 @@ export default function ExecutiveDashboard({
 
           <button
             onClick={onOpenGenerateQR}
-            className="flex items-center space-x-2 px-3.5 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold transition shadow-xs cursor-pointer"
+            className="flex items-center space-x-2 px-3.5 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200/80 text-xs font-bold transition shadow-xs cursor-pointer"
           >
-            <QrCode className="w-4 h-4 text-slate-600 dark:text-slate-300" />
+            <QrCode className="w-4 h-4 text-slate-600" />
             <span>Floor QRs</span>
           </button>
           
           <button
             onClick={onOpenAddItem}
-            className="flex items-center space-x-2 px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 dark:bg-amber-600 dark:hover:bg-amber-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+            className="flex items-center space-x-2 px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition shadow-xs cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>+ Add Menu Item</span>
@@ -928,8 +928,8 @@ export default function ExecutiveDashboard({
           {/* Tile 1: Total Revenue */}
           <div className={`p-5 rounded-3xl ${palette.cardBg} border ${palette.cardBorder} shadow-xs hover:shadow-sm transition`}>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Today's Revenue</span>
-              <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold text-sm">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Today's Revenue</span>
+              <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 flex items-center justify-center font-bold text-sm">
                 ₹
               </div>
             </div>
@@ -938,7 +938,7 @@ export default function ExecutiveDashboard({
                 {currentDataset.total}
               </span>
             </div>
-            <div className="mt-2.5 flex items-center text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 space-x-1">
+            <div className="mt-2.5 flex items-center text-[11px] font-bold text-emerald-700 space-x-1">
               <TrendingUp className="w-3.5 h-3.5" />
               <span>Realtime Live Sync</span>
             </div>
@@ -947,8 +947,8 @@ export default function ExecutiveDashboard({
           {/* Tile 2: Volume Tracked */}
           <div className={`p-5 rounded-3xl ${palette.cardBg} border ${palette.cardBorder} shadow-xs hover:shadow-sm transition`}>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Volume Tracked</span>
-              <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 flex items-center justify-center">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Volume Tracked</span>
+              <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 flex items-center justify-center">
                 <ShoppingBag className="w-4 h-4" />
               </div>
             </div>
@@ -957,7 +957,7 @@ export default function ExecutiveDashboard({
                 {currentDataset.totalVolume} Plates
               </span>
             </div>
-            <div className="mt-2.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            <div className="mt-2.5 text-[11px] font-semibold text-slate-600">
               Across {currentDataset.totalOrders} dining tickets
             </div>
           </div>
@@ -965,8 +965,8 @@ export default function ExecutiveDashboard({
           {/* Tile 3: Average Order Value */}
           <div className={`p-5 rounded-3xl ${palette.cardBg} border ${palette.cardBorder} shadow-xs hover:shadow-sm transition`}>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Avg Ticket (AOV)</span>
-              <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold text-xs">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Avg Ticket (AOV)</span>
+              <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 flex items-center justify-center font-bold text-xs">
                 AOV
               </div>
             </div>
@@ -975,7 +975,7 @@ export default function ExecutiveDashboard({
                 ₹{realAov}
               </span>
             </div>
-            <div className="mt-2.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            <div className="mt-2.5 text-[11px] font-semibold text-slate-600">
               {validOrders.length > 0 ? `Calculated across ${validOrders.length} live orders` : 'Calculated live from orders'}
             </div>
           </div>
@@ -983,8 +983,8 @@ export default function ExecutiveDashboard({
           {/* Tile 4: Active Occupancy */}
           <div className={`p-5 rounded-3xl ${palette.cardBg} border ${palette.cardBorder} shadow-xs hover:shadow-sm transition`}>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Floor Seated</span>
-              <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 flex items-center justify-center">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Floor Seated</span>
+              <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 flex items-center justify-center">
                 <Clock className="w-4 h-4" />
               </div>
             </div>
@@ -993,7 +993,7 @@ export default function ExecutiveDashboard({
                 {occupiedTablesCount} / {totalTablesCount} Tables
               </span>
             </div>
-            <div className="mt-2.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+            <div className="mt-2.5 text-[11px] font-semibold text-slate-600">
               {occupancyPercent}% Current Floor Seated
             </div>
           </div>
@@ -1001,10 +1001,10 @@ export default function ExecutiveDashboard({
           {/* Tile 5: EDITABLE DAILY SALES GOAL CARD */}
           <div className={`col-span-2 lg:col-span-1 p-5 rounded-3xl ${palette.cardBg} border ${palette.cardBorder} shadow-xs hover:shadow-sm transition flex flex-col justify-between`}>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Daily Target</span>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Daily Target</span>
               <button
                 onClick={() => { setIsEditingTarget(true); setTargetInputVal(dailyTarget); }}
-                className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer flex items-center space-x-1"
+                className="text-[10px] font-bold text-slate-700 hover:text-slate-900 px-2 py-0.5 rounded-lg border border-slate-200 hover:bg-slate-100 transition cursor-pointer flex items-center space-x-1"
                 title="Click to edit your daily target goal"
               >
                 <Edit2 className="w-2.5 h-2.5" />
@@ -1013,18 +1013,18 @@ export default function ExecutiveDashboard({
             </div>
 
             {isEditingTarget ? (
-              <div className="mt-2 bg-slate-50 dark:bg-slate-800/80 p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white flex items-center space-x-1.5">
-                <span className="font-bold text-xs text-slate-500">₹</span>
+              <div className="mt-2 bg-slate-50 p-2 rounded-xl border border-slate-300 text-slate-900 flex items-center space-x-1.5">
+                <span className="font-bold text-xs text-slate-600">₹</span>
                 <input
                   type="number"
                   value={targetInputVal}
                   onChange={(e) => setTargetInputVal(e.target.value)}
-                  className="w-full text-xs font-mono font-bold bg-transparent focus:outline-none"
+                  className="w-full text-xs font-mono font-bold bg-transparent text-slate-900 focus:outline-none"
                   autoFocus
                 />
                 <button
                   onClick={handleSaveDailyTarget}
-                  className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 dark:bg-amber-600 dark:hover:bg-amber-700 text-white text-[10px] font-bold cursor-pointer"
+                  className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold cursor-pointer"
                 >
                   Save
                 </button>
@@ -1035,19 +1035,19 @@ export default function ExecutiveDashboard({
                   <span className={`text-2xl sm:text-3xl font-black font-mono tracking-tight ${palette.textPrimary}`}>
                     {targetPercent}%
                   </span>
-                  <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                  <span className="text-xs font-mono font-semibold text-slate-600">
                     ₹{currentTodaySales.toLocaleString()} / ₹{dailyTarget.toLocaleString()}
                   </span>
                 </div>
                 
                 {/* Target Progress Bar */}
-                <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 mt-2.5 overflow-hidden border border-slate-200/50 dark:border-slate-700/50">
+                <div className="w-full h-2 rounded-full bg-slate-100 mt-2.5 overflow-hidden border border-slate-200">
                   <div 
                     style={{ width: `${Math.min(100, targetPercent)}%` }} 
                     className={`h-full rounded-full transition-all duration-500 ${targetPercent >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}`}
                   />
                 </div>
-                <span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                <span className="block text-[11px] text-slate-600 mt-1.5 font-semibold">
                   {targetPercent >= 100 ? '🎉 Goal Achieved!' : `₹${(dailyTarget - currentTodaySales).toLocaleString()} remaining`}
                 </span>
               </div>
@@ -1082,32 +1082,48 @@ export default function ExecutiveDashboard({
               <div className="flex flex-wrap items-center gap-2">
                 
                 {/* Pie vs Donut Style Toggle */}
-                <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold">
+                <div className="flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold shadow-xs">
                   <button
                     onClick={() => { setPieChartStyle('donut'); updateConfig('chartType', 'donut'); }}
-                    className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${pieChartStyle === 'donut' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
+                    className={`px-3 py-1.5 rounded-lg transition cursor-pointer font-bold ${
+                      pieChartStyle === 'donut' 
+                        ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80 font-black' 
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    }`}
                   >
                     Donut
                   </button>
                   <button
                     onClick={() => { setPieChartStyle('pie'); updateConfig('chartType', 'pie'); }}
-                    className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${pieChartStyle === 'pie' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
+                    className={`px-3 py-1.5 rounded-lg transition cursor-pointer font-bold ${
+                      pieChartStyle === 'pie' 
+                        ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80 font-black' 
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    }`}
                   >
                     Pie
                   </button>
                 </div>
 
                 {/* Metric: Volume vs Revenue */}
-                <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold">
+                <div className="flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold shadow-xs">
                   <button
                     onClick={() => setPieMetric('volume')}
-                    className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${pieMetric === 'volume' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
+                    className={`px-3 py-1.5 rounded-lg transition cursor-pointer font-bold ${
+                      pieMetric === 'volume' 
+                        ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80 font-black' 
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    }`}
                   >
                     Volume
                   </button>
                   <button
                     onClick={() => setPieMetric('revenue')}
-                    className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${pieMetric === 'revenue' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
+                    className={`px-3 py-1.5 rounded-lg transition cursor-pointer font-bold ${
+                      pieMetric === 'revenue' 
+                        ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80 font-black' 
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    }`}
                   >
                     Revenue (₹)
                   </button>
@@ -1121,10 +1137,10 @@ export default function ExecutiveDashboard({
               <button
                 onClick={() => setSelectedSlice('all')}
                 onMouseEnter={() => setHoveredSlice(null)}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer shrink-0 ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer shrink-0 border ${
                   selectedSlice === 'all'
-                    ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-xs'
-                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200'
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-xs font-black'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
                 }`}
               >
                 All Categories
@@ -1141,20 +1157,20 @@ export default function ExecutiveDashboard({
                     onClick={() => setSelectedSlice(selectedSlice === cat.id ? 'all' : cat.id)}
                     onMouseEnter={() => setHoveredSlice(cat.id)}
                     onMouseLeave={() => setHoveredSlice(null)}
-                    className={`px-2.5 py-1 rounded-xl text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer shrink-0 border ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer shrink-0 border shadow-2xs ${
                       isSelected || isHovered
                         ? 'ring-2 shadow-xs'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-transparent hover:bg-slate-200'
+                        : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50 hover:border-slate-300'
                     }`}
                     style={{
-                      borderColor: isSelected || isHovered ? cat.color : 'transparent',
-                      backgroundColor: isSelected || isHovered ? `${cat.color}15` : undefined,
-                      color: isSelected || isHovered ? cat.color : undefined
+                      borderColor: isSelected || isHovered ? cat.color : '#e2e8f0',
+                      backgroundColor: isSelected || isHovered ? `${cat.color}15` : '#ffffff',
+                      color: isSelected || isHovered ? cat.color : '#0f172a'
                     }}
                   >
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
-                    <span>{cat.name}</span>
-                    <span className="font-mono text-[10px] opacity-80">({cat.share}%)</span>
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+                    <span className="font-black text-slate-900">{cat.name}</span>
+                    <span className="font-mono text-[10px] text-slate-600 font-bold">({cat.share}%)</span>
                   </button>
                 );
               })}
@@ -1238,7 +1254,7 @@ export default function ExecutiveDashboard({
                           >
                             {activeHoveredOrSelected.name}
                           </span>
-                          <span className="text-xl sm:text-2xl font-black font-mono tracking-tight text-slate-900 dark:text-slate-100 mt-0.5">
+                          <span className="text-xl sm:text-2xl font-black font-mono tracking-tight text-slate-900 mt-0.5">
                             {pieMetric === 'volume' ? `${activeHoveredOrSelected.volume}p` : `₹${activeHoveredOrSelected.revenue.toLocaleString()}`}
                           </span>
                           <span 
@@ -1250,13 +1266,13 @@ export default function ExecutiveDashboard({
                         </>
                       ) : (
                         <>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
                             {pieMetric === 'volume' ? 'Total Volume' : 'Total Revenue'}
                           </span>
-                          <span className="text-xl sm:text-2xl font-black font-mono tracking-tight text-slate-900 dark:text-slate-100 mt-0.5">
+                          <span className="text-xl sm:text-2xl font-black font-mono tracking-tight text-slate-900 mt-0.5">
                             {pieMetric === 'volume' ? `${totalCategoryVolume}p` : `₹${(totalCategoryRevenue / 1000).toFixed(1)}k`}
                           </span>
-                          <span className="text-[9px] text-emerald-700 dark:text-emerald-400 font-bold mt-1 px-2 py-0.2 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
+                          <span className="text-[9px] text-emerald-700 font-bold mt-1 px-2 py-0.2 rounded-full bg-emerald-50 border border-emerald-200">
                             100% Demand
                           </span>
                         </>
@@ -1270,10 +1286,10 @@ export default function ExecutiveDashboard({
                 <div className="flex items-center space-x-2 mt-2">
                   <button
                     onClick={() => { setSelectedSlice('all'); setHoveredSlice(null); }}
-                    className={`text-[11px] font-bold px-2 py-0.5 rounded-lg border transition cursor-pointer ${
+                    className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition cursor-pointer ${
                       selectedSlice === 'all' 
-                        ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900' 
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-xs' 
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-300'
                     }`}
                   >
                     Reset Filter
@@ -1289,32 +1305,32 @@ export default function ExecutiveDashboard({
               {/* Category Breakdown Cards on Right of Pie: Scrollable & Active Filtered */}
               <div className="sm:col-span-6 flex flex-col">
                 {/* Header with Active vs All Toggle */}
-                <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200">
                   <div className="flex items-center space-x-1.5">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Categories</span>
-                    <span className="text-[10px] font-mono font-bold text-orange-500 bg-orange-50 dark:bg-orange-950/40 px-1.5 py-0.2 rounded">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Categories</span>
+                    <span className="text-[10px] font-mono font-bold text-orange-600 bg-orange-100 px-1.5 py-0.2 rounded">
                       {displayedCategorySegments.length}
                     </span>
                   </div>
 
                   {/* Active vs All Segmented Filter */}
-                  <div className="flex items-center p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-[10px] font-bold">
+                  <div className="flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold shadow-xs">
                     <button
                       onClick={() => setCategoryViewMode('active')}
-                      className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg transition cursor-pointer font-bold ${
                         categoryViewMode === 'active'
-                          ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                          : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+                          ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80 font-black'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                       }`}
                     >
                       Active ({activeCategorySegments.length})
                     </button>
                     <button
                       onClick={() => setCategoryViewMode('all')}
-                      className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                      className={`px-2.5 py-1 rounded-lg transition cursor-pointer font-bold ${
                         categoryViewMode === 'all'
-                          ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                          : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+                          ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80 font-black'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                       }`}
                     >
                       All ({pieAndDonutSegments.length})
@@ -1323,7 +1339,7 @@ export default function ExecutiveDashboard({
                 </div>
 
                 {/* Scrollable Category List with Fixed Max Height */}
-                <div className="max-h-72 overflow-y-auto pr-1.5 space-y-1.5">
+                <div className="max-h-72 overflow-y-auto pr-1.5 space-y-2">
                   {displayedCategorySegments.map((cat) => {
                     const isSelected = selectedSlice === cat.id;
                     const isHovered = hoveredSlice === cat.id;
@@ -1334,29 +1350,29 @@ export default function ExecutiveDashboard({
                         onClick={() => setSelectedSlice(selectedSlice === cat.id ? 'all' : cat.id)}
                         onMouseEnter={() => setHoveredSlice(cat.id)}
                         onMouseLeave={() => setHoveredSlice(null)}
-                        className={`p-2 rounded-xl border transition cursor-pointer flex items-center justify-between gap-2 ${
+                        className={`p-3 rounded-2xl border transition cursor-pointer flex items-center justify-between gap-3 shadow-xs ${
                           isSelected || isHovered
-                            ? 'bg-orange-50/90 dark:bg-orange-950/40 border-orange-400 ring-2 ring-orange-400/20 shadow-xs'
-                            : 'bg-slate-50/70 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200/60 dark:border-slate-800'
+                            ? 'bg-amber-50/80 border-amber-400 ring-2 ring-amber-400/20 shadow-sm'
+                            : 'bg-white hover:bg-slate-50 border-slate-200/90 hover:border-slate-300'
                         }`}
                       >
-                        <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                        <div className="flex items-center space-x-3 min-w-0 flex-1">
                           <div 
-                            className="w-3 h-3 rounded-full shrink-0 shadow-xs" 
+                            className="w-3.5 h-3.5 rounded-full shrink-0 shadow-xs ring-2 ring-white" 
                             style={{ backgroundColor: cat.color }} 
                           />
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className={`font-bold truncate ${isSelected || isHovered ? 'text-orange-600 dark:text-orange-400' : 'text-slate-900 dark:text-slate-100'}`}>
+                            <div className="flex items-center justify-between text-xs font-bold">
+                              <span className={`truncate text-xs ${isSelected || isHovered ? 'text-amber-800 font-black' : 'text-slate-900 font-bold'}`}>
                                 {cat.name}
                               </span>
-                              <span className="font-mono font-bold text-slate-800 dark:text-slate-200 text-[11px]">
+                              <span className="font-mono font-black text-slate-900 text-xs ml-2 shrink-0">
                                 {pieMetric === 'volume' ? `${cat.volume}p` : `₹${cat.revenue.toLocaleString()}`}
                               </span>
                             </div>
                             
                             {/* Mini Progress Bar */}
-                            <div className="w-full h-1 rounded-full bg-slate-200 dark:bg-slate-700 mt-1 overflow-hidden">
+                            <div className="w-full h-1.5 rounded-full bg-slate-100 mt-1.5 overflow-hidden border border-slate-200/60">
                               <div 
                                 style={{ width: `${Math.max(1, Number(cat.share))}%`, backgroundColor: cat.color }} 
                                 className="h-full rounded-full transition-all duration-300"
@@ -1365,7 +1381,7 @@ export default function ExecutiveDashboard({
                           </div>
                         </div>
 
-                        <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 shrink-0">
+                        <span className="text-[11px] font-mono font-black text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/70 shrink-0">
                           {cat.share}%
                         </span>
                       </div>
@@ -1398,37 +1414,37 @@ export default function ExecutiveDashboard({
 
               {/* Timeframe & Metric Toggle */}
               <div className="flex items-center space-x-1.5">
-                <div className="flex items-center p-1 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold">
+                <div className="flex items-center p-1 rounded-2xl bg-slate-100 border border-slate-200 text-xs font-bold">
                   <button
                     onClick={() => setChartMetric('revenue')}
-                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer ${chartMetric === 'revenue' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
+                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer font-bold ${chartMetric === 'revenue' ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}
                   >
                     Revenue (₹)
                   </button>
                   <button
                     onClick={() => setChartMetric('volume')}
-                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer ${chartMetric === 'volume' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
+                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer font-bold ${chartMetric === 'volume' ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}
                   >
                     Volume (Plates)
                   </button>
                 </div>
 
-                <div className="flex items-center p-1 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold">
+                <div className="flex items-center p-1 rounded-2xl bg-slate-100 border border-slate-200 text-xs font-bold">
                   <button
                     onClick={() => { setTimeframe('hourly'); setSelectedPointIndex(5); }}
-                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer ${timeframe === 'hourly' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
+                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer font-bold ${timeframe === 'hourly' ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}
                   >
                     Today
                   </button>
                   <button
                     onClick={() => { setTimeframe('weekly'); setSelectedPointIndex(5); }}
-                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer ${timeframe === 'weekly' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
+                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer font-bold ${timeframe === 'weekly' ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}
                   >
                     Week
                   </button>
                   <button
                     onClick={() => { setTimeframe('monthly'); setSelectedPointIndex(3); }}
-                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer ${timeframe === 'monthly' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
+                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer font-bold ${timeframe === 'monthly' ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}
                   >
                     Month
                   </button>
@@ -1437,9 +1453,9 @@ export default function ExecutiveDashboard({
             </div>
 
             {/* Active Milestone Card */}
-            <div className={`p-3.5 rounded-2xl ${palette.innerBox} flex items-center justify-between text-xs transition`}>
+            <div className={`p-3.5 rounded-2xl ${palette.innerBox} flex items-center justify-between text-xs transition border border-slate-200`}>
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 flex items-center justify-center font-black text-xs shadow-xs font-mono">
+                <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-xs shadow-xs font-mono">
                   {activePoint.label}
                 </div>
                 <div>
@@ -1449,17 +1465,17 @@ export default function ExecutiveDashboard({
                         ? `₹${activePoint.revenue.toLocaleString('en-IN')}` 
                         : `${activePoint.volume || activePoint.orders * 2} Plates`}
                     </span>
-                    <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-[10px] border border-slate-200/80 dark:border-slate-700/80">
+                    <span className="px-2 py-0.5 rounded-md bg-white text-slate-800 font-bold text-[10px] border border-slate-200 shadow-2xs">
                       {activePoint.status}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    {activePoint.orders} tickets • Top Dish: <strong className="font-semibold text-slate-900 dark:text-slate-200">{activePoint.peakDish}</strong>
+                  <p className="text-[11px] text-slate-600 mt-0.5">
+                    {activePoint.orders} tickets • Top Dish: <strong className="font-bold text-slate-900">{activePoint.peakDish}</strong>
                   </p>
                 </div>
               </div>
 
-              <span className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono font-semibold text-[11px] text-slate-700 dark:text-slate-300 shadow-xs">
+              <span className="px-2.5 py-1 rounded-xl bg-white border border-slate-200 font-mono font-bold text-[11px] text-slate-700 shadow-xs">
                 Turn: 18m
               </span>
             </div>
@@ -1571,22 +1587,22 @@ export default function ExecutiveDashboard({
 
             {/* Sub-Filters: All, Bestsellers, Dead Stock */}
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center p-1 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold">
+              <div className="flex items-center p-1 rounded-2xl bg-slate-100 border border-slate-200 text-xs font-bold">
                 <button
                   onClick={() => setDemandTab('all')}
-                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${demandTab === 'all' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
+                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer font-bold ${demandTab === 'all' ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}
                 >
                   All Menu Items ({itemsList.length})
                 </button>
                 <button
                   onClick={() => setDemandTab('bestsellers')}
-                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${demandTab === 'bestsellers' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
+                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer font-bold ${demandTab === 'bestsellers' ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}
                 >
                   Top Sellers
                 </button>
                 <button
                   onClick={() => setDemandTab('low_demand')}
-                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${demandTab === 'low_demand' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
+                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer font-bold ${demandTab === 'low_demand' ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'}`}
                 >
                   Low Demand
                 </button>

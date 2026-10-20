@@ -249,11 +249,11 @@ export default function TablesView({
 
         {/* View Switcher & Add Table Action */}
         <div className="flex items-center space-x-2.5">
-          <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold">
+          <div className="flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold">
             <button
               onClick={() => setViewMode('grid')}
-              className={`px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition cursor-pointer ${
-                viewMode === 'grid' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+              className={`px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition cursor-pointer font-bold ${
+                viewMode === 'grid' ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <LayoutGrid className="w-3.5 h-3.5" />
@@ -261,8 +261,8 @@ export default function TablesView({
             </button>
             <button
               onClick={() => setViewMode('floorplan')}
-              className={`px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition cursor-pointer ${
-                viewMode === 'floorplan' ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+              className={`px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition cursor-pointer font-bold ${
+                viewMode === 'floorplan' ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <Map className="w-3.5 h-3.5" />
@@ -284,44 +284,44 @@ export default function TablesView({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className={`p-4 rounded-xl ${cardBg} border ${cardBorder} shadow-xs flex items-center justify-between`}>
           <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Tables</span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Tables</span>
             <div className={`text-xl font-black ${textPrimary} font-mono mt-0.5`}>{totalTables}</div>
-            <span className="text-[10px] text-slate-400 font-medium">{totalCapacity} Total Seats</span>
+            <span className="text-[10px] text-slate-500 font-semibold">{totalCapacity} Total Seats</span>
           </div>
-          <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center font-bold">
+          <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
             <LayoutGrid className="w-4 h-4" />
           </div>
         </div>
 
         <div className={`p-4 rounded-xl ${cardBg} border ${cardBorder} shadow-xs flex items-center justify-between`}>
           <div>
-            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Available</span>
+            <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Available</span>
             <div className="text-xl font-black text-emerald-600 font-mono mt-0.5">{vacantTables}</div>
-            <span className="text-[10px] text-emerald-600/80 font-medium">Ready for Seating</span>
+            <span className="text-[10px] text-emerald-700 font-semibold">Ready for Seating</span>
           </div>
-          <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center font-bold">
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
             <CheckCircle2 className="w-4 h-4" />
           </div>
         </div>
 
         <div className={`p-4 rounded-xl ${cardBg} border ${cardBorder} shadow-xs flex items-center justify-between`}>
           <div>
-            <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wider">Occupied</span>
-            <div className="text-xl font-black text-orange-500 font-mono mt-0.5">{occupiedTables}</div>
-            <span className="text-[10px] text-orange-500/80 font-medium">Active Dining</span>
+            <span className="text-[10px] font-bold text-orange-700 uppercase tracking-wider">Occupied</span>
+            <div className="text-xl font-black text-orange-600 font-mono mt-0.5">{occupiedTables}</div>
+            <span className="text-[10px] text-orange-700 font-semibold">Active Dining</span>
           </div>
-          <div className="w-9 h-9 rounded-xl bg-orange-50 dark:bg-orange-950/40 text-orange-600 flex items-center justify-center font-bold">
+          <div className="w-9 h-9 rounded-xl bg-orange-50 text-orange-700 flex items-center justify-center font-bold">
             <Clock className="w-4 h-4" />
           </div>
         </div>
 
         <div className={`p-4 rounded-xl ${cardBg} border ${cardBorder} shadow-xs flex items-center justify-between`}>
           <div>
-            <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Floor Running Bill</span>
+            <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Floor Running Bill</span>
             <div className="text-xl font-black text-blue-600 font-mono mt-0.5">₹{activeFloorRevenue.toLocaleString('en-IN')}</div>
-            <span className="text-[10px] text-blue-500/80 font-medium">Unsettled Value</span>
+            <span className="text-[10px] text-blue-700 font-semibold">Unsettled Value</span>
           </div>
-          <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 flex items-center justify-center font-bold">
+          <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center font-bold">
             <IndianRupee className="w-4 h-4" />
           </div>
         </div>
@@ -338,13 +338,13 @@ export default function TablesView({
                 onClick={() => setSelectedZone(z)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap flex items-center space-x-1.5 cursor-pointer ${
                   selectedZone === z 
-                    ? 'bg-slate-900 text-white dark:bg-orange-500 shadow-xs' 
-                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                    ? 'bg-slate-900 text-white shadow-xs' 
+                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
                 }`}
               >
                 <span>{z}</span>
                 <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${
-                  selectedZone === z ? 'bg-white/20' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                  selectedZone === z ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
                 }`}>
                   {count}
                 </span>
@@ -362,13 +362,13 @@ export default function TablesView({
           }}
           className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-2 shrink-0 border cursor-pointer ${
             autoVacatePaidTables 
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800' 
-              : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-300' 
+              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
           }`}
           title="Turn on 30-minute automatic table vacation for online prepaid orders"
         >
           <Zap className={`w-3.5 h-3.5 ${autoVacatePaidTables ? 'text-emerald-600 fill-emerald-600 animate-pulse' : 'text-slate-400'}`} />
-          <span>Auto-Vacate (30m): <strong className={autoVacatePaidTables ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500'}>{autoVacatePaidTables ? 'ON' : 'OFF'}</strong></span>
+          <span>Auto-Vacate (30m): <strong className={autoVacatePaidTables ? 'text-emerald-700' : 'text-slate-600'}>{autoVacatePaidTables ? 'ON' : 'OFF'}</strong></span>
         </button>
       </div>
 
@@ -387,8 +387,8 @@ export default function TablesView({
                 onClick={() => setSelectedTable(table)}
                 className={`p-4 rounded-2xl border transition space-y-3 cursor-pointer hover:shadow-md relative overflow-hidden flex flex-col justify-between group ${
                   isOccupied 
-                    ? 'bg-orange-500/5 border-orange-400/60 dark:border-orange-500/40 hover:border-orange-500' 
-                    : `${cardBg} ${cardBorder} hover:border-emerald-400 dark:hover:border-emerald-500`
+                    ? 'bg-orange-50/40 border-orange-300 hover:border-orange-500' 
+                    : 'bg-white border-slate-200 hover:border-emerald-400 shadow-2xs'
                 }`}
               >
                 {/* Status Indicator Pill */}
@@ -416,50 +416,50 @@ export default function TablesView({
                       return (
                         <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${
                           isOrderPaid 
-                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' 
-                            : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                            : 'bg-amber-50 text-amber-700 border border-amber-200'
                         }`}>
                           {isOrderPaid ? 'Paid' : 'Cash Due'}
                         </span>
                       );
                     })()
                   ) : (
-                    <span className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                    <span className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
                       Vacant
                     </span>
                   )}
                 </div>
 
                 {/* Table Metadata */}
-                <div className="space-y-1.5 text-xs text-slate-500 dark:text-slate-400">
+                <div className="space-y-1.5 text-xs text-slate-600">
                   <div className="flex items-center justify-between">
-                    <span className="font-medium text-slate-400">Zone:</span>
+                    <span className="font-semibold text-slate-500">Zone:</span>
                     <span className={`font-bold ${textPrimary}`}>{table.zone}</span>
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <span className="font-medium text-slate-400">Capacity:</span>
+                    <span className="font-semibold text-slate-500">Capacity:</span>
                     <span className={`font-bold ${textPrimary} flex items-center space-x-1`}>
-                      <Users className="w-3 h-3 text-slate-400" />
+                      <Users className="w-3 h-3 text-slate-500" />
                       <span>{table.capacity} Guests</span>
                     </span>
                   </div>
 
                   {isOccupied && (
-                    <div className="pt-1.5 border-t border-orange-200/40 dark:border-orange-900/40 space-y-1">
+                    <div className="pt-1.5 border-t border-orange-200 space-y-1">
                       <div className="flex items-center justify-between text-[11px] gap-1 min-w-0 overflow-hidden">
                         <span className={`font-bold ${textPrimary} flex items-center gap-1 min-w-0 flex-1 truncate`}>
-                          <User className="w-3 h-3 text-slate-400 shrink-0" />
+                          <User className="w-3 h-3 text-slate-500 shrink-0" />
                           <span className="truncate">{activeOrder?.customer_name || table.current_customer_name || 'Guest'}</span>
                         </span>
                         {(activeOrder?.customer_phone || table.current_customer_phone) && (
-                          <span className="font-mono text-[10px] text-slate-400 font-bold flex items-center gap-0.5 shrink-0">
-                            <Phone className="w-2.5 h-2.5 text-slate-400" />
+                          <span className="font-mono text-[10px] text-slate-500 font-bold flex items-center gap-0.5 shrink-0">
+                            <Phone className="w-2.5 h-2.5 text-slate-500" />
                             <span>{(activeOrder?.customer_phone || table.current_customer_phone).slice(-4)}</span>
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center justify-between text-orange-600 dark:text-orange-400 font-bold font-mono">
+                      <div className="flex items-center justify-between text-orange-700 font-bold font-mono">
                         <span className="flex items-center space-x-1 text-[10px]">
                           <Clock className="w-3 h-3" />
                           <span>{table.timing || '18m'}</span>
@@ -473,10 +473,10 @@ export default function TablesView({
                 </div>
 
                 {/* Card Bottom Quick Actions */}
-                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-1.5" onClick={(e) => e.stopPropagation()}>
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5" onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={() => setPreviewQRTable(table)}
-                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer"
                     title="View & Print QR Standee"
                   >
                     <QrCode className="w-3.5 h-3.5" />
@@ -484,20 +484,19 @@ export default function TablesView({
 
                   <button
                     onClick={() => onSimulateCustomer(table.number)}
-                    className="px-2 py-1 rounded-lg bg-orange-50 hover:bg-orange-100 dark:bg-orange-950/40 dark:hover:bg-orange-900/40 text-orange-600 dark:text-orange-400 font-bold text-[10px] flex-1 text-center transition truncate cursor-pointer"
+                    className="px-2 py-1 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-700 font-bold text-[10px] flex-1 text-center transition truncate cursor-pointer border border-orange-200"
                   >
                     Menu
                   </button>
 
                   <button
                     onClick={() => onDeleteTable(table.id)}
-                    className="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-400 hover:text-rose-500 transition cursor-pointer"
+                    className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
                     title="Delete Table"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
-
               </div>
             );
           })}

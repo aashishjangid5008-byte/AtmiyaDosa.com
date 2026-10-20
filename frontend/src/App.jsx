@@ -1192,7 +1192,7 @@ export default function App() {
         <div>
           <div className={`p-5 flex items-center justify-between border-b ${isDark ? 'border-slate-800/80' : 'border-zinc-100'}`}>
             <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
-              <div className="w-10 h-10 rounded-2xl bg-slate-900 dark:bg-slate-800 text-amber-500 border border-slate-800 dark:border-slate-700 flex items-center justify-center font-heading font-black shadow-xs">
+              <div className="w-10 h-10 rounded-2xl bg-slate-900 text-amber-500 border border-slate-800 flex items-center justify-center font-heading font-black shadow-xs">
                 <Utensils className="w-5 h-5" />
               </div>
               <div>
@@ -1370,23 +1370,19 @@ export default function App() {
         </div>
 
         {/* Sidebar Footer with Live POS Status */}
-        <div className="p-4 space-y-2 border-t border-slate-200/60 dark:border-slate-800/80">
-          <div className={`rounded-2xl p-3 border ${
-            isDark 
-              ? 'bg-slate-900/60 border-slate-800/80' 
-              : 'bg-slate-50 border-slate-200/70'
-          }`}>
+        <div className="p-4 space-y-2 border-t border-slate-200/60">
+          <div className="rounded-2xl p-3 border bg-slate-50 border-slate-200/70">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
-                <span className={`text-[11px] font-bold font-heading ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                <span className="text-[11px] font-bold font-heading text-slate-800">
                   Live POS Cloud
                 </span>
               </div>
-              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold">
+              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 font-bold">
                 Online
               </span>
             </div>
