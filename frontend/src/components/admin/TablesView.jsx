@@ -447,13 +447,13 @@ export default function TablesView({
 
                   {isOccupied && (
                     <div className="pt-1.5 border-t border-orange-200/40 dark:border-orange-900/40 space-y-1">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className={`font-bold ${textPrimary} truncate max-w-[120px] flex items-center gap-1`}>
+                      <div className="flex items-center justify-between text-[11px] gap-1 min-w-0 overflow-hidden">
+                        <span className={`font-bold ${textPrimary} flex items-center gap-1 min-w-0 flex-1 truncate`}>
                           <User className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span>{activeOrder?.customer_name || table.current_customer_name || 'Guest'}</span>
+                          <span className="truncate">{activeOrder?.customer_name || table.current_customer_name || 'Guest'}</span>
                         </span>
                         {(activeOrder?.customer_phone || table.current_customer_phone) && (
-                          <span className="font-mono text-[10px] text-slate-400 font-bold flex items-center gap-0.5">
+                          <span className="font-mono text-[10px] text-slate-400 font-bold flex items-center gap-0.5 shrink-0">
                             <Phone className="w-2.5 h-2.5 text-slate-400" />
                             <span>{(activeOrder?.customer_phone || table.current_customer_phone).slice(-4)}</span>
                           </span>

@@ -115,18 +115,18 @@ export default function QRManagementView({ tables, orders = [], restaurantSettin
                           : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100')
                   }`}
                 >
-                  <div className="min-w-0 pr-1">
-                    <div className="flex items-center space-x-1.5">
+                  <div className="min-w-0 flex-1 pr-1.5 overflow-hidden">
+                    <div className="flex items-center space-x-1.5 min-w-0">
                       <span className="text-sm sm:text-base font-black font-heading truncate">{table.number}</span>
                       {tblActiveOrder && (
-                        <span className={`px-1.5 py-0.2 rounded text-[8px] sm:text-[9px] font-black uppercase tracking-wider ${
+                        <span className={`px-1.5 py-0.2 rounded text-[8px] sm:text-[9px] font-black uppercase tracking-wider shrink-0 ${
                           isSelected ? 'bg-amber-400 text-slate-950' : 'bg-amber-200 text-amber-900'
                         }`}>
                           🔒 Busy
                         </span>
                       )}
                     </div>
-                    <div className={`text-[10px] font-medium truncate ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
+                    <div className={`text-[10px] font-medium truncate block w-full ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
                       {tblActiveOrder ? `#${tblActiveOrder.id} (${tblActiveOrder.status})` : `${table.zone} • Open`}
                     </div>
                   </div>
