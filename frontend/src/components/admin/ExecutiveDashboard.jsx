@@ -833,19 +833,19 @@ export default function ExecutiveDashboard({
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-black font-heading tracking-tight text-slate-900">
+              <h1 className={`text-xl sm:text-2xl font-black font-heading tracking-tight ${palette.textPrimary}`}>
                 DARSHIT RANA
               </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                Age 19 • Primary Restaurant Owner
+              <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${theme === 'light' ? 'bg-slate-100 text-slate-700 border-slate-200' : 'bg-slate-800 text-slate-300 border-slate-700'}`}>
+                Restaurant Owner & Director
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold border border-emerald-200 flex items-center space-x-1.5">
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold border border-emerald-500/20 flex items-center space-x-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>Supabase Cloud (Mumbai ap-south-1) 🟢</span>
+                <span>Live Cloud POS Online</span>
               </span>
             </div>
-            <p className="text-xs text-slate-500 font-medium mt-1">
-              Atmiya Dosa Hub • Executive Restaurant Intelligence & Operations (Petlad, Anand)
+            <p className={`text-xs ${palette.textSecondary} font-medium mt-1`}>
+              Atmiya Dosa Hub • Executive Operations & Analytics (Petlad, Anand)
             </p>
           </div>
         </div>
@@ -916,7 +916,7 @@ export default function ExecutiveDashboard({
               </div>
             </div>
             <div className="mt-3">
-              <span className="text-2xl sm:text-3xl font-black tracking-tight font-mono text-slate-900">
+              <span className={`text-2xl sm:text-3xl font-black tracking-tight font-mono ${palette.textPrimary}`}>
                 {currentDataset.total}
               </span>
             </div>
@@ -935,7 +935,7 @@ export default function ExecutiveDashboard({
               </div>
             </div>
             <div className="mt-3">
-              <span className="text-2xl sm:text-3xl font-black tracking-tight font-mono text-slate-900">
+              <span className={`text-2xl sm:text-3xl font-black tracking-tight font-mono ${palette.textPrimary}`}>
                 {currentDataset.totalVolume} Plates
               </span>
             </div>
@@ -953,7 +953,7 @@ export default function ExecutiveDashboard({
               </div>
             </div>
             <div className="mt-3">
-              <span className="text-2xl sm:text-3xl font-black tracking-tight font-mono text-slate-900">
+              <span className={`text-2xl sm:text-3xl font-black tracking-tight font-mono ${palette.textPrimary}`}>
                 ₹{realAov}
               </span>
             </div>
@@ -971,7 +971,7 @@ export default function ExecutiveDashboard({
               </div>
             </div>
             <div className="mt-3">
-              <span className="text-2xl sm:text-3xl font-black tracking-tight font-mono text-slate-900">
+              <span className={`text-2xl sm:text-3xl font-black tracking-tight font-mono ${palette.textPrimary}`}>
                 {occupiedTablesCount} / {totalTablesCount} Tables
               </span>
             </div>
@@ -1044,14 +1044,14 @@ export default function ExecutiveDashboard({
         
         {/* LEFT / PIE CHART (6 COLS): WORLD-CLASS INTERACTIVE PIE & DONUT VISUALIZER */}
         {dashboardConfig.showPieChart && (
-          <div className="lg:col-span-6 p-6 sm:p-7 rounded-3xl bg-white border border-slate-200/90 shadow-xs hover:shadow-sm space-y-5 transition-all">
+          <div className={`lg:col-span-6 p-6 sm:p-7 rounded-3xl ${palette.cardBg} border ${palette.cardBorder} shadow-xs hover:shadow-sm space-y-5 transition-all`}>
             
             {/* Header with Visual Style & Metric Toggles */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b ${theme === 'light' ? 'border-slate-100' : 'border-slate-800/80'} pb-4`}>
               <div>
                 <div className="flex items-center space-x-2">
                   <PieChartIcon className="w-5 h-5 text-orange-500" />
-                  <h2 className="text-base font-black font-heading text-slate-900">
+                  <h2 className={`text-base font-black font-heading ${palette.textPrimary}`}>
                     Category Demand Pie & Volume
                   </h2>
                 </div>
@@ -1256,13 +1256,13 @@ export default function ExecutiveDashboard({
 
         {/* RIGHT / SALES VELOCITY (6 COLS): DUAL-METRIC SALES VELOCITY WAVE */}
         {dashboardConfig.showSalesWave && (
-          <div className="lg:col-span-6 p-6 sm:p-7 rounded-3xl bg-white border border-slate-200/90 shadow-xs hover:shadow-sm space-y-4 transition-all">
+          <div className={`lg:col-span-6 p-6 sm:p-7 rounded-3xl ${palette.cardBg} border ${palette.cardBorder} shadow-xs hover:shadow-sm space-y-4 transition-all`}>
             
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b ${theme === 'light' ? 'border-slate-100' : 'border-slate-800/80'} pb-4`}>
               <div>
                 <div className="flex items-center space-x-2">
                   <Activity className="w-5 h-5 text-orange-500" />
-                  <h2 className="text-base font-black font-heading text-slate-900">
+                  <h2 className={`text-base font-black font-heading ${palette.textPrimary}`}>
                     {currentDataset.title}
                   </h2>
                 </div>
@@ -1428,14 +1428,14 @@ export default function ExecutiveDashboard({
 
       {/* 4. "CHECKS THE ITEMS IN ONE PLACE" — ALL-IN-ONE MENU ITEM COMMAND CENTER & QUICK-EDITOR */}
       {dashboardConfig.showItemCommandCenter && (
-        <div className="p-6 sm:p-7 rounded-3xl bg-white border border-slate-200/90 shadow-xs hover:shadow-sm space-y-5 transition-all">
+        <div className={`p-6 sm:p-7 rounded-3xl ${palette.cardBg} border ${palette.cardBorder} shadow-xs hover:shadow-sm space-y-5 transition-all`}>
           
           {/* Header & Controls Bar */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div className={`flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b ${theme === 'light' ? 'border-slate-100' : 'border-slate-800/80'} pb-4`}>
             <div>
               <div className="flex items-center space-x-2">
                 <Trophy className="w-5 h-5 text-orange-500" />
-                <h2 className="text-base sm:text-lg font-black font-heading text-slate-900">
+                <h2 className={`text-base sm:text-lg font-black font-heading ${palette.textPrimary}`}>
                   Menu Items Demand & Live Control Center ({filteredDishes.length} Items)
                 </h2>
               </div>
@@ -1695,12 +1695,12 @@ export default function ExecutiveDashboard({
 
       {/* 5. ACTIVE TABLE SESSIONS & COD VS ONLINE RECONCILIATION */}
       {dashboardConfig.showLiveTables && (
-        <div className="p-6 sm:p-7 rounded-3xl bg-white border border-slate-200/90 shadow-xs hover:shadow-sm space-y-5 transition-all">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+        <div className={`p-6 sm:p-7 rounded-3xl ${palette.cardBg} border ${palette.cardBorder} shadow-xs hover:shadow-sm space-y-5 transition-all`}>
+          <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b ${theme === 'light' ? 'border-slate-100' : 'border-slate-800/80'} pb-4`}>
             <div>
               <div className="flex items-center space-x-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                <h2 className="text-base sm:text-lg font-black font-heading text-slate-900">
+                <h2 className={`text-base sm:text-lg font-black font-heading ${palette.textPrimary}`}>
                   Live Table Sessions & Bill Settlement ({displaySessions.filter(s => s.status === 'ACTIVE').length} Tables Seated)
                 </h2>
               </div>
@@ -1814,11 +1814,11 @@ export default function ExecutiveDashboard({
 
       {/* 6. PEAK DINING RUSH HEATMAP */}
       {dashboardConfig.showRushHeatmap && (
-        <div className="p-6 sm:p-7 rounded-3xl bg-white border border-slate-200/90 shadow-xs hover:shadow-sm space-y-4 transition-all">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className={`p-6 sm:p-7 rounded-3xl ${palette.cardBg} border ${palette.cardBorder} shadow-xs hover:shadow-sm space-y-4 transition-all`}>
+          <div className={`flex items-center justify-between border-b ${theme === 'light' ? 'border-slate-100' : 'border-slate-800/80'} pb-3`}>
             <div className="flex items-center space-x-2">
               <Clock className="w-5 h-5 text-orange-500" />
-              <h2 className="text-base font-black font-heading text-slate-900">
+              <h2 className={`text-base font-black font-heading ${palette.textPrimary}`}>
                 Hourly Kitchen Prep & Tawa Staffing Heatmap
               </h2>
             </div>

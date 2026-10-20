@@ -22,7 +22,8 @@ import {
   ChevronDown,
   Package,
   Zap,
-  BellRing
+  BellRing,
+  Moon
 } from 'lucide-react';
 
 import { 
@@ -318,8 +319,7 @@ export default function App() {
       const date = now.getDate();
       const month = months[now.getMonth()];
       const year = now.getFullYear();
-      const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      setCurrentTimeStr(`${day}, ${date} ${month} ${year} | ${time}`);
+      setCurrentTimeStr(`${day}, ${date} ${month} • ${time}`);
     };
     updateTime();
     const interval = setInterval(updateTime, 30000);
@@ -989,6 +989,10 @@ export default function App() {
     ? 'text-slate-400 hover:text-white hover:bg-slate-800/60 font-medium'
     : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100/80 font-medium';
 
+  const recentOrders = (orders || []).slice(0, 5);
+  const pendingOrdersCount = (orders || []).filter(o => (o.status || '').toUpperCase() === 'PENDING').length;
+  const totalAlertsCount = (serviceCalls?.length || 0) + pendingOrdersCount;
+
   return (
     <div className={`min-h-screen font-sans flex transition-colors duration-300 ${appBgClass}`}>
       
@@ -1051,7 +1055,7 @@ export default function App() {
                 <span>{t('orders')}</span>
               </div>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-orange-400/20 text-orange-400">
-                6
+                {orders?.length || 0}
               </span>
             </button>
 
@@ -1180,37 +1184,32 @@ export default function App() {
           </nav>
         </div>
 
-        {/* Sidebar Footer with Quote Banner & Appwrite credit */}
-        <div className="p-4 space-y-3">
-          
-          {/* Food Graphic Banner */}
-          <div className={`rounded-2xl p-3 border relative overflow-hidden ${
+        {/* Sidebar Footer with Live POS Status */}
+        <div className="p-4 space-y-2 border-t border-slate-200/60 dark:border-slate-800/80">
+          <div className={`rounded-2xl p-3 border ${
             isDark 
-              ? 'bg-slate-800/80 border-slate-700/60' 
-              : 'bg-gradient-to-br from-orange-50 to-amber-50/60 border-orange-200/60'
+              ? 'bg-slate-900/60 border-slate-800/80' 
+              : 'bg-slate-50 border-slate-200/70'
           }`}>
-            <div className="flex items-center space-x-3">
-              <img 
-                src="https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=120&q=80" 
-                alt="Dosa Plate" 
-                className="w-12 h-12 rounded-xl object-cover shrink-0" 
-              />
-              <div>
-                <p className={`text-[11px] font-black font-heading leading-tight ${
-                  isDark ? 'text-white' : 'text-slate-900'
-                }`}>
-                  {t('goodFoodHappyPeople')}
-                </p>
-                <span className="text-[9px] font-bold text-orange-600">Pure Veg Authentic</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span className={`text-[11px] font-bold font-heading ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                  Live POS Cloud
+                </span>
               </div>
+              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold">
+                Online
+              </span>
+            </div>
+            <div className="mt-2 text-[10px] text-slate-400 font-medium flex items-center justify-between">
+              <span>Atmiya Dosa Hub</span>
+              <span className="font-mono font-semibold">v2.5</span>
             </div>
           </div>
-
-          <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono pt-1">
-            <span>Version 2.0.0</span>
-            <span className="text-emerald-500 font-bold">Supabase Cloud 🟢</span>
-          </div>
-
         </div>
 
       </aside>
@@ -1227,117 +1226,120 @@ export default function App() {
       <div className="flex-1 lg:pl-64 flex flex-col min-h-screen">
         
         {/* TOP HEADER BAR */}
-        <header className={`sticky top-0 z-30 border-b px-4 sm:px-6 py-3.5 transition-colors ${headerClass}`}>
-          <div className="flex items-center justify-between gap-4">
+        <header className={`sticky top-0 z-30 border-b px-4 sm:px-6 py-2.5 transition-colors ${headerClass}`}>
+          <div className="flex items-center justify-between gap-3 sm:gap-4">
             
-            {/* Mobile Hamburger & Greeting */}
-            <div className="flex items-center space-x-3">
+            {/* Mobile Hamburger & Clean Brand Greeting */}
+            <div className="flex items-center space-x-3 shrink-0">
               <button
                 onClick={() => setMobileSidebarOpen(true)}
-                className={`lg:hidden p-2 rounded-xl transition ${
+                className={`lg:hidden p-2 rounded-xl transition cursor-pointer ${
                   isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-200' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                 }`}
               >
                 <Menu className="w-5 h-5" />
               </button>
 
-              <div className="flex items-center space-x-2">
-                <Sun className="w-5 h-5 text-amber-500 shrink-0" />
-                <div>
-                  <div className={`text-sm font-black font-heading flex items-center space-x-1.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    <span>{t('goodMorning')},</span>
-                    <span className="text-orange-500">{authUser?.name || 'Darshit Rana'}</span>
-                    <span>👑</span>
-                  </div>
-                  <div className="text-[10px] font-bold text-slate-400">
-                    {authUser?.role || 'Admin'} • {settings?.restaurantName || 'Atmiya Dosa'}
-                  </div>
+              <div>
+                <div className={`text-sm font-black font-heading tracking-tight flex items-center space-x-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  <span>{settings?.restaurantName || 'Atmiya Dosa Hub'}</span>
+                  <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-orange-500/10 text-orange-600 border border-orange-500/20">
+                    Live POS
+                  </span>
+                </div>
+                <div className="text-[11px] font-medium text-slate-400">
+                  {authUser?.name || 'Darshit Rana'} • <span className="capitalize">{authUser?.role || 'Admin'}</span>
                 </div>
               </div>
             </div>
 
-            {/* Global Search Bar (hidden on very small screens) */}
-            <div className="hidden md:flex items-center flex-1 max-w-md mx-4">
+            {/* Global Search Bar */}
+            <div className="hidden md:flex items-center flex-1 max-w-xs lg:max-w-sm mx-2">
               <div className="relative w-full">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
-                  placeholder={t('searchPlaceholder')}
-                  className={`w-full pl-10 pr-4 py-2 rounded-2xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500/30 transition ${
+                  placeholder="Search orders, tables, dishes..."
+                  className={`w-full pl-9 pr-10 py-1.5 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-orange-500/30 transition ${
                     isDark 
                       ? 'bg-slate-900/80 border border-slate-800 text-slate-100 placeholder-slate-500' 
-                      : 'bg-slate-100 border-none text-slate-900 placeholder-slate-400'
+                      : 'bg-slate-100/90 border border-slate-200/80 text-slate-900 placeholder-slate-400'
                   }`}
                 />
+                <kbd className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-mono px-1.5 py-0.5 rounded border pointer-events-none ${
+                  isDark ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-white border-slate-200 text-slate-400'
+                }`}>
+                  ⌘K
+                </kbd>
               </div>
             </div>
 
-            {/* Right Controls: Theme Toggle, Live Clock, Language Dropdown, Notifications, User */}
-            <div className="flex items-center space-x-2 sm:space-x-3">
+            {/* Right Controls: Live Clock, Theme, Language, Quick POS, Smart Notifications, Profile */}
+            <div className="flex items-center space-x-2 shrink-0">
 
-              {/* Theme Switcher Pill (Obsidian Luxe, Sapphire, Titanium Light) */}
-              <div className={`hidden md:flex items-center space-x-1 p-1 rounded-2xl border ${
-                isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-slate-100 border-slate-200/80'
+              {/* Live Date & Time Badge (Non-wrapping!) */}
+              <div className={`hidden xl:flex items-center space-x-2 px-3 py-1.5 rounded-xl border text-xs font-semibold font-mono whitespace-nowrap shrink-0 ${
+                isDark ? 'bg-slate-900/80 border-slate-800 text-slate-300' : 'bg-slate-100/90 border-slate-200 text-slate-700'
+              }`}>
+                <Calendar className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                <span className="whitespace-nowrap">{currentTimeStr}</span>
+              </div>
+
+              {/* Segmented Theme Switcher */}
+              <div className={`flex items-center p-0.5 rounded-xl border shrink-0 ${
+                isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-slate-100/90 border-slate-200'
               }`}>
                 <button
+                  type="button"
+                  onClick={() => setTheme('light')}
+                  className={`p-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    theme === 'light' 
+                      ? 'bg-white text-slate-900 shadow-xs' 
+                      : 'text-slate-400 hover:text-slate-700'
+                  }`}
+                  title="Light Theme"
+                >
+                  <Sun className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
                   onClick={() => setTheme('obsidian')}
-                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition flex items-center space-x-1 ${
+                  className={`p-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
                     theme === 'obsidian' 
                       ? 'bg-orange-500 text-white shadow-xs' 
                       : 'text-slate-400 hover:text-white'
                   }`}
-                  title="Obsidian Cyber Luxe (Dark)"
+                  title="Obsidian Dark Theme"
                 >
-                  <span>🌙</span>
-                  <span className="hidden xl:inline">Obsidian</span>
+                  <Moon className="w-3.5 h-3.5" />
                 </button>
                 <button
+                  type="button"
                   onClick={() => setTheme('sapphire')}
-                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition flex items-center space-x-1 ${
+                  className={`p-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
                     theme === 'sapphire' 
                       ? 'bg-indigo-600 text-white shadow-xs' 
                       : 'text-slate-400 hover:text-white'
                   }`}
-                  title="Deep Sapphire Blue"
+                  title="Sapphire Blue Theme"
                 >
-                  <span>💎</span>
-                  <span className="hidden xl:inline">Sapphire</span>
+                  <Sparkles className="w-3.5 h-3.5" />
                 </button>
-                <button
-                  onClick={() => setTheme('light')}
-                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition flex items-center space-x-1 ${
-                    theme === 'light' 
-                      ? 'bg-white text-zinc-900 shadow-xs' 
-                      : 'text-slate-400 hover:text-slate-700'
-                  }`}
-                  title="Clean Titanium Light"
-                >
-                  <span>☀️</span>
-                  <span className="hidden xl:inline">Light</span>
-                </button>
-              </div>
-              
-              {/* Date & Time Badge */}
-              <div className={`hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-2xl border text-xs font-bold font-mono ${
-                isDark ? 'bg-slate-900/80 border-slate-800 text-slate-300' : 'bg-slate-100 border-slate-200/80 text-slate-700'
-              }`}>
-                <Calendar className="w-3.5 h-3.5 text-orange-500" />
-                <span>{currentTimeStr}</span>
               </div>
 
-              {/* 4-Language Dropdown Selector */}
-              <div className={`flex items-center space-x-1 px-2.5 py-1.5 rounded-2xl border text-xs font-bold ${
-                isDark ? 'bg-slate-900/80 border-slate-800 text-slate-300' : 'bg-slate-100 border-slate-200/80 text-slate-700'
+              {/* Language Selector */}
+              <div className={`flex items-center space-x-1 px-2 py-1.5 rounded-xl border text-xs font-semibold shrink-0 ${
+                isDark ? 'bg-slate-900/80 border-slate-800 text-slate-300' : 'bg-slate-100/90 border-slate-200 text-slate-700'
               }`}>
-                <Globe className="w-3.5 h-3.5 text-orange-500" />
+                <Globe className="w-3.5 h-3.5 text-orange-500 shrink-0" />
                 <select
                   value={currentLang}
                   onChange={(e) => setCurrentLang(e.target.value)}
-                  className={`bg-transparent font-bold focus:outline-none cursor-pointer text-xs ${
+                  className={`bg-transparent font-semibold focus:outline-none cursor-pointer text-xs ${
                     isDark ? 'text-slate-200 bg-slate-900' : 'text-slate-800'
                   }`}
                 >
-                  <option value="en" className={isDark ? 'bg-slate-900 text-white' : ''}>English</option>
+                  <option value="en" className={isDark ? 'bg-slate-900 text-white' : ''}>EN</option>
                   <option value="hi" className={isDark ? 'bg-slate-900 text-white' : ''}>हिन्दी</option>
                   <option value="gu" className={isDark ? 'bg-slate-900 text-white' : ''}>ગુજરાતી</option>
                   <option value="hinglish" className={isDark ? 'bg-slate-900 text-white' : ''}>Hinglish</option>
@@ -1347,73 +1349,120 @@ export default function App() {
               {/* Quick POS Rapid Counter Button */}
               <button
                 onClick={() => setShowQuickPos(true)}
-                className="hidden sm:flex items-center space-x-1.5 px-3.5 py-1.5 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-black shadow-md shadow-orange-500/20 transition cursor-pointer"
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-bold shadow-xs shadow-orange-500/20 transition cursor-pointer shrink-0"
                 title="Rapid Counter POS (Punch order in seconds)"
               >
                 <Zap className="w-3.5 h-3.5 fill-current" />
-                <span>Quick POS</span>
+                <span className="hidden sm:inline">Quick POS</span>
               </button>
 
-              {/* Table Service Calls Drawer Toggle */}
-              <div className="relative">
+              {/* Single Unified Smart Notification Bell */}
+              <div className="relative shrink-0">
                 <button
-                  onClick={() => setServiceDrawerOpen(!serviceDrawerOpen)}
-                  className={`p-2 rounded-2xl relative transition ${
-                    serviceCalls.length > 0 
-                      ? 'bg-orange-100 text-orange-700 animate-pulse' 
-                      : (isDark ? 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800' : 'bg-slate-100 hover:bg-slate-200 text-slate-700')
+                  onClick={() => setNotificationOpen(!notificationOpen)}
+                  className={`p-2 rounded-xl relative transition cursor-pointer ${
+                    totalAlertsCount > 0 
+                      ? (isDark ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'bg-orange-50 text-orange-600 border border-orange-200') 
+                      : (isDark ? 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80')
                   }`}
-                  title="Table Service Requests (Waiter, Water, Bill)"
+                  title="Notifications & Table Calls"
                 >
-                  <BellRing className="w-4 h-4" />
-                  {serviceCalls.length > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-orange-600 text-white text-[9px] font-black flex items-center justify-center shadow">
-                      {serviceCalls.length}
+                  <Bell className="w-4 h-4" />
+                  {totalAlertsCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center shadow">
+                      {totalAlertsCount}
                     </span>
                   )}
                 </button>
 
-                {serviceDrawerOpen && (
-                  <div className={`absolute right-0 mt-2 w-80 rounded-3xl p-4 shadow-2xl border space-y-3 z-50 ${
+                {notificationOpen && (
+                  <div className={`absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl p-4 shadow-2xl border space-y-3 z-50 animate-in fade-in zoom-in-95 duration-150 ${
                     isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
                   }`}>
-                    <div className="flex items-center justify-between border-b border-slate-800/40 pb-2">
-                      <div className="flex items-center space-x-1.5">
-                        <BellRing className="w-4 h-4 text-orange-500" />
-                        <span className="text-xs font-black font-heading">Table Service Calls</span>
+                    <div className="flex items-center justify-between border-b border-slate-700/20 pb-2">
+                      <div className="flex items-center space-x-2">
+                        <Bell className="w-4 h-4 text-orange-500" />
+                        <span className="text-xs font-bold font-heading">Notifications & Service</span>
                       </div>
-                      <span className="text-[10px] font-bold text-orange-500 font-mono">
-                        {serviceCalls.length} Pending
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-500 font-mono">
+                        {totalAlertsCount} Active
                       </span>
                     </div>
 
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {serviceCalls.map(call => (
-                        <div key={call.id} className={`p-2.5 rounded-xl border flex items-center justify-between ${
-                          isDark ? 'bg-orange-500/10 border-orange-500/20' : 'bg-orange-50/70 border-orange-200'
-                        }`}>
-                          <div>
-                            <div className="flex items-center space-x-1.5">
-                              <span className={`font-heading font-black text-xs ${isDark ? 'text-orange-300' : 'text-orange-950'}`}>
-                                Table {call.tableNumber}
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-mono">{call.time}</span>
-                            </div>
-                            <p className={`text-[11px] font-bold ${isDark ? 'text-orange-200' : 'text-orange-800'}`}>{call.label}</p>
+                    <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                      {/* Table Service Calls */}
+                      {serviceCalls.length > 0 && (
+                        <div className="space-y-1.5">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">
+                            Table Service Calls
                           </div>
-
-                          <button
-                            onClick={() => handleDismissServiceCall(call.id)}
-                            className="px-2.5 py-1 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-bold text-[10px] shadow-sm"
-                          >
-                            Attend
-                          </button>
+                          {serviceCalls.map(call => (
+                            <div key={call.id} className={`p-2.5 rounded-xl border flex items-center justify-between ${
+                              isDark ? 'bg-orange-500/10 border-orange-500/20' : 'bg-orange-50/80 border-orange-200'
+                            }`}>
+                              <div>
+                                <div className="flex items-center space-x-1.5">
+                                  <span className="font-heading font-black text-xs text-orange-600 dark:text-orange-400">
+                                    Table {call.tableNumber}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-mono">{call.time}</span>
+                                </div>
+                                <p className="text-[11px] font-medium text-slate-700 dark:text-slate-300">{call.label}</p>
+                              </div>
+                              <button
+                                onClick={() => handleDismissServiceCall(call.id)}
+                                className="px-2.5 py-1 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-bold text-[10px] shadow-sm transition cursor-pointer"
+                              >
+                                Attend
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
 
-                      {serviceCalls.length === 0 && (
-                        <div className="p-4 text-center text-xs text-slate-400 font-medium">
-                          No active table service calls.
+                      {/* Real Live Kitchen Orders */}
+                      {recentOrders.length > 0 && (
+                        <div className="space-y-1.5">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">
+                            Recent Orders
+                          </div>
+                          {recentOrders.map(ord => (
+                            <div 
+                              key={ord.id} 
+                              onClick={() => { setActiveTab('orders'); setNotificationOpen(false); }}
+                              className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition ${
+                                isDark ? 'bg-slate-800/60 border-slate-700/60 hover:bg-slate-800' : 'bg-slate-50 border-slate-100 hover:bg-slate-100'
+                              }`}
+                            >
+                              <div>
+                                <div className="flex items-center space-x-1.5">
+                                  <span className="font-bold text-xs">
+                                    #{ord.order_number || ord.id?.slice(-4)}
+                                  </span>
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                                    Table {ord.table_number || ord.table}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400">{ord.time || 'Just now'}</span>
+                                </div>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                  ₹{ord.total_amount || ord.total || 0} • {ord.payment_mode || 'Cash'} • {ord.status}
+                                </p>
+                              </div>
+                              <span className="text-[10px] font-bold text-orange-500 hover:underline">
+                                View →
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {totalAlertsCount === 0 && (
+                        <div className="py-6 text-center space-y-1">
+                          <div className="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-500 mx-auto flex items-center justify-center text-sm font-bold">
+                            ✓
+                          </div>
+                          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">All caught up</p>
+                          <p className="text-[11px] text-slate-400">No pending table service calls or urgent alerts.</p>
                         </div>
                       )}
                     </div>
@@ -1421,78 +1470,14 @@ export default function App() {
                 )}
               </div>
 
-              {/* Customer Menu Bypass Shortcut */}
-              <button
-                onClick={() => setViewMode('customer')}
-                className={`hidden sm:flex items-center space-x-1 px-2.5 py-1.5 rounded-2xl border text-xs font-bold transition ${
-                  isDark ? 'bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20' : 'bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200'
-                }`}
-                title="Preview Guest Mobile QR Menu"
-              >
-                <QrCode className="w-3.5 h-3.5" />
-                <span>Menu</span>
-              </button>
-
-              {/* Kitchen KDS Shortcut */}
-              <button
-                onClick={() => setActiveTab('kitchen')}
-                className={`hidden sm:flex items-center space-x-1 px-2.5 py-1.5 rounded-2xl border text-xs font-bold transition ${
-                  isDark ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20' : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
-                }`}
-                title="Open Kitchen Display"
-              >
-                <ChefHat className="w-3.5 h-3.5" />
-                <span>KDS</span>
-              </button>
-
-              {/* Notification Bell with Badge */}
-              <div className="relative">
-                <button
-                  onClick={() => setNotificationOpen(!notificationOpen)}
-                  className={`p-2 rounded-2xl relative transition ${
-                    isDark ? 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                  }`}
-                >
-                  <Bell className="w-4 h-4" />
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center shadow">
-                    3
-                  </span>
-                </button>
-
-                {notificationOpen && (
-                  <div className={`absolute right-0 mt-2 w-72 rounded-3xl p-4 shadow-2xl border space-y-2 z-50 ${
-                    isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
-                  }`}>
-                    <div className="flex items-center justify-between border-b border-slate-800/40 pb-2">
-                      <span className="text-xs font-black font-heading">Notifications</span>
-                      <span className="text-[10px] font-bold text-orange-500">3 Unread</span>
-                    </div>
-                    <div className="space-y-2 text-xs">
-                      <div className={`p-2 rounded-xl border ${isDark ? 'bg-orange-500/10 border-orange-500/20 text-slate-200' : 'bg-orange-50 border-orange-100 text-slate-800'}`}>
-                        <p className="font-bold">New Order #ORD1048 received</p>
-                        <span className="text-[10px] text-slate-400">Table T04 • 2 mins ago</span>
-                      </div>
-                      <div className={`p-2 rounded-xl border ${isDark ? 'bg-slate-800/70 border-slate-700 text-slate-200' : 'bg-slate-50 border-slate-100 text-slate-800'}`}>
-                        <p className="font-bold">Payment received ₹260 (UPI)</p>
-                        <span className="text-[10px] text-slate-400">Table T07 • 12 mins ago</span>
-                      </div>
-                      <div className={`p-2 rounded-xl border ${isDark ? 'bg-slate-800/70 border-slate-700 text-slate-200' : 'bg-slate-50 border-slate-100 text-slate-800'}`}>
-                        <p className="font-bold">Low Stock Alert: Basmati Rice</p>
-                        <span className="text-[10px] text-slate-400">Kitchen Store • 1 hour ago</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
               {/* User Avatar & Logout */}
-              <div className={`flex items-center space-x-2 pl-1 border-l ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-                <div className="w-8 h-8 rounded-full bg-orange-500 text-white font-black text-xs flex items-center justify-center font-heading shadow-md shadow-orange-500/30">
-                  DR
+              <div className={`flex items-center space-x-2 pl-2 border-l shrink-0 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white font-black text-xs flex items-center justify-center font-heading shadow-xs">
+                  {authUser?.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'DR'}
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="p-1.5 rounded-xl hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 transition"
+                  className="p-1.5 rounded-xl hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 transition cursor-pointer"
                   title="Sign Out"
                 >
                   <LogOut className="w-4 h-4" />
