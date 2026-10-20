@@ -312,14 +312,18 @@ export default function App() {
   // Update live clock
   useEffect(() => {
     const updateTime = () => {
-      const now = new Date();
-      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const day = days[now.getDay()];
-      const date = now.getDate();
-      const month = months[now.getMonth()];
-      const year = now.getFullYear();
-      setCurrentTimeStr(`${day}, ${date} ${month} • ${time}`);
+      try {
+        const now = new Date();
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const day = days[now.getDay()];
+        const date = now.getDate();
+        const month = months[now.getMonth()];
+        const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setCurrentTimeStr(`${day}, ${date} ${month} • ${time}`);
+      } catch (err) {
+        console.warn('Clock format err:', err);
+      }
     };
     updateTime();
     const interval = setInterval(updateTime, 30000);
