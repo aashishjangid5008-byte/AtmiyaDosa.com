@@ -175,7 +175,7 @@ export default function ExecutiveDashboard({
         textPrimary: 'text-slate-100',
         textSecondary: 'text-slate-400',
         accentGrad: 'from-indigo-600 to-blue-600',
-        activePill: 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+        activePill: 'bg-indigo-600 text-white shadow-xs font-semibold'
       };
     }
     if (theme === 'obsidian') {
@@ -187,21 +187,21 @@ export default function ExecutiveDashboard({
         innerBox: 'bg-[#0D1322] border-slate-800/90',
         textPrimary: 'text-slate-100',
         textSecondary: 'text-slate-400',
-        accentGrad: 'from-orange-500 via-amber-500 to-amber-400',
-        activePill: 'bg-orange-500 text-white shadow-md shadow-orange-500/30'
+        accentGrad: 'from-amber-600 to-amber-500',
+        activePill: 'bg-slate-800 text-white border border-slate-700 shadow-xs font-semibold'
       };
     }
-    // Default: 'light' — Clean, High-End Enterprise Professional White (Stripe/Toast/Linear)
+    // Default: 'light' — Classic, High-End Enterprise Hospitality (Toast / Square / Linear)
     return {
       bg: 'bg-[#F8FAFC]',
       cardBg: 'bg-white',
-      cardBorder: 'border-slate-200/90',
-      cardHover: 'hover:border-slate-300 hover:shadow-md',
-      innerBox: 'bg-slate-50/80 border-slate-200/80',
+      cardBorder: 'border-slate-200/80',
+      cardHover: 'hover:border-slate-300 hover:shadow-xs',
+      innerBox: 'bg-slate-50 border-slate-200/70',
       textPrimary: 'text-slate-900',
       textSecondary: 'text-slate-500',
-      accentGrad: 'from-orange-500 to-amber-500',
-      activePill: 'bg-orange-500 text-white shadow-sm shadow-orange-500/25'
+      accentGrad: 'from-amber-600 to-amber-500',
+      activePill: 'bg-slate-900 text-white shadow-xs font-semibold'
     };
   }, [theme]);
 
@@ -905,15 +905,15 @@ export default function ExecutiveDashboard({
 
           <button
             onClick={onOpenGenerateQR}
-            className="flex items-center space-x-2 px-3.5 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-bold transition shadow-xs cursor-pointer"
+            className="flex items-center space-x-2 px-3.5 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold transition shadow-xs cursor-pointer"
           >
-            <QrCode className="w-4 h-4 text-orange-500" />
+            <QrCode className="w-4 h-4 text-slate-600 dark:text-slate-300" />
             <span>Floor QRs</span>
           </button>
           
           <button
             onClick={onOpenAddItem}
-            className="flex items-center space-x-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-bold transition shadow-sm shadow-orange-500/25 cursor-pointer"
+            className="flex items-center space-x-2 px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 dark:bg-amber-600 dark:hover:bg-amber-700 text-white text-xs font-bold transition shadow-xs cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>+ Add Menu Item</span>
@@ -928,8 +928,8 @@ export default function ExecutiveDashboard({
           {/* Tile 1: Total Revenue */}
           <div className={`p-5 rounded-3xl ${palette.cardBg} border ${palette.cardBorder} shadow-xs hover:shadow-sm transition`}>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Today's Revenue</span>
-              <div className="w-8 h-8 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-sm">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Today's Revenue</span>
+              <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold text-sm">
                 ₹
               </div>
             </div>
@@ -938,17 +938,17 @@ export default function ExecutiveDashboard({
                 {currentDataset.total}
               </span>
             </div>
-            <div className="mt-2 flex items-center text-[11px] font-bold text-emerald-600 space-x-1">
+            <div className="mt-2.5 flex items-center text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 space-x-1">
               <TrendingUp className="w-3.5 h-3.5" />
-              <span>Realtime Supabase Sync</span>
+              <span>Realtime Live Sync</span>
             </div>
           </div>
 
           {/* Tile 2: Volume Tracked */}
           <div className={`p-5 rounded-3xl ${palette.cardBg} border ${palette.cardBorder} shadow-xs hover:shadow-sm transition`}>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Volume Tracked</span>
-              <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Volume Tracked</span>
+              <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 flex items-center justify-center">
                 <ShoppingBag className="w-4 h-4" />
               </div>
             </div>
@@ -957,7 +957,7 @@ export default function ExecutiveDashboard({
                 {currentDataset.totalVolume} Plates
               </span>
             </div>
-            <div className="mt-2 text-[11px] font-bold text-purple-600">
+            <div className="mt-2.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
               Across {currentDataset.totalOrders} dining tickets
             </div>
           </div>
@@ -965,8 +965,8 @@ export default function ExecutiveDashboard({
           {/* Tile 3: Average Order Value */}
           <div className={`p-5 rounded-3xl ${palette.cardBg} border ${palette.cardBorder} shadow-xs hover:shadow-sm transition`}>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Avg Ticket (AOV)</span>
-              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-xs">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Avg Ticket (AOV)</span>
+              <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 flex items-center justify-center font-bold text-xs">
                 AOV
               </div>
             </div>
@@ -975,7 +975,7 @@ export default function ExecutiveDashboard({
                 ₹{realAov}
               </span>
             </div>
-            <div className="mt-2 text-[11px] font-bold text-emerald-600">
+            <div className="mt-2.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
               {validOrders.length > 0 ? `Calculated across ${validOrders.length} live orders` : 'Calculated live from orders'}
             </div>
           </div>
@@ -983,8 +983,8 @@ export default function ExecutiveDashboard({
           {/* Tile 4: Active Occupancy */}
           <div className={`p-5 rounded-3xl ${palette.cardBg} border ${palette.cardBorder} shadow-xs hover:shadow-sm transition`}>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Floor Seated</span>
-              <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Floor Seated</span>
+              <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 flex items-center justify-center">
                 <Clock className="w-4 h-4" />
               </div>
             </div>
@@ -993,61 +993,61 @@ export default function ExecutiveDashboard({
                 {occupiedTablesCount} / {totalTablesCount} Tables
               </span>
             </div>
-            <div className="mt-2 text-[11px] font-bold text-blue-600">
+            <div className="mt-2.5 text-[11px] font-medium text-slate-500 dark:text-slate-400">
               {occupancyPercent}% Current Floor Seated
             </div>
           </div>
 
           {/* Tile 5: EDITABLE DAILY SALES GOAL CARD */}
-          <div className={`col-span-2 lg:col-span-1 p-5 rounded-3xl bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/20 relative overflow-hidden flex flex-col justify-between`}>
+          <div className={`col-span-2 lg:col-span-1 p-5 rounded-3xl ${palette.cardBg} border ${palette.cardBorder} shadow-xs hover:shadow-sm transition flex flex-col justify-between`}>
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-orange-100">Daily Target Goal</span>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Daily Target</span>
               <button
                 onClick={() => { setIsEditingTarget(true); setTargetInputVal(dailyTarget); }}
-                className="text-[10px] font-bold bg-white/20 hover:bg-white/30 text-white px-2 py-0.5 rounded-lg transition cursor-pointer flex items-center space-x-1"
+                className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer flex items-center space-x-1"
                 title="Click to edit your daily target goal"
               >
                 <Edit2 className="w-2.5 h-2.5" />
-                <span>Edit Goal</span>
+                <span>Edit</span>
               </button>
             </div>
 
             {isEditingTarget ? (
-              <div className="mt-2 bg-white/95 p-2 rounded-xl text-slate-900 flex items-center space-x-1.5">
-                <span className="font-bold text-xs">₹</span>
+              <div className="mt-2 bg-slate-50 dark:bg-slate-800/80 p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white flex items-center space-x-1.5">
+                <span className="font-bold text-xs text-slate-500">₹</span>
                 <input
                   type="number"
                   value={targetInputVal}
                   onChange={(e) => setTargetInputVal(e.target.value)}
-                  className="w-full text-xs font-mono font-bold focus:outline-none"
+                  className="w-full text-xs font-mono font-bold bg-transparent focus:outline-none"
                   autoFocus
                 />
                 <button
                   onClick={handleSaveDailyTarget}
-                  className="px-2 py-1 rounded bg-orange-600 text-white text-[10px] font-bold hover:bg-orange-700"
+                  className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 dark:bg-amber-600 dark:hover:bg-amber-700 text-white text-[10px] font-bold cursor-pointer"
                 >
                   Save
                 </button>
               </div>
             ) : (
-              <div className="mt-2">
+              <div className="mt-3">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-2xl font-black font-mono tracking-tight">
+                  <span className={`text-2xl sm:text-3xl font-black font-mono tracking-tight ${palette.textPrimary}`}>
                     {targetPercent}%
                   </span>
-                  <span className="text-xs font-mono opacity-90">
+                  <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
                     ₹{currentTodaySales.toLocaleString()} / ₹{dailyTarget.toLocaleString()}
                   </span>
                 </div>
                 
                 {/* Target Progress Bar */}
-                <div className="w-full h-2 rounded-full bg-black/20 mt-2 overflow-hidden">
+                <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 mt-2.5 overflow-hidden border border-slate-200/50 dark:border-slate-700/50">
                   <div 
-                    style={{ width: `${targetPercent}%` }} 
-                    className="h-full bg-white rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min(100, targetPercent)}%` }} 
+                    className={`h-full rounded-full transition-all duration-500 ${targetPercent >= 100 ? 'bg-emerald-500' : 'bg-amber-500'}`}
                   />
                 </div>
-                <span className="block text-[10px] opacity-90 mt-1 font-medium">
+                <span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
                   {targetPercent >= 100 ? '🎉 Goal Achieved!' : `₹${(dailyTarget - currentTodaySales).toLocaleString()} remaining`}
                 </span>
               </div>
@@ -1082,32 +1082,32 @@ export default function ExecutiveDashboard({
               <div className="flex flex-wrap items-center gap-2">
                 
                 {/* Pie vs Donut Style Toggle */}
-                <div className="flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold">
+                <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold">
                   <button
                     onClick={() => { setPieChartStyle('donut'); updateConfig('chartType', 'donut'); }}
-                    className={`px-2.5 py-1 rounded-lg transition ${pieChartStyle === 'donut' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                    className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${pieChartStyle === 'donut' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
                   >
                     Donut
                   </button>
                   <button
                     onClick={() => { setPieChartStyle('pie'); updateConfig('chartType', 'pie'); }}
-                    className={`px-2.5 py-1 rounded-lg transition ${pieChartStyle === 'pie' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                    className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${pieChartStyle === 'pie' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
                   >
                     Pie
                   </button>
                 </div>
 
                 {/* Metric: Volume vs Revenue */}
-                <div className="flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold">
+                <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold">
                   <button
                     onClick={() => setPieMetric('volume')}
-                    className={`px-2.5 py-1 rounded-lg transition ${pieMetric === 'volume' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                    className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${pieMetric === 'volume' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
                   >
                     Volume
                   </button>
                   <button
                     onClick={() => setPieMetric('revenue')}
-                    className={`px-2.5 py-1 rounded-lg transition ${pieMetric === 'revenue' ? 'bg-orange-500 text-white shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                    className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${pieMetric === 'revenue' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
                   >
                     Revenue (₹)
                   </button>
@@ -1398,37 +1398,37 @@ export default function ExecutiveDashboard({
 
               {/* Timeframe & Metric Toggle */}
               <div className="flex items-center space-x-1.5">
-                <div className="flex items-center p-1 rounded-2xl bg-slate-100 border border-slate-200 text-xs font-bold">
+                <div className="flex items-center p-1 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold">
                   <button
                     onClick={() => setChartMetric('revenue')}
-                    className={`px-2 py-1 rounded-xl transition ${chartMetric === 'revenue' ? 'bg-orange-500 text-white shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer ${chartMetric === 'revenue' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
                   >
-                    ₹
+                    Revenue (₹)
                   </button>
                   <button
                     onClick={() => setChartMetric('volume')}
-                    className={`px-2 py-1 rounded-xl transition ${chartMetric === 'volume' ? 'bg-purple-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer ${chartMetric === 'volume' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
                   >
-                    📦
+                    Volume (Plates)
                   </button>
                 </div>
 
-                <div className="flex items-center p-1 rounded-2xl bg-slate-100 border border-slate-200 text-xs font-bold">
+                <div className="flex items-center p-1 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold">
                   <button
                     onClick={() => { setTimeframe('hourly'); setSelectedPointIndex(5); }}
-                    className={`px-2.5 py-1 rounded-xl transition ${timeframe === 'hourly' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer ${timeframe === 'hourly' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
                   >
                     Today
                   </button>
                   <button
                     onClick={() => { setTimeframe('weekly'); setSelectedPointIndex(5); }}
-                    className={`px-2.5 py-1 rounded-xl transition ${timeframe === 'weekly' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer ${timeframe === 'weekly' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
                   >
                     Week
                   </button>
                   <button
                     onClick={() => { setTimeframe('monthly'); setSelectedPointIndex(3); }}
-                    className={`px-2.5 py-1 rounded-xl transition ${timeframe === 'monthly' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer ${timeframe === 'monthly' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
                   >
                     Month
                   </button>
@@ -1437,30 +1437,30 @@ export default function ExecutiveDashboard({
             </div>
 
             {/* Active Milestone Card */}
-            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-orange-50 via-amber-50/50 to-white border border-orange-200/60 flex items-center justify-between text-xs">
+            <div className={`p-3.5 rounded-2xl ${palette.innerBox} flex items-center justify-between text-xs transition`}>
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 text-white flex items-center justify-center font-black text-xs shadow-xs font-mono">
+                <div className="w-10 h-10 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 flex items-center justify-center font-black text-xs shadow-xs font-mono">
                   {activePoint.label}
                 </div>
                 <div>
                   <div className="flex items-center space-x-2">
-                    <span className="font-black text-sm font-mono text-slate-900">
+                    <span className={`font-black text-sm font-mono ${palette.textPrimary}`}>
                       {chartMetric === 'revenue' 
                         ? `₹${activePoint.revenue.toLocaleString('en-IN')}` 
                         : `${activePoint.volume || activePoint.orders * 2} Plates`}
                     </span>
-                    <span className="px-2 py-0.5 rounded-md bg-orange-100 text-orange-800 font-bold text-[10px] border border-orange-200">
+                    <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-[10px] border border-slate-200/80 dark:border-slate-700/80">
                       {activePoint.status}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    {activePoint.orders} tickets • Top Dish: <strong className="text-orange-700">{activePoint.peakDish}</strong>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    {activePoint.orders} tickets • Top Dish: <strong className="font-semibold text-slate-900 dark:text-slate-200">{activePoint.peakDish}</strong>
                   </p>
                 </div>
               </div>
 
-              <span className="px-2.5 py-1 rounded-xl bg-white border border-slate-200 font-mono font-bold text-[11px] text-slate-700 shadow-xs">
-                ⚡ Turn: 18m
+              <span className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono font-semibold text-[11px] text-slate-700 dark:text-slate-300 shadow-xs">
+                Turn: 18m
               </span>
             </div>
 
@@ -1571,22 +1571,22 @@ export default function ExecutiveDashboard({
 
             {/* Sub-Filters: All, Bestsellers, Dead Stock */}
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center p-1 rounded-2xl bg-slate-100 border border-slate-200 text-xs font-bold">
+              <div className="flex items-center p-1 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold">
                 <button
                   onClick={() => setDemandTab('all')}
-                  className={`px-3 py-1.5 rounded-xl transition ${demandTab === 'all' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${demandTab === 'all' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
                 >
                   All Menu Items ({itemsList.length})
                 </button>
                 <button
                   onClick={() => setDemandTab('bestsellers')}
-                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${demandTab === 'bestsellers' ? 'bg-orange-500 text-white shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${demandTab === 'bestsellers' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
                 >
                   Top Sellers
                 </button>
                 <button
                   onClick={() => setDemandTab('low_demand')}
-                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${demandTab === 'low_demand' ? 'bg-rose-500 text-white shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${demandTab === 'low_demand' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}`}
                 >
                   Low Demand
                 </button>

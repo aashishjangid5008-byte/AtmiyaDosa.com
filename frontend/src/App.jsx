@@ -986,8 +986,8 @@ export default function App() {
     : (theme === 'light' ? 'bg-white/90 border-zinc-200/80 backdrop-blur-xl shadow-xs' : 'bg-[#0E1526]/90 border-slate-800/80 backdrop-blur-xl');
 
   const navActiveStyle = theme === 'sapphire'
-    ? 'bg-indigo-600 text-white font-bold shadow-md shadow-indigo-600/30'
-    : (theme === 'light' ? 'bg-orange-500 text-white font-bold shadow-sm shadow-orange-500/25' : 'bg-orange-500 text-white font-bold shadow-md shadow-orange-500/25');
+    ? 'bg-indigo-600 text-white font-semibold shadow-xs'
+    : (theme === 'light' ? 'bg-slate-900 text-white font-semibold shadow-xs' : 'bg-slate-800 text-white font-semibold border border-slate-700/80 shadow-xs');
 
   const navInactiveStyle = isDark
     ? 'text-slate-400 hover:text-white hover:bg-slate-800/60 font-medium'
@@ -1011,7 +1011,7 @@ export default function App() {
         <div>
           <div className={`p-5 flex items-center justify-between border-b ${isDark ? 'border-slate-800/80' : 'border-zinc-100'}`}>
             <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-heading font-black shadow-md shadow-orange-500/20">
+              <div className="w-10 h-10 rounded-2xl bg-slate-900 dark:bg-slate-800 text-amber-500 border border-slate-800 dark:border-slate-700 flex items-center justify-center font-heading font-black shadow-xs">
                 <Utensils className="w-5 h-5" />
               </div>
               <div>
@@ -1247,7 +1247,7 @@ export default function App() {
               <div>
                 <div className={`text-sm font-black font-heading tracking-tight flex items-center space-x-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   <span>{settings?.restaurantName || 'Atmiya Dosa Hub'}</span>
-                  <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-orange-500/10 text-orange-600 border border-orange-500/20">
+                  <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800">
                     Live POS
                   </span>
                 </div>
@@ -1353,10 +1353,10 @@ export default function App() {
               {/* Quick POS Rapid Counter Button */}
               <button
                 onClick={() => setShowQuickPos(true)}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-bold shadow-xs shadow-orange-500/20 transition cursor-pointer shrink-0"
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-amber-600 dark:hover:bg-amber-700 text-white text-xs font-semibold shadow-xs transition cursor-pointer shrink-0"
                 title="Rapid Counter POS (Punch order in seconds)"
               >
-                <Zap className="w-3.5 h-3.5 fill-current" />
+                <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                 <span className="hidden sm:inline">Quick POS</span>
               </button>
 

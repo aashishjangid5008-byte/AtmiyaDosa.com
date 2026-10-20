@@ -389,12 +389,12 @@ export default function CustomerMenu({
                 <span className="font-black text-base sm:text-lg text-slate-900 font-heading truncate">
                   {restaurantSettings?.restaurantName || 'Atmiya Dosa Hub'}
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-orange-500/10 text-orange-600 border border-orange-500/20 shrink-0">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-slate-900 text-white shrink-0 shadow-xs">
                   Table {currentTable}
                 </span>
               </div>
               <div className="flex items-center space-x-2 text-[10px] text-slate-500 font-medium">
-                <span className="inline-flex items-center text-emerald-600 font-bold">
+                <span className="inline-flex items-center text-emerald-700 font-bold">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span>
                   100% Pure Veg
                 </span>
@@ -408,33 +408,33 @@ export default function CustomerMenu({
           <div className="flex items-center space-x-1.5 shrink-0">
             <button
               onClick={() => handleServiceButton('WAITER', 'Floor Waiter')}
-              className="px-2.5 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer"
+              className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 text-[11px] font-semibold transition flex items-center space-x-1 cursor-pointer"
               title="Call Floor Waiter"
             >
-              <BellRing className="w-3.5 h-3.5 text-orange-500" />
+              <BellRing className="w-3.5 h-3.5 text-slate-600" />
               <span className="hidden sm:inline">Waiter</span>
             </button>
 
             <button
               onClick={() => handleServiceButton('WATER', 'Water')}
-              className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer"
+              className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 text-[11px] font-semibold transition flex items-center space-x-1 cursor-pointer"
               title="Request Water"
             >
-              <GlassWater className="w-3.5 h-3.5 text-blue-500" />
+              <GlassWater className="w-3.5 h-3.5 text-slate-600" />
               <span className="hidden sm:inline">Water</span>
             </button>
 
             <button
               onClick={() => handleServiceButton('BILL', 'Bill')}
-              className="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer"
+              className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 text-[11px] font-semibold transition flex items-center space-x-1 cursor-pointer"
               title="Request Bill"
             >
-              <Receipt className="w-3.5 h-3.5 text-emerald-600" />
+              <Receipt className="w-3.5 h-3.5 text-slate-600" />
               <span className="hidden sm:inline">Bill</span>
             </button>
 
             <div className="flex items-center space-x-1 px-2 py-1 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold">
-              <Globe className="w-3 h-3 text-orange-500" />
+              <Globe className="w-3 h-3 text-slate-600" />
               <select 
                 value={currentLang} 
                 onChange={(e) => onLanguageChange(e.target.value)}
@@ -512,21 +512,21 @@ export default function CustomerMenu({
         )}
 
         {/* Compact Hospitality Welcome Strip */}
-        <div className="rounded-2xl p-3 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-500 text-white shadow-xs flex items-center justify-between">
+        <div className="rounded-2xl p-3 bg-slate-900 text-white shadow-xs border border-slate-800 flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
-            <div className="w-7 h-7 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 text-sm">
+            <div className="w-7 h-7 rounded-xl bg-slate-800 text-amber-400 flex items-center justify-center shrink-0 text-sm">
               🥞
             </div>
             <div>
               <p className="text-xs font-black font-heading leading-tight">
                 Authentic Gujarati & South Indian Tawa Specialties
               </p>
-              <p className="text-[10px] text-orange-100 font-medium">
+              <p className="text-[10px] text-slate-300 font-medium">
                 Freshly prepared upon ordering • Jain options available
               </p>
             </div>
           </div>
-          <span className="hidden sm:inline-flex px-2 py-0.5 rounded-lg bg-white/20 text-white text-[10px] font-bold font-mono">
+          <span className="hidden sm:inline-flex px-2 py-0.5 rounded-lg bg-emerald-950/60 text-emerald-400 border border-emerald-800/80 text-[10px] font-bold font-mono">
             Pure Veg 100%
           </span>
         </div>
@@ -540,7 +540,7 @@ export default function CustomerMenu({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search dishes (e.g. Mysore, Pav Bhaji, Cheese...)"
-              className="w-full pl-9 pr-8 py-2 rounded-xl bg-white border border-slate-200/90 text-xs font-medium shadow-xs focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition"
+              className="w-full pl-9 pr-8 py-2 rounded-xl bg-white border border-slate-200/90 text-xs font-medium shadow-xs focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-800 transition"
             />
             {searchQuery && (
               <button 
@@ -560,8 +560,8 @@ export default function CustomerMenu({
                 onClick={() => setSelectedCategory(cat)}
                 className={`px-3 py-1.5 rounded-full text-xs font-bold transition whitespace-nowrap shrink-0 cursor-pointer ${
                   selectedCategory === cat
-                    ? 'bg-orange-500 text-white shadow-xs'
-                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 hover:text-slate-900'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-white text-slate-700 border border-slate-200/90 hover:bg-slate-100 hover:text-slate-900 font-semibold'
                 }`}
               >
                 {cat}
@@ -607,7 +607,7 @@ export default function CustomerMenu({
               <div 
                 key={item.id} 
                 onClick={() => handleOpenCustomizer(item)}
-                className="bg-white rounded-2xl p-2 sm:p-2.5 border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-orange-300 transition-all duration-200 flex flex-col justify-between relative group cursor-pointer"
+                className="bg-white rounded-2xl p-2 sm:p-2.5 border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col justify-between relative group cursor-pointer"
               >
                 {/* Top Food Visual Card (Soft Pastel Gradient & Centered Artistic Emoji / Image) */}
                 <div className={`w-full aspect-[4/3] rounded-xl relative overflow-hidden flex items-center justify-center bg-gradient-to-br ${getDishGradient(item)} border border-slate-100/80`}>
@@ -637,7 +637,7 @@ export default function CustomerMenu({
                     </div>
                   ) : item.prepTimeMins ? (
                     <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-white/95 backdrop-blur-xs text-slate-700 font-mono text-[9px] font-bold border border-slate-200/60 shadow-2xs flex items-center space-x-0.5">
-                      <Clock className="w-2.5 h-2.5 text-orange-500" />
+                      <Clock className="w-2.5 h-2.5 text-slate-500" />
                       <span>{item.prepTimeMins}m</span>
                     </div>
                   ) : null}
@@ -655,10 +655,10 @@ export default function CustomerMenu({
                 {/* Dish Details */}
                 <div className="mt-2 flex-1 flex flex-col justify-between">
                   <div>
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-orange-600 font-mono truncate block">
+                    <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 font-mono truncate block">
                       {item.category}
                     </span>
-                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 font-heading line-clamp-2 leading-snug group-hover:text-orange-600 transition mt-0.5 min-h-[2rem]">
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 font-heading line-clamp-2 leading-snug group-hover:text-slate-700 transition mt-0.5 min-h-[2rem]">
                       {item.english_name || item.name}
                     </h3>
                     {item.gujarati_name && (
@@ -690,7 +690,7 @@ export default function CustomerMenu({
                             e.stopPropagation();
                             handleQuickAdd(item);
                           }}
-                          className="px-2.5 sm:px-3 py-1 rounded-xl bg-orange-50 hover:bg-orange-500 text-orange-600 hover:text-white border border-orange-500 font-black text-[11px] sm:text-xs uppercase tracking-wider shadow-2xs flex items-center space-x-1 transition active:scale-95 cursor-pointer"
+                          className="px-2.5 sm:px-3 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-600/40 font-black text-[11px] sm:text-xs uppercase tracking-wider shadow-2xs flex items-center space-x-1 transition active:scale-95 cursor-pointer"
                         >
                           <span>ADD</span>
                           <Plus className="w-3 h-3 stroke-[3]" />
@@ -698,12 +698,12 @@ export default function CustomerMenu({
                       ) : (
                         <div 
                           onClick={(e) => e.stopPropagation()}
-                          className="flex items-center space-x-1 bg-orange-500 text-white rounded-xl px-1.5 py-0.5 shadow-xs"
+                          className="flex items-center space-x-1 bg-emerald-600 text-white rounded-xl px-1.5 py-0.5 shadow-xs"
                         >
                           <button
                             type="button"
                             onClick={() => handleRemoveFromCart(item.id)}
-                            className="w-5 h-5 rounded-lg hover:bg-orange-600 flex items-center justify-center text-white active:scale-90 transition cursor-pointer"
+                            className="w-5 h-5 rounded-lg hover:bg-emerald-700 flex items-center justify-center text-white active:scale-90 transition cursor-pointer"
                           >
                             <Minus className="w-2.5 h-2.5 stroke-[3]" />
                           </button>
@@ -711,7 +711,7 @@ export default function CustomerMenu({
                           <button
                             type="button"
                             onClick={() => handleQuickAdd(item)}
-                            className="w-5 h-5 rounded-lg hover:bg-orange-600 flex items-center justify-center text-white active:scale-90 transition cursor-pointer"
+                            className="w-5 h-5 rounded-lg hover:bg-emerald-700 flex items-center justify-center text-white active:scale-90 transition cursor-pointer"
                           >
                             <Plus className="w-2.5 h-2.5 stroke-[3]" />
                           </button>
@@ -843,7 +843,7 @@ export default function CustomerMenu({
             className="w-full py-3 px-4 rounded-2xl bg-slate-900 text-white font-black text-sm shadow-2xl flex items-center justify-between border border-slate-800 hover:bg-slate-950 active:scale-[0.99] transition cursor-pointer"
           >
             <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 rounded-xl bg-orange-500 text-white flex items-center justify-center font-black text-xs font-mono shadow-xs">
+              <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-xs font-mono shadow-xs">
                 {totalCartCount}
               </div>
               <div className="text-left">
@@ -854,7 +854,7 @@ export default function CustomerMenu({
               </div>
             </div>
 
-            <div className="flex items-center space-x-1.5 bg-orange-500 hover:bg-orange-600 text-white px-3.5 py-1.5 rounded-xl font-black text-xs shadow-xs uppercase tracking-wider transition">
+            <div className="flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded-xl font-black text-xs shadow-xs uppercase tracking-wider transition">
               <span>View Cart</span>
               <ArrowRight className="w-3.5 h-3.5 stroke-[3]" />
             </div>
