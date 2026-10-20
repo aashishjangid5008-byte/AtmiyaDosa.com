@@ -267,7 +267,7 @@ export default function QuickPosModal({
 
             {/* Customer VIP Info & Permanent CRM */}
             <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                 <div className="relative">
                   <User className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
                   <input

@@ -58,7 +58,7 @@ import {
 } from './lib/supabase';
 import { getTranslation } from './lib/translations';
 import { playSound } from './lib/sound';
-import { registerServiceWorker, triggerStaffOrderNotification } from './lib/notifications';
+import { registerServiceWorker, triggerStaffOrderNotification, triggerStaffServiceNotification } from './lib/notifications';
 
 import AuthPage from './components/auth/AuthPage';
 import ExecutiveDashboard from './components/admin/ExecutiveDashboard';
@@ -114,6 +114,17 @@ export default function App() {
   const [serviceDrawerOpen, setServiceDrawerOpen] = useState(false);
   const [showQuickPos, setShowQuickPos] = useState(false);
   const [currentTimeStr, setCurrentTimeStr] = useState('Wed, 15 Oct 2025 | 11:42 AM');
+  const [activeToast, setActiveToast] = useState(null);
+
+  // Auto-dismiss floating toast notifications after 8 seconds
+  useEffect(() => {
+    if (activeToast) {
+      const timer = setTimeout(() => {
+        setActiveToast(null);
+      }, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [activeToast]);
 
   const t = (key) => getTranslation(currentLang, key);
 
@@ -155,6 +166,7 @@ export default function App() {
   // Live Supabase Synchronization Hook (keeps QR Menu, Admin POS & Kitchen in 100% real-time sync)
   useEffect(() => {
     let orderChannel = null;
+    let alertsChannel = null;
 
     const mapDbOrderToFrontend = (dbOrd) => {
       const isOnline = dbOrd.payment_method === 'UPI_COUNTER' || dbOrd.payment_method === 'ONLINE_RAZORPAY';
@@ -268,19 +280,81 @@ export default function App() {
           });
         }
 
-        // Subscribe to live order updates from Supabase Realtime
+        // Restore active un-attended table service calls from Supabase audit_logs
+        try {
+          const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+          const { data: recentLogs } = await supabase
+            .from('audit_logs')
+            .select('*')
+            .gte('created_at', fourHoursAgo)
+            .in('action_type', ['CALL_WAITER', 'CALL_WATER', 'CALL_BILL', 'CALL_CLEAN'])
+            .order('created_at', { ascending: false })
+            .limit(25);
+
+          if (recentLogs && recentLogs.length > 0) {
+            const { data: attendedLogs } = await supabase
+              .from('audit_logs')
+              .select('details')
+              .gte('created_at', fourHoursAgo)
+              .eq('action_type', 'SERVICE_ATTENDED');
+
+            const attendedSet = new Set((attendedLogs || []).map(a => a.details));
+            const labelsMap = {
+              CALL_WAITER: 'Floor Waiter Assistance',
+              CALL_WATER: 'Drinking Water Refill',
+              CALL_BILL: 'Bill Settlement Request',
+              CALL_CLEAN: 'Table Cleaning'
+            };
+
+            const restoredCalls = recentLogs
+              .filter(log => !attendedSet.has(`Attended ${log.id}`))
+              .map(log => ({
+                id: log.id || `srv_${new Date(log.created_at).getTime()}`,
+                tableNumber: log.table_number || '01',
+                type: log.action_type?.replace('CALL_', '') || 'WAITER',
+                label: labelsMap[log.action_type] || log.details || 'Floor Assistance',
+                time: new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                status: 'pending'
+              }));
+
+            if (restoredCalls.length > 0) {
+              setServiceCalls(prev => {
+                const merged = [...restoredCalls];
+                prev.forEach(p => {
+                  if (!merged.some(m => m.id === p.id)) {
+                    merged.push(p);
+                  }
+                });
+                setLocalStore('service_calls', merged);
+                return merged;
+              });
+            }
+          }
+        } catch (srvErr) {
+          console.warn('[SUPABASE] Service logs restore notice:', srvErr);
+        }
+
+        // 1. Subscribe to live order updates from Supabase Realtime
         orderChannel = supabase
           .channel('realtime:app_orders')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async (payload) => {
             console.log('[SUPABASE REALTIME] Order event:', payload?.eventType);
 
-            // If a new order is placed from ANY phone/device, trigger spoken & lock-screen alert!
+            // If a new order is placed from ANY phone/device, trigger spoken voice, audio chime, and floating banner!
             if (payload?.eventType === 'INSERT' && payload?.new) {
               const newOrd = payload.new;
               triggerStaffOrderNotification({
                 tableNumber: newOrd.table_number || '01',
                 orderNumber: newOrd.order_number || '',
                 customerName: newOrd.customer_name || 'Guest'
+              });
+              setActiveToast({
+                id: `ord_${Date.now()}`,
+                title: `🚨 Table ${newOrd.table_number || '01'} Order Placed!`,
+                message: `Order #${newOrd.order_number || ''} (${newOrd.payment_method || 'Cash'}) from ${newOrd.customer_name || 'Guest'}`,
+                type: 'order',
+                time: 'Just now',
+                orderId: newOrd.order_number
               });
             }
 
@@ -290,6 +364,50 @@ export default function App() {
               setOrders(mapped);
               setLocalStore('orders', mapped);
             }
+          })
+          .subscribe();
+
+        // 2. Subscribe to cross-device Table Service Calls Broadcast ('restaurant_alerts')
+        alertsChannel = supabase
+          .channel('restaurant_alerts')
+          .on('broadcast', { event: 'service_call' }, ({ payload }) => {
+            console.log('[SUPABASE REALTIME] Incoming service call broadcast:', payload);
+            if (!payload || !payload.id) return;
+
+            // Trigger sound & speech announcement on this device
+            triggerStaffServiceNotification({
+              tableNumber: payload.tableNumber,
+              type: payload.type,
+              label: payload.label,
+              customerName: payload.customerName || 'Guest'
+            });
+
+            // Update local serviceCalls state
+            setServiceCalls(prev => {
+              if (prev.some(c => c.id === payload.id)) return prev;
+              const updated = [payload, ...prev.slice(0, 24)];
+              setLocalStore('service_calls', updated);
+              return updated;
+            });
+
+            // Display floating notification toast at top of screen
+            setActiveToast({
+              id: payload.id,
+              title: `🔔 Table ${payload.tableNumber} Requested Assistance`,
+              message: `${payload.label} requested by Table ${payload.tableNumber}`,
+              type: 'service',
+              time: payload.time || 'Just now',
+              tableNumber: payload.tableNumber,
+              callId: payload.id
+            });
+          })
+          .on('broadcast', { event: 'dismiss_service_call' }, ({ payload }) => {
+            if (!payload || !payload.callId) return;
+            setServiceCalls(prev => {
+              const updated = prev.filter(c => c.id !== payload.callId);
+              setLocalStore('service_calls', updated);
+              return updated;
+            });
           })
           .subscribe();
 
@@ -303,6 +421,9 @@ export default function App() {
     return () => {
       if (orderChannel) {
         supabase.removeChannel(orderChannel);
+      }
+      if (alertsChannel) {
+        supabase.removeChannel(alertsChannel);
       }
     };
   }, []);
@@ -915,41 +1036,93 @@ export default function App() {
     playSound('success');
   };
 
-  const handleCallService = (type, tableNumber) => {
+  const handleCallService = async (type, tableNumber) => {
     const labels = {
       WAITER: 'Floor Waiter Assistance',
       WATER: 'Drinking Water Refill',
       BILL: 'Bill Settlement Request',
       CLEAN: 'Table Cleaning'
     };
+    const cleanTbl = String(tableNumber).replace(/\D/g, '') || tableNumber;
     const newCall = {
-      id: `srv_${Date.now()}`,
-      tableNumber,
+      id: `srv_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      tableNumber: cleanTbl,
       type,
       label: labels[type] || 'Assistance',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: Date.now(),
       status: 'pending'
     };
-    const updated = [newCall, ...serviceCalls.slice(0, 19)];
-    setServiceCalls(updated);
-    setLocalStore('service_calls', updated);
 
+    // 1. Update local state
+    setServiceCalls(prev => {
+      const updated = [newCall, ...prev.filter(c => c.id !== newCall.id).slice(0, 24)];
+      setLocalStore('service_calls', updated);
+      return updated;
+    });
+
+    // 2. Play waiter chime
+    playSound('waiter');
+
+    // 3. Broadcast immediately over Supabase Realtime channel to laptop POS & all staff devices
+    try {
+      const channel = supabase.channel('restaurant_alerts');
+      await channel.send({
+        type: 'broadcast',
+        event: 'service_call',
+        payload: newCall
+      });
+    } catch (err) {
+      console.warn('Realtime service broadcast error:', err);
+    }
+
+    // 4. Persist to Supabase audit_logs
     recordEmployeeActivity({
-      employeeName: `Table ${tableNumber} Guest`,
+      employeeName: `Table ${cleanTbl} Guest`,
       employeeRole: 'Customer QR',
-      tableNumber,
+      tableNumber: cleanTbl,
       actionType: `CALL_${type}`,
-      details: `Table ${tableNumber} guest requested: ${labels[type] || type}`,
+      details: `Table ${cleanTbl} guest requested: ${labels[type] || type}`,
       type: 'table',
       color: 'orange'
     });
-    playSound('waiter');
   };
 
-  const handleDismissServiceCall = (callId) => {
+  const handleDismissServiceCall = async (callId) => {
+    const targetCall = serviceCalls.find(s => s.id === callId);
     const updated = serviceCalls.filter(s => s.id !== callId);
     setServiceCalls(updated);
     setLocalStore('service_calls', updated);
+
+    // Dismiss active toast if it matches this call
+    if (activeToast && (activeToast.callId === callId || activeToast.id === callId)) {
+      setActiveToast(null);
+    }
+
+    // Broadcast dismissal to all devices so the alert clears everywhere
+    try {
+      const channel = supabase.channel('restaurant_alerts');
+      await channel.send({
+        type: 'broadcast',
+        event: 'dismiss_service_call',
+        payload: { callId }
+      });
+    } catch (e) {
+      console.warn('Dismiss service broadcast error:', e);
+    }
+
+    if (targetCall) {
+      recordEmployeeActivity({
+        employeeName: authUser?.name || 'Staff',
+        employeeRole: authUser?.role || 'Waiter',
+        tableNumber: targetCall.tableNumber,
+        actionType: 'SERVICE_ATTENDED',
+        details: `Attended ${targetCall.id}`,
+        type: 'table',
+        color: 'emerald'
+      });
+    }
+    playSound('success');
   };
 
   const handleSaveSettings = (newSettings) => {
@@ -997,9 +1170,13 @@ export default function App() {
   const navActiveStyle = 'bg-slate-900 text-white font-semibold shadow-xs';
   const navInactiveStyle = 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium';
 
-  const recentOrders = (orders || []).slice(0, 5);
-  const pendingOrdersCount = (orders || []).filter(o => (o.status || '').toUpperCase() === 'PENDING').length;
-  const totalAlertsCount = (serviceCalls?.length || 0) + pendingOrdersCount;
+  const recentOrders = (orders || []).slice(0, 6);
+  const activeKitchenOrders = (orders || []).filter(o => {
+    const st = String(o?.status || '').toLowerCase().trim();
+    return st === 'placed' || st === 'pending' || st === 'preparing' || st === 'cooking' || st === 'ready';
+  });
+  const activeServiceCalls = (serviceCalls || []).filter(c => c.status !== 'attended' && c.status !== 'completed');
+  const totalAlertsCount = activeServiceCalls.length + activeKitchenOrders.length;
 
   return (
     <div className={`min-h-screen font-sans flex transition-colors duration-300 ${appBgClass}`}>
@@ -1233,217 +1410,272 @@ export default function App() {
       {/* 2. MAIN CONTENT AREA */}
       <div className="flex-1 lg:pl-64 flex flex-col min-h-screen">
         
+        {/* Real-time Floating Toast Alert for Table Calls & Incoming Orders */}
+        {activeToast && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[92%] sm:w-auto sm:min-w-[420px] max-w-lg animate-in slide-in-from-top-3 duration-200">
+            <div className={`p-3.5 rounded-2xl border shadow-2xl flex items-center justify-between gap-3 ${
+              activeToast.type === 'service' 
+                ? 'bg-amber-50 border-amber-300 text-amber-950 shadow-amber-500/10' 
+                : 'bg-emerald-50 border-emerald-300 text-emerald-950 shadow-emerald-500/10'
+            }`}>
+              <div className="flex items-center space-x-3 min-w-0">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
+                  activeToast.type === 'service' ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white'
+                }`}>
+                  {activeToast.type === 'service' ? (
+                    <BellRing className="w-5 h-5 animate-bounce" />
+                  ) : (
+                    <ShoppingBag className="w-5 h-5" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-black font-heading leading-tight truncate">
+                    {activeToast.title}
+                  </div>
+                  <div className="text-[11px] font-medium opacity-85 truncate mt-0.5">
+                    {activeToast.message}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-1.5 shrink-0">
+                {activeToast.type === 'service' && activeToast.callId && (
+                  <button
+                    onClick={() => handleDismissServiceCall(activeToast.callId)}
+                    className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition cursor-pointer shadow-xs"
+                  >
+                    Attend
+                  </button>
+                )}
+                {activeToast.type === 'order' && (
+                  <button
+                    onClick={() => {
+                      setActiveTab('kitchen');
+                      setActiveToast(null);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition cursor-pointer shadow-xs"
+                  >
+                    Kitchen →
+                  </button>
+                )}
+                <button
+                  onClick={() => setActiveToast(null)}
+                  className="p-1 rounded-lg hover:bg-black/5 text-slate-500 hover:text-slate-800 transition cursor-pointer"
+                  aria-label="Dismiss toast"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* TOP HEADER BAR */}
-        <header className={`sticky top-0 z-30 border-b px-4 sm:px-6 py-2.5 transition-colors ${headerClass}`}>
-          <div className="flex items-center justify-between gap-3 sm:gap-4">
+        <header className={`sticky top-0 z-30 border-b px-3 sm:px-6 py-2.5 transition-colors ${headerClass}`}>
+          <div className="flex items-center justify-between gap-2 sm:gap-4 max-w-full">
             
             {/* Mobile Hamburger & Clean Brand Greeting */}
-            <div className="flex items-center space-x-3 shrink-0">
+            <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1 sm:flex-initial">
               <button
                 onClick={() => setMobileSidebarOpen(true)}
-                className={`lg:hidden p-2 rounded-xl transition cursor-pointer ${
-                  isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-200' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                }`}
+                className="lg:hidden p-2 rounded-xl transition cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 shrink-0"
+                aria-label="Toggle navigation menu"
               >
                 <Menu className="w-5 h-5" />
               </button>
 
-              <div>
-                <div className={`text-sm font-black font-heading tracking-tight flex items-center space-x-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  <span>{settings?.restaurantName || 'Atmiya Dosa Hub'}</span>
-                  <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800">
+              <div className="min-w-0">
+                <div className="text-sm font-black font-heading tracking-tight flex items-center space-x-1.5 truncate text-slate-900">
+                  <span className="truncate">{settings?.restaurantName || 'Atmiya Dosa Hub'}</span>
+                  <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60 shrink-0">
                     Live POS
                   </span>
                 </div>
-                <div className="text-[11px] font-medium text-slate-400">
-                  {authUser?.name || 'Darshit Rana'} • <span className="capitalize">{authUser?.role || 'Admin'}</span>
+                <div className="text-[10px] sm:text-[11px] font-medium text-slate-400 truncate">
+                  {authUser?.name || 'Staff'} • <span className="capitalize">{authUser?.role || 'Admin'}</span>
                 </div>
               </div>
             </div>
 
-            {/* Global Search Bar */}
+            {/* Global Search Bar (hidden on mobile/tablet) */}
             <div className="hidden md:flex items-center flex-1 max-w-xs lg:max-w-sm mx-2">
               <div className="relative w-full">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Search orders, tables, dishes..."
-                  className={`w-full pl-9 pr-10 py-1.5 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-orange-500/30 transition ${
-                    isDark 
-                      ? 'bg-slate-900/80 border border-slate-800 text-slate-100 placeholder-slate-500' 
-                      : 'bg-slate-100/90 border border-slate-200/80 text-slate-900 placeholder-slate-400'
-                  }`}
+                  className="w-full pl-9 pr-10 py-1.5 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-orange-500/30 transition bg-slate-100/90 border border-slate-200/80 text-slate-900 placeholder-slate-400"
                 />
-                <kbd className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-mono px-1.5 py-0.5 rounded border pointer-events-none ${
-                  isDark ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-white border-slate-200 text-slate-400'
-                }`}>
+                <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-mono px-1.5 py-0.5 rounded border pointer-events-none bg-white border-slate-200 text-slate-400">
                   ⌘K
                 </kbd>
               </div>
             </div>
 
-            {/* Right Controls: Live Clock, Theme, Language, Quick POS, Smart Notifications, Profile */}
-            <div className="flex items-center space-x-2 shrink-0">
+            {/* Right Controls: Guaranteed never to overflow on mobile */}
+            <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
 
-              {/* Live Date & Time Badge (Non-wrapping!) */}
-              <div className={`hidden xl:flex items-center space-x-2 px-3 py-1.5 rounded-xl border text-xs font-semibold font-mono whitespace-nowrap shrink-0 ${
-                isDark ? 'bg-slate-900/80 border-slate-800 text-slate-300' : 'bg-slate-100/90 border-slate-200 text-slate-700'
-              }`}>
+              {/* Live Date & Time Badge (Desktop Only) */}
+              <div className="hidden xl:flex items-center space-x-2 px-3 py-1.5 rounded-xl border text-xs font-semibold font-mono whitespace-nowrap shrink-0 bg-slate-100/90 border-slate-200 text-slate-700">
                 <Calendar className="w-3.5 h-3.5 text-orange-500 shrink-0" />
                 <span className="whitespace-nowrap">{currentTimeStr}</span>
               </div>
 
-              {/* Language Selector */}
-              <div className={`flex items-center space-x-1 px-2 py-1.5 rounded-xl border text-xs font-semibold shrink-0 ${
-                isDark ? 'bg-slate-900/80 border-slate-800 text-slate-300' : 'bg-slate-100/90 border-slate-200 text-slate-700'
-              }`}>
+              {/* Language Selector (Hidden on small mobile screens to keep header clean) */}
+              <div className="hidden sm:flex items-center space-x-1 px-2 py-1.5 rounded-xl border text-xs font-semibold shrink-0 bg-slate-100/90 border-slate-200 text-slate-700">
                 <Globe className="w-3.5 h-3.5 text-orange-500 shrink-0" />
                 <select
                   value={currentLang}
                   onChange={(e) => setCurrentLang(e.target.value)}
-                  className={`bg-transparent font-semibold focus:outline-none cursor-pointer text-xs ${
-                    isDark ? 'text-slate-200 bg-slate-900' : 'text-slate-800'
-                  }`}
+                  className="bg-transparent font-semibold focus:outline-none cursor-pointer text-xs text-slate-800"
                 >
-                  <option value="en" className={isDark ? 'bg-slate-900 text-white' : ''}>EN</option>
-                  <option value="hi" className={isDark ? 'bg-slate-900 text-white' : ''}>हिन्दी</option>
-                  <option value="gu" className={isDark ? 'bg-slate-900 text-white' : ''}>ગુજરાતી</option>
-                  <option value="hinglish" className={isDark ? 'bg-slate-900 text-white' : ''}>Hinglish</option>
+                  <option value="en">EN</option>
+                  <option value="hi">हिन्दी</option>
+                  <option value="gu">ગુજરાતી</option>
+                  <option value="hinglish">Hinglish</option>
                 </select>
               </div>
 
-              {/* Quick POS Rapid Counter Button */}
+              {/* Quick POS Rapid Counter Button (Icon-only on mobile, icon+label on sm+) */}
               <button
                 onClick={() => setShowQuickPos(true)}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-amber-600 dark:hover:bg-amber-700 text-white text-xs font-semibold shadow-xs transition cursor-pointer shrink-0"
-                title="Rapid Counter POS (Punch order in seconds)"
+                className="flex items-center space-x-1 px-2 sm:px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition cursor-pointer shrink-0"
+                title="Rapid Counter POS"
               >
-                <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0" />
                 <span className="hidden sm:inline">Quick POS</span>
               </button>
 
-              {/* Single Unified Smart Notification Bell */}
+              {/* Single Unified Smart Notification Bell (ALWAYS VISIBLE & PROMINENT) */}
               <div className="relative shrink-0">
                 <button
                   onClick={() => setNotificationOpen(!notificationOpen)}
-                  className={`p-2 rounded-xl relative transition cursor-pointer ${
+                  className={`p-2 rounded-xl relative transition cursor-pointer shrink-0 ${
                     totalAlertsCount > 0 
-                      ? (isDark ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'bg-orange-50 text-orange-600 border border-orange-200') 
-                      : (isDark ? 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80')
+                      ? 'bg-rose-50 text-rose-600 border border-rose-200 ring-2 ring-rose-500/20' 
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80'
                   }`}
-                  title="Notifications & Table Calls"
+                  title={`Notifications & Table Calls (${totalAlertsCount} active)`}
+                  aria-label="Notifications"
                 >
                   <Bell className="w-4 h-4" />
                   {totalAlertsCount > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center shadow">
-                      {totalAlertsCount}
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[19px] h-[19px] px-1 rounded-full bg-rose-600 text-white text-[10px] font-black flex items-center justify-center shadow-md border-2 border-white animate-pulse">
+                      {totalAlertsCount > 99 ? '99+' : totalAlertsCount}
                     </span>
                   )}
                 </button>
 
+                {/* Dropdown Modal: Full-screen friendly on mobile, dropdown on desktop */}
                 {notificationOpen && (
-                  <div className={`absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl p-4 shadow-2xl border space-y-3 z-50 animate-in fade-in zoom-in-95 duration-150 ${
-                    isDark ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
-                  }`}>
-                    <div className="flex items-center justify-between border-b border-slate-700/20 pb-2">
-                      <div className="flex items-center space-x-2">
-                        <Bell className="w-4 h-4 text-orange-500" />
-                        <span className="text-xs font-bold font-heading">Notifications & Service</span>
-                      </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-500 font-mono">
-                        {totalAlertsCount} Active
-                      </span>
-                    </div>
-
-                    <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
-                      {/* Table Service Calls */}
-                      {serviceCalls.length > 0 && (
-                        <div className="space-y-1.5">
-                          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">
-                            Table Service Calls
-                          </div>
-                          {serviceCalls.map(call => (
-                            <div key={call.id} className={`p-2.5 rounded-xl border flex items-center justify-between ${
-                              isDark ? 'bg-orange-500/10 border-orange-500/20' : 'bg-orange-50/80 border-orange-200'
-                            }`}>
-                              <div>
-                                <div className="flex items-center space-x-1.5">
-                                  <span className="font-heading font-black text-xs text-orange-600 dark:text-orange-400">
-                                    Table {call.tableNumber}
-                                  </span>
-                                  <span className="text-[10px] text-slate-400 font-mono">{call.time}</span>
-                                </div>
-                                <p className="text-[11px] font-medium text-slate-700 dark:text-slate-300">{call.label}</p>
-                              </div>
-                              <button
-                                onClick={() => handleDismissServiceCall(call.id)}
-                                className="px-2.5 py-1 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-bold text-[10px] shadow-sm transition cursor-pointer"
-                              >
-                                Attend
-                              </button>
-                            </div>
-                          ))}
+                  <>
+                    <div 
+                      onClick={() => setNotificationOpen(false)}
+                      className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-xs sm:hidden"
+                    />
+                    <div className="fixed sm:absolute top-14 sm:top-full left-2 right-2 sm:left-auto sm:right-0 sm:w-96 rounded-2xl p-4 shadow-2xl border border-slate-200 bg-white text-slate-900 space-y-3 z-50 animate-in fade-in zoom-in-95 duration-150 max-h-[85vh] sm:max-h-[520px] overflow-hidden flex flex-col">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                        <div className="flex items-center space-x-2">
+                          <Bell className="w-4 h-4 text-orange-500" />
+                          <span className="text-xs font-black font-heading">Notifications & Live Alerts</span>
                         </div>
-                      )}
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200 font-mono">
+                          {totalAlertsCount} Active
+                        </span>
+                      </div>
 
-                      {/* Real Live Kitchen Orders */}
-                      {recentOrders.length > 0 && (
-                        <div className="space-y-1.5">
-                          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">
-                            Recent Orders
-                          </div>
-                          {recentOrders.map(ord => (
-                            <div 
-                              key={ord.id} 
-                              onClick={() => { setActiveTab('orders'); setNotificationOpen(false); }}
-                              className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition ${
-                                isDark ? 'bg-slate-800/60 border-slate-700/60 hover:bg-slate-800' : 'bg-slate-50 border-slate-100 hover:bg-slate-100'
-                              }`}
-                            >
-                              <div>
-                                <div className="flex items-center space-x-1.5">
-                                  <span className="font-bold text-xs">
-                                    #{ord.order_number || ord.id?.slice(-4)}
-                                  </span>
-                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                                    Table {ord.table_number || ord.table}
-                                  </span>
-                                  <span className="text-[10px] text-slate-400">{ord.time || 'Just now'}</span>
-                                </div>
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                                  ₹{ord.total_amount || ord.total || 0} • {ord.payment_mode || 'Cash'} • {ord.status}
-                                </p>
-                              </div>
-                              <span className="text-[10px] font-bold text-orange-500 hover:underline">
-                                View →
+                      <div className="space-y-3 overflow-y-auto pr-1 flex-1">
+                        {/* 1. Table Service Calls */}
+                        {activeServiceCalls.length > 0 && (
+                          <div className="space-y-1.5">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-amber-700 flex items-center justify-between px-1">
+                              <span>Table Service Calls</span>
+                              <span className="text-[9px] font-mono bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-bold">
+                                {activeServiceCalls.length}
                               </span>
                             </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {totalAlertsCount === 0 && (
-                        <div className="py-6 text-center space-y-1">
-                          <div className="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-500 mx-auto flex items-center justify-center text-sm font-bold">
-                            ✓
+                            {activeServiceCalls.map(call => (
+                              <div key={call.id} className="p-2.5 rounded-xl border border-amber-200 bg-amber-50/70 flex items-center justify-between gap-2 shadow-xs">
+                                <div className="min-w-0">
+                                  <div className="flex items-center space-x-1.5">
+                                    <span className="font-heading font-black text-xs text-amber-900">
+                                      Table {call.tableNumber}
+                                    </span>
+                                    <span className="text-[10px] text-amber-700 font-mono">• {call.time}</span>
+                                  </div>
+                                  <p className="text-[11px] font-semibold text-amber-950 truncate">{call.label}</p>
+                                </div>
+                                <button
+                                  onClick={() => handleDismissServiceCall(call.id)}
+                                  className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] shadow-xs transition cursor-pointer shrink-0"
+                                >
+                                  Attend
+                                </button>
+                              </div>
+                            ))}
                           </div>
-                          <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">All caught up</p>
-                          <p className="text-[11px] text-slate-400">No pending table service calls or urgent alerts.</p>
-                        </div>
-                      )}
+                        )}
+
+                        {/* 2. Active Kitchen Orders */}
+                        {activeKitchenOrders.length > 0 && (
+                          <div className="space-y-1.5">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between px-1">
+                              <span>Active Kitchen Orders</span>
+                              <span className="text-[9px] font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-bold">
+                                {activeKitchenOrders.length}
+                              </span>
+                            </div>
+                            {activeKitchenOrders.slice(0, 6).map(ord => (
+                              <div 
+                                key={ord.id} 
+                                onClick={() => { setActiveTab('kitchen'); setNotificationOpen(false); }}
+                                className="p-2.5 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 flex items-center justify-between gap-2 cursor-pointer transition shadow-xs"
+                              >
+                                <div className="min-w-0">
+                                  <div className="flex items-center space-x-1.5">
+                                    <span className="font-bold text-xs text-slate-900 truncate">
+                                      #{ord.order_number || ord.id?.slice(-4)}
+                                    </span>
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                                      Table {ord.table_number || ord.table}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 shrink-0">{ord.time || 'Now'}</span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-600 truncate mt-0.5">
+                                    ₹{ord.total_amount || ord.total || 0} • {ord.status} • {ord.items_summary || (ord.items && ord.items.map(i=>`${i.qty}x ${i.name}`).join(', ')) || 'Dishes'}
+                                  </p>
+                                </div>
+                                <span className="text-[10px] font-bold text-orange-600 shrink-0">
+                                  Kitchen →
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {totalAlertsCount === 0 && (
+                          <div className="py-6 text-center space-y-1">
+                            <div className="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-500 mx-auto flex items-center justify-center text-sm font-bold">
+                              ✓
+                            </div>
+                            <p className="text-xs font-semibold text-slate-700">All caught up</p>
+                            <p className="text-[11px] text-slate-400">No pending table service calls or kitchen orders.</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  </>
                 )}
               </div>
 
               {/* User Avatar & Logout */}
-              <div className={`flex items-center space-x-2 pl-2 border-l shrink-0 ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white font-black text-xs flex items-center justify-center font-heading shadow-xs">
+              <div className="flex items-center space-x-1 sm:space-x-2 pl-1.5 sm:pl-2 border-l border-slate-200 shrink-0">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white font-black text-xs flex items-center justify-center font-heading shadow-xs">
                   {authUser?.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'DR'}
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="p-1.5 rounded-xl hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 transition cursor-pointer"
+                  className="p-1 sm:p-1.5 rounded-xl hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
                   title="Sign Out"
                 >
                   <LogOut className="w-4 h-4" />
