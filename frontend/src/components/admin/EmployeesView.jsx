@@ -266,13 +266,13 @@ export default function EmployeesView({
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-black tracking-wider border-b border-slate-200">
                   <tr>
-                    <th class="p-4">Time</th>
-                    <th class="p-4">Employee</th>
-                    <th class="p-4">Role</th>
-                    <th class="p-4">Table #</th>
-                    <th class="p-4">Action</th>
-                    <th class="p-4">Amount</th>
-                    <th class="p-4">Detailed Audit Event Description</th>
+                    <th className="p-4">Time</th>
+                    <th className="p-4">Employee</th>
+                    <th className="p-4">Role</th>
+                    <th className="p-4">Table #</th>
+                    <th className="p-4">Action</th>
+                    <th className="p-4">Amount</th>
+                    <th className="p-4">Detailed Audit Event Description</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -283,8 +283,8 @@ export default function EmployeesView({
                       </td>
                     </tr>
                   ) : (
-                    filteredActivities.map(act => (
-                      <tr key={act.id} className="hover:bg-slate-50/70 transition">
+                    filteredActivities.map((act, idx) => (
+                      <tr key={`${act.id || act.time}-${idx}`} className="hover:bg-slate-50/70 transition">
                         <td className="p-4 font-mono font-bold text-slate-500 whitespace-nowrap">
                           {act.time}
                         </td>
@@ -298,7 +298,7 @@ export default function EmployeesView({
                         </td>
                         <td className="p-4 font-mono font-bold whitespace-nowrap">
                           {act.tableNumber ? (
-                            <span className="px-2 py-0.5 rounded bg-slate-900 text-white text-[11px]">
+                            <span className="px-2 py-0.5 rounded bg-orange-600 text-white text-[11px] font-bold">
                               {act.tableNumber}
                             </span>
                           ) : (
@@ -338,7 +338,7 @@ export default function EmployeesView({
 
       {/* GENERATE CREDENTIALS MODAL (Section 1 of Admin.txt) */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full border border-slate-200 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-black text-[#1F2937] font-heading">Generate Staff Credentials</h3>

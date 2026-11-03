@@ -17,7 +17,13 @@ class ShiftTableRequest(BaseModel):
     target_table_number: str = Field(..., min_length=1, max_length=20, description="Destination vacant table code")
 
 class SettleBillRequest(BaseModel):
-    payment_method: str = Field(default="Cash", description="Cash | UPI | Card")
+    payment_method: str = Field(default="Cash", description="Cash | UPI | Card | Split")
+    session_id: Optional[str] = Field(default=None, description="Optional active table session UUID to terminate")
+    amount_collected: Optional[float] = Field(default=None, description="Exact amount collected from customer")
+    change_due: Optional[float] = Field(default=None, description="Change returned to customer if paid in cash")
+    settled_by: Optional[str] = Field(default=None, description="Name of staff member who settled the bill")
+    waiter_id: Optional[str] = Field(default=None, description="Unique Waiter identifier (e.g. WTR-101) who collected cash")
+    notes: Optional[str] = Field(default=None, description="Optional settlement notes")
 
 class TableResponse(BaseModel):
     id: str

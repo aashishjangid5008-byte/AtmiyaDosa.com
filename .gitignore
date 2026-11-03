@@ -43,3 +43,9 @@ venv/
 ENV/
 *.egg-info/
 .pytest_cache/
+
+# Agent & AI Assistant metadata
+.agents/
+.gemini/
+skills-lock.json
+

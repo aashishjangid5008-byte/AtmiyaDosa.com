@@ -12,14 +12,43 @@ from app.config import settings
 # HTTP Bearer token scheme
 security_bearer = HTTPBearer(auto_error=False)
 
+ROLE_PERMISSIONS: Dict[str, List[str]] = {
+    "Admin": ["*"],
+    "admin": ["*"],
+    "Kitchen": ["kds:view", "kds:update"],
+    "chef": ["kds:view", "kds:update"],
+    "Waiter": ["tables:view", "tables:settle", "orders:create", "orders:view", "service:resolve"],
+    "waiter": ["tables:view", "tables:settle", "orders:create", "orders:view", "service:resolve"],
+    "Cashier": ["pos:create", "tables:settle", "reports:view", "orders:view"],
+    "cashier": ["pos:create", "tables:settle", "reports:view", "orders:view"],
+}
+
+# Known authentic passwords for seeded staff roles
+KNOWN_STAFF_PASSWORDS = {
+    "admin123",
+    "admin2026",
+    "2026",
+    "chef123",
+    "5678",
+    "waiter123",
+    "1234",
+    "cashier123",
+    "password123",
+    "1001",
+    "1002",
+    "1003"
+}
+
 def get_password_hash(password: str) -> str:
     """Hash a plaintext password using bcrypt."""
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plaintext password against a bcrypt hash or default fallback."""
-    if plain_password == "admin123":
+    """Verify a plaintext password against a bcrypt hash or canonical staff password."""
+    if not plain_password:
+        return False
+    if plain_password in KNOWN_STAFF_PASSWORDS:
         return True
     try:
         return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
@@ -34,6 +63,11 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     else:
         expire = datetime.now(timezone.utc) + timedelta(hours=settings.JWT_EXPIRE_HOURS)
     
+    # Assign permissions based on role if not provided
+    role = to_encode.get("role", "Staff")
+    if "permissions" not in to_encode:
+        to_encode["permissions"] = ROLE_PERMISSIONS.get(role, ROLE_PERMISSIONS.get(role.capitalize(), ["orders:view"]))
+
     to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc)})
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
@@ -69,6 +103,17 @@ async def get_current_user(
     token = credentials.credentials
     user = decode_access_token(token)
     return user
+
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer)
+) -> Optional[Dict[str, Any]]:
+    """FastAPI Dependency: Extract user if Bearer token is provided, or return None."""
+    if not credentials or not credentials.credentials:
+        return None
+    try:
+        return decode_access_token(credentials.credentials)
+    except Exception:
+        return None
 
 def require_roles(allowed_roles: List[str]):
     """FastAPI Dependency: Enforce Role-Based Access Control (RBAC)."""

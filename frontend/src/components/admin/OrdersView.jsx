@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ShoppingBag, 
   Search, 
   Clock, 
+  Calendar,
   CheckCircle2, 
   Printer, 
   Eye, 
@@ -17,24 +18,42 @@ import {
   Globe,
   Utensils,
   Receipt,
-  Users
+  Download,
+  ChefHat,
+  Flame,
+  BellRing,
+  Lock
 } from 'lucide-react';
 import { getTranslation } from '../../lib/translations';
+import { downloadSinglePageBillPdf, printSinglePageReceipt } from '../../lib/generateBillPdf';
 
 export default function OrdersView({ 
   orders = [], 
+  seenOrderIds = [],
+  onMarkOrderAsSeen,
+  onMarkAllOrdersAsSeen,
   onUpdateStatus, 
   onMarkCashPaymentDone,
   onCancelOrderWithReason,
   onAddNewOrder, 
   currentStaff = { name: 'Darshit Rana', role: 'Admin' },
   currentLang,
-  theme = 'light'
+  theme = 'light',
+  restaurantSettings = {}
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [channelTab, setChannelTab] = useState('all'); // 'all', 'dine_in', 'online_queue', 'completed'
   const [statusFilter, setStatusFilter] = useState('All');
+  const [dateFilter, setDateFilter] = useState('all'); // 'all', 'today', 'yesterday'
   const [selectedOrder, setSelectedOrder] = useState(null);
+
+  // Mark all current orders as seen after user has spent 2s viewing the Orders page
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onMarkAllOrdersAsSeen?.();
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [orders?.length]);
   
   // Cancel Order Modal State
   const [cancellingOrder, setCancellingOrder] = useState(null);
@@ -47,27 +66,109 @@ export default function OrdersView({
 
   const t = (key) => getTranslation(currentLang, key);
 
-  // Theme palettes
-  const isDark = theme === 'obsidian' || theme === 'sapphire';
-  const isSapphire = theme === 'sapphire';
-  const cardBg = isDark ? (isSapphire ? 'bg-slate-900/90' : 'bg-slate-900') : 'bg-white';
-  const cardBorder = isDark ? (isSapphire ? 'border-sky-900/40' : 'border-slate-800') : 'border-slate-200/80';
-  const textPrimary = isDark ? 'text-slate-100' : 'text-slate-900';
-  const textMuted = isDark ? 'text-slate-400' : 'text-slate-500';
-  const headerBg = isDark ? 'bg-slate-800/80 text-slate-300 border-slate-700/60' : 'bg-slate-50 text-slate-500 border-slate-200';
-  const rowHover = isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50/70';
-  const rowBorder = isDark ? 'border-slate-800/80' : 'border-slate-100';
-  const inputBg = isDark ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-500' : 'bg-slate-100 border-transparent text-slate-800 placeholder-slate-400';
+  // Theme palettes - pure authentic light surfaces
+  const isDark = false;
+  const cardBg = 'bg-white';
+  const cardBorder = 'border-slate-200/80';
+  const textPrimary = 'text-slate-900';
+  const textMuted = 'text-slate-500';
+  const headerBg = 'bg-slate-50 text-slate-600 border-slate-200';
+  const rowHover = 'hover:bg-slate-50/70';
+  const rowBorder = 'border-slate-100';
+  const inputBg = 'bg-slate-100 border-transparent text-slate-800 placeholder-slate-400';
+
+  // Helper: Determine if order is completed or settled
+  const isOrderCompleted = (o) => {
+    if (!o) return false;
+    const st = String(o.status || '').toLowerCase().trim();
+    const paySt = String(o.payment_status || '').toLowerCase().trim();
+    if (st === 'completed' || st === 'settled') return true;
+    if (st === 'served' && (paySt === 'paid' || paySt === 'settled')) return true;
+    return false;
+  };
+
+  // Helper: Resolve timestamp for chronological date-wise and time-wise ordering
+  const getOrderTimestamp = (ord) => {
+    if (!ord) return 0;
+    const candidates = [
+      ord.settled_at,
+      ord.completed_at,
+      ord.served_at,
+      ord.placed_at,
+      ord.created_at
+    ];
+    for (const c of candidates) {
+      if (c) {
+        const ts = new Date(c).getTime();
+        if (!isNaN(ts) && ts > 0) return ts;
+      }
+    }
+    if (ord.time) {
+      const ts = new Date(ord.time).getTime();
+      if (!isNaN(ts) && ts > 0) return ts;
+    }
+    return 0;
+  };
+
+  // Helper: Format human-friendly date and time for audit display
+  const formatOrderDateTime = (order) => {
+    if (!order) return { dateStr: 'Today', timeStr: '--:--', fullStr: 'Today' };
+    const rawDate = order.settled_at || order.completed_at || order.placed_at || order.created_at;
+    let d = rawDate ? new Date(rawDate) : null;
+    if (!d || isNaN(d.getTime())) {
+      return {
+        dateStr: 'Today',
+        timeStr: order.time || '12:00 PM',
+        fullStr: `Today • ${order.time || '12:00 PM'}`
+      };
+    }
+
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const isYesterday = d.toDateString() === yesterday.toDateString();
+
+    let dateStr = '';
+    if (isToday) {
+      dateStr = 'Today';
+    } else if (isYesterday) {
+      dateStr = 'Yesterday';
+    } else {
+      dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    const timeStr = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+    return {
+      dateStr,
+      timeStr,
+      fullStr: `${dateStr} • ${timeStr}`
+    };
+  };
 
   // Telemetry metrics
+  const safeSeenOrderIds = Array.isArray(seenOrderIds) ? seenOrderIds : [];
+  const validOrders = orders.filter(o => String(o.status || '').toUpperCase() !== 'CANCELLED');
+  const cancelledOrdersCount = orders.filter(o => String(o.status || '').toUpperCase() === 'CANCELLED').length;
   const totalOrdersCount = orders.length;
-  const activeOrdersCount = orders.filter(o => o.status !== 'Completed' && o.status !== 'Cancelled').length;
-  const dineInCount = orders.filter(o => !o.order_source || o.order_source === 'Dine-In').length;
-  const onlineCount = orders.filter(o => o.order_source && o.order_source !== 'Dine-In').length;
-  const cashPendingOrders = orders.filter(o => o.payment_mode === 'Cash' && o.payment_status !== 'Paid');
-  const totalRevenue = orders
-    .filter(o => o.status !== 'Cancelled')
-    .reduce((sum, o) => sum + (Number(o.total || o.total_amount) || 0), 0);
+  const activeOrdersCount = orders.filter(o => !isOrderCompleted(o) && o.status !== 'Cancelled').length;
+  const completedOrdersCount = orders.filter(isOrderCompleted).length;
+  const unseenOrdersCount = orders.filter(o => !safeSeenOrderIds.includes(o.id) && !isOrderCompleted(o) && o.status !== 'Cancelled').length;
+  const dineInCount = orders.filter(o => !o.order_source || o.order_source === 'Dine-In' || o.order_source === 'Table QR' || o.order_source === 'Waiter POS').length;
+  const takeawayCount = orders.filter(o => o.order_source === 'Takeaway' || o.order_source === 'Counter').length;
+  const cashPendingOrders = orders.filter(o => 
+    o.status !== 'Cancelled' && 
+    o.payment_mode === 'Cash' && 
+    o.payment_status !== 'Paid' && 
+    (o.payment_status || '').toLowerCase() !== 'paid' && 
+    o.payment_status !== 'Void'
+  );
+  const totalRevenue = validOrders.reduce((sum, o) => sum + (Number(o.total || o.total_amount) || 0), 0);
+  const totalPlatesVolume = validOrders.reduce((sum, o) => {
+    const items = o.items || o.order_items || [];
+    return sum + (items.length > 0 ? items.reduce((isum, it) => isum + Number(it.qty || it.quantity || 1), 0) : 1);
+  }, 0);
 
   // Helper to calculate wait time elapsed
   const getElapsedWaitMinutes = (placedTimeStr) => {
@@ -84,20 +185,38 @@ export default function OrdersView({
 
   // Filter orders
   const filteredOrders = orders.filter(o => {
-    if (channelTab === 'dine_in' && o.order_source && o.order_source !== 'Dine-In') return false;
-    if (channelTab === 'online_queue' && (!o.order_source || o.order_source === 'Dine-In')) return false;
-    if (channelTab === 'completed' && o.status !== 'Completed') return false;
+    if (channelTab === 'dine_in' && (o.order_source === 'Takeaway' || o.order_source === 'Counter')) return false;
+    if (channelTab === 'takeaway' && o.order_source !== 'Takeaway' && o.order_source !== 'Counter') return false;
+    if (channelTab === 'completed' && !isOrderCompleted(o)) return false;
+
+    const dt = formatOrderDateTime(o);
+
+    // Optional Quick Day Filter when browsing Completed Orders
+    if (channelTab === 'completed' && dateFilter !== 'all') {
+      if (dateFilter === 'today' && dt.dateStr !== 'Today') return false;
+      if (dateFilter === 'yesterday' && dt.dateStr !== 'Yesterday') return false;
+    }
 
     // Search filter
     const searchLow = searchTerm.toLowerCase();
     const matchesSearch = (o.id || '').toLowerCase().includes(searchLow) || 
                           (o.table_number || '').toLowerCase().includes(searchLow) ||
                           (o.customer_name && o.customer_name.toLowerCase().includes(searchLow)) ||
-                          (o.customer_phone && o.customer_phone.includes(searchTerm));
+                          (o.customer_phone && o.customer_phone.includes(searchTerm)) ||
+                          (dt.fullStr.toLowerCase().includes(searchLow));
     // Status filter
     const matchesStatus = statusFilter === 'All' || o.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  // Strict Date-wise and Time-wise Chronological Sort (most recent first)
+  const sortedFilteredOrders = useMemo(() => {
+    return [...filteredOrders].sort((a, b) => {
+      const tsA = getOrderTimestamp(a);
+      const tsB = getOrderTimestamp(b);
+      return tsB - tsA; // Newest first
+    });
+  }, [filteredOrders]);
 
   const handleConfirmCashPayment = () => {
     if (!cashCollectingOrder) return;
@@ -114,8 +233,13 @@ export default function OrdersView({
   };
 
   const handlePrintKOT = (order) => {
-    setSelectedOrder(order);
-    setTimeout(() => window.print(), 200);
+    printSinglePageReceipt({
+      order,
+      restaurantSettings,
+      customerName: order.customer_name,
+      customerPhone: order.customer_phone,
+      currentTable: order.table_number
+    });
   };
 
   return (
@@ -132,17 +256,32 @@ export default function OrdersView({
               Orders Dispatch & Queue
             </h2>
             <p className={`text-xs ${textMuted} font-medium`}>
-              Live synchronization across Table QR, Waiter POS, Kitchen KDS, and Delivery Channels.
+              Live synchronization across Table QR, Waiter Handheld POS, and Kitchen KDS.
             </p>
           </div>
         </div>
 
         <div className="flex items-center space-x-3">
+          {unseenOrdersCount > 0 && (
+            <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 text-xs font-bold flex items-center gap-1.5 shadow-xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+              <span>{unseenOrdersCount} {t('newBadge') || 'NEW'}</span>
+            </div>
+          )}
+
           {cashPendingOrders.length > 0 && (
-            <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 text-xs font-bold flex items-center gap-1.5">
+            <button
+              onClick={() => {
+                setStatusFilter('All');
+                setChannelTab('all');
+                setSearchTerm('');
+              }}
+              className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 text-xs font-bold flex items-center gap-1.5 hover:bg-amber-500/20 transition cursor-pointer"
+              title="Click to view orders with pending cash collection"
+            >
               <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
               <span>{cashPendingOrders.length} Cash Uncollected</span>
-            </div>
+            </button>
           )}
 
           <button
@@ -166,19 +305,21 @@ export default function OrdersView({
         <div className={`p-3.5 rounded-xl ${cardBg} border ${cardBorder} shadow-xs`}>
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dine-In Tables</span>
           <div className={`text-xl font-black ${textPrimary} font-mono mt-0.5`}>{dineInCount}</div>
-          <span className="text-[10px] text-blue-500 font-medium">QR Scans & Counter</span>
+          <span className="text-[10px] text-blue-500 font-medium">QR Scans & Waiter POS</span>
         </div>
 
         <div className={`p-3.5 rounded-xl ${cardBg} border ${cardBorder} shadow-xs`}>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Online Deliveries</span>
-          <div className={`text-xl font-black ${textPrimary} font-mono mt-0.5`}>{onlineCount}</div>
-          <span className="text-[10px] text-emerald-500 font-medium">Zomato / Swiggy Queue</span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Counter Takeaway</span>
+          <div className={`text-xl font-black ${textPrimary} font-mono mt-0.5`}>{takeawayCount}</div>
+          <span className="text-[10px] text-purple-600 font-medium">Parcel & Counter Pickup</span>
         </div>
 
         <div className={`p-3.5 rounded-xl ${cardBg} border ${cardBorder} shadow-xs`}>
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Shift Revenue</span>
           <div className="text-xl font-black text-emerald-600 font-mono mt-0.5">₹{totalRevenue.toLocaleString('en-IN')}</div>
-          <span className="text-[10px] text-slate-400 font-medium">{totalOrdersCount} Completed & Active</span>
+          <span className="text-[10px] text-slate-400 font-medium">
+            {validOrders.length} Valid Orders • {totalPlatesVolume} Plates{cancelledOrdersCount > 0 ? ` (${cancelledOrdersCount} void)` : ''}
+          </span>
         </div>
       </div>
 
@@ -212,16 +353,16 @@ export default function OrdersView({
           </button>
 
           <button
-            onClick={() => setChannelTab('online_queue')}
+            onClick={() => setChannelTab('takeaway')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-              channelTab === 'online_queue' 
+              channelTab === 'takeaway' 
                 ? 'bg-orange-500 text-white shadow-xs' 
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Globe className="w-3.5 h-3.5" />
-            <span>Online Queue</span>
-            <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${channelTab === 'online_queue' ? 'bg-orange-600 text-white' : 'bg-slate-200 text-slate-700'}`}>{onlineCount}</span>
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span>Takeaway / Parcel</span>
+            <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${channelTab === 'takeaway' ? 'bg-orange-600 text-white' : 'bg-slate-200 text-slate-700'}`}>{takeawayCount}</span>
           </button>
 
           <button
@@ -234,11 +375,42 @@ export default function OrdersView({
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
             <span>Completed</span>
+            <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${channelTab === 'completed' ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800 font-bold'}`}>{completedOrdersCount}</span>
           </button>
         </div>
 
         {/* Search & Status Filters */}
-        <div className="flex items-center gap-2 w-full md:w-auto">
+        <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
+          {/* Quick Date Pills when browsing Completed Section */}
+          {channelTab === 'completed' && (
+            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+              <button
+                onClick={() => setDateFilter('all')}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                  dateFilter === 'all' ? 'bg-white text-emerald-800 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                All Dates ({completedOrdersCount})
+              </button>
+              <button
+                onClick={() => setDateFilter('today')}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                  dateFilter === 'today' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Today
+              </button>
+              <button
+                onClick={() => setDateFilter('yesterday')}
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                  dateFilter === 'yesterday' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Yesterday
+              </button>
+            </div>
+          )}
+
           {/* Status Dropdown */}
           <select
             value={statusFilter}
@@ -262,7 +434,7 @@ export default function OrdersView({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search ID, table, phone..."
+              placeholder="Search ID, table, date, phone..."
               className={`w-full pl-8 pr-7 py-1.5 rounded-xl ${inputBg} text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-orange-500`}
             />
             {searchTerm && (
@@ -285,51 +457,94 @@ export default function OrdersView({
               <tr>
                 <th className="py-3 px-4">Order ID & Source</th>
                 <th className="py-3 px-4">Table</th>
+                <th className="py-3 px-4">Date & Time</th>
                 <th className="py-3 px-4">Customer</th>
-                <th className="py-3 px-4">Elapsed</th>
+                <th className="py-3 px-4">{channelTab === 'completed' ? 'Archive Status' : 'Elapsed'}</th>
                 <th className="py-3 px-4">Items Summary</th>
                 <th className="py-3 px-4 text-right">Total</th>
                 <th className="py-3 px-4">Payment</th>
-                <th className="py-3 px-4 text-center">Status</th>
+                <th className="py-3 px-4 text-center">Live Status</th>
                 <th className="py-3 px-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className={`divide-y ${rowBorder}`}>
-              {filteredOrders.length === 0 ? (
+              {sortedFilteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="p-8 text-center text-slate-400 font-medium">
-                    No orders matching the active criteria.
+                  <td colSpan="10" className="p-8 text-center text-slate-400 font-medium">
+                    {channelTab === 'completed' 
+                      ? 'No completed orders found. Orders settled with cash or UPI are stored here permanently with full dates and times.'
+                      : 'No orders matching the active criteria.'}
                   </td>
                 </tr>
               ) : (
-                filteredOrders.map(order => {
-                  const isOnlinePayment = order.payment_verified_online || order.payment_mode === 'UPI' || order.payment_mode?.includes('Online') || order.payment_mode?.includes('Razorpay');
-                  const isCashPending = order.payment_mode === 'Cash' && order.payment_status !== 'Paid';
+                sortedFilteredOrders.map((order, idx) => {
                   const isCancelled = order.status === 'Cancelled';
+                  const isCompleted = isOrderCompleted(order);
+                  const dt = formatOrderDateTime(order);
+                  const payStatusLower = (order.payment_status || '').toLowerCase();
+                  const isPaid = payStatusLower === 'paid';
+                  const isOnline = Boolean(order.payment_verified_online || order.payment_mode === 'UPI' || order.payment_mode?.includes('Online') || order.payment_mode?.includes('Razorpay'));
+
+                  const isOnlinePaid = !isCancelled && isPaid && isOnline;
+                  const isCashPaid = !isCancelled && isPaid && !isOnline;
+                  const isUpiPending = !isCancelled && !isPaid && isOnline && order.payment_status !== 'Void';
+                  const isCashPending = !isCancelled && !isPaid && !isOnline && order.payment_status !== 'Void';
                   const elapsedMins = getElapsedWaitMinutes(order.placed_at || order.time);
 
                   return (
-                    <tr key={order.id} className={`${rowHover} transition ${isCancelled ? 'bg-rose-50/40 opacity-60' : ''}`}>
+                    <tr key={`${order.id}-${idx}`} className={`${rowHover} transition ${isCancelled ? 'bg-rose-50/40 opacity-60' : ''}`}>
                       
                       {/* Order ID & Source */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="font-mono font-bold text-slate-900 flex items-center gap-1.5">
                           <span>{order.id}</span>
+                          {/* Mark NEW only when order is not seen or not completed, not permanent */}
+                          {(!safeSeenOrderIds.includes(order.id) || order.status === 'Placed' || order.status === 'Pending') && !isCompleted && order.status !== 'Cancelled' && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase bg-emerald-500 text-white shadow-xs animate-pulse">
+                              <span className="w-1 h-1 rounded-full bg-white"></span>
+                              {t('newBadge') || 'NEW'}
+                            </span>
+                          )}
                         </div>
                         <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider mt-0.5 ${
-                          order.order_source === 'Zomato' ? 'bg-red-50 text-red-700 border border-red-200' :
-                          order.order_source === 'Swiggy' ? 'bg-orange-50 text-orange-700 border border-orange-200' :
-                          'bg-slate-100 text-slate-700 border border-slate-200'
+                          order.order_source === 'Waiter_POS' || order.order_source === 'Waiter POS'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                            : order.order_source === 'Takeaway' || order.order_source === 'Counter'
+                              ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                         }`}>
-                          {order.order_source || 'Dine-In'}
+                          {order.order_source === 'Waiter_POS' || order.order_source === 'Waiter POS'
+                            ? 'Waiter POS'
+                            : order.order_source === 'Takeaway' || order.order_source === 'Counter'
+                              ? 'Takeaway'
+                              : 'Table QR'}
                         </span>
                       </td>
 
                       {/* Table Number */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        <span className="px-2 py-1 bg-orange-50 text-orange-700 font-mono font-bold rounded-md border border-orange-200 text-xs">
-                          {order.table_number || 'Takeaway'}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="px-2 py-1 bg-orange-50 text-orange-700 font-mono font-bold rounded-md border border-orange-200 text-xs">
+                            {order.table_number || 'Takeaway'}
+                          </span>
+                          {(order.round > 1 || order.is_addon) && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-purple-100 text-purple-900 border border-purple-200">
+                              Round {order.round || 2}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Date & Time Column */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>{dt.dateStr}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-500 font-mono">
+                          <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span>{dt.timeStr}</span>
+                        </div>
                       </td>
 
                       {/* Customer Name & Mobile */}
@@ -343,13 +558,17 @@ export default function OrdersView({
                           ) : (
                             <span className="text-[10px] text-slate-500 font-mono">Walk-in</span>
                           )}
-                          <span className="text-[10px] text-slate-500 font-mono">• {order.time || 'Now'}</span>
                         </div>
                       </td>
 
-                      {/* Elapsed Wait Time */}
+                      {/* Elapsed / Archive Status */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        {!isCancelled && order.status !== 'Completed' ? (
+                        {isCompleted ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>Settled</span>
+                          </span>
+                        ) : !isCancelled ? (
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                             elapsedMins >= 15 
                               ? 'bg-rose-50 text-rose-700 border-rose-300'
@@ -385,13 +604,43 @@ export default function OrdersView({
 
                       {/* Payment Verification Column */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
-                        {isOnlinePayment ? (
+                        {isCancelled ? (
+                          <div className="space-y-0.5">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
+                              Cancelled (Void)
+                            </span>
+                            <div className="text-[9px] text-slate-400 font-mono">No Payment Due</div>
+                          </div>
+                        ) : isOnlinePaid ? (
                           <div className="space-y-0.5">
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                              <Check className="w-3 h-3" />
+                              <Check className="w-3 h-3 text-emerald-600" />
                               <span>{order.payment_mode || 'UPI'} Paid</span>
                             </span>
-                            <div className="text-[9px] text-slate-500 font-semibold">Verified Online</div>
+                            <div className="text-[9px] font-mono font-bold text-slate-700 truncate max-w-[130px]">
+                              {order.transaction_id ? `Ref: ${order.transaction_id}` : 'Verified UPI'}
+                            </div>
+                            {order.paid_collected_by && (
+                              <div className="text-[8px] text-slate-500 font-mono truncate max-w-[130px]" title={order.paid_collected_by}>
+                                {order.paid_collected_by}
+                              </div>
+                            )}
+                          </div>
+                        ) : isUpiPending ? (
+                          <div className="space-y-1">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300">
+                              <Clock className="w-3 h-3 text-amber-600" />
+                              <span>UPI Awaiting Check</span>
+                            </span>
+                            <button
+                              onClick={() => {
+                                onMarkCashPaymentDone(order.id, currentStaff?.name || 'Darshit Rana');
+                              }}
+                              className="block px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] shadow-xs transition cursor-pointer"
+                              title="Check your phone/soundbox for UPI payment, then click to verify"
+                            >
+                              Verify UPI Received
+                            </button>
                           </div>
                         ) : isCashPending ? (
                           <div className="space-y-1">
@@ -405,10 +654,10 @@ export default function OrdersView({
                               Receive Cash
                             </button>
                           </div>
-                        ) : (
+                        ) : isCashPaid ? (
                           <div className="space-y-0.5">
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                              <Check className="w-3 h-3" />
+                              <Check className="w-3 h-3 text-emerald-600" />
                               <span>Paid in Cash</span>
                             </span>
                             {order.paid_collected_by && (
@@ -417,46 +666,114 @@ export default function OrdersView({
                               </div>
                             )}
                           </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300">
+                              Cash Pending
+                            </span>
+                            <button
+                              onClick={() => { setCashCollectingOrder(order); setCollectorName(currentStaff?.name || 'Darshit Rana'); }}
+                              className="block px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] shadow-xs transition cursor-pointer"
+                            >
+                              Receive Cash
+                            </button>
+                          </div>
                         )}
                       </td>
 
-                      {/* Order Status Select Pill */}
+                      {/* Order Live Automatic Status */}
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        <select
-                          value={order.status}
-                          disabled={isCancelled || order.status === 'Completed'}
-                          onChange={(e) => onUpdateStatus(order.id, e.target.value)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border focus:outline-none cursor-pointer ${
-                            order.status === 'Preparing' ? 'bg-amber-50 text-amber-900 border-amber-300' :
-                            order.status === 'Ready' ? 'bg-emerald-50 text-emerald-900 border-emerald-300' :
-                            order.status === 'Cooking' ? 'bg-orange-50 text-orange-900 border-orange-300' :
-                            order.status === 'Served' ? 'bg-cyan-50 text-cyan-900 border-cyan-300' :
-                            order.status === 'Completed' ? 'bg-slate-900 text-white border-slate-900' :
-                            order.status === 'Cancelled' ? 'bg-rose-50 text-rose-900 border-rose-300' :
-                            'bg-slate-100 text-slate-800 border-slate-300'
-                          }`}
-                        >
-                          <option value="Placed">Placed</option>
-                          <option value="Cooking">Cooking</option>
-                          <option value="Preparing">Preparing</option>
-                          <option value="Ready">Ready</option>
-                          <option value="Served">Served</option>
-                          <option value="Completed">Completed</option>
-                        </select>
+                        {(() => {
+                          if (isCancelled) {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-2xs">
+                                <Ban className="w-3.5 h-3.5 text-rose-500" />
+                                <span>Cancelled</span>
+                              </span>
+                            );
+                          }
+                          
+                          const st = String(order.status || '').toLowerCase().trim();
+
+                          if (isCompleted || st === 'completed' || st === 'settled') {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Completed</span>
+                              </span>
+                            );
+                          }
+
+                          // Active orders: allow admin to change live status directly
+                          const currentDisplayStatus = st === 'ready' ? 'Ready' : (st === 'preparing' || st === 'cooking' ? 'Preparing' : (st === 'served' ? 'Served' : 'Placed'));
+                          return (
+                            <select
+                              value={currentDisplayStatus}
+                              onChange={(e) => onUpdateStatus?.(order.id, e.target.value)}
+                              className={`px-2.5 py-1 rounded-full text-xs font-bold border shadow-2xs cursor-pointer focus:outline-none transition ${
+                                st === 'ready'
+                                  ? 'bg-blue-50 text-blue-800 border-blue-200 focus:ring-1 focus:ring-blue-400'
+                                  : st === 'preparing' || st === 'cooking'
+                                    ? 'bg-amber-50 text-amber-800 border-amber-200 focus:ring-1 focus:ring-amber-400'
+                                    : st === 'served'
+                                      ? 'bg-teal-50 text-teal-800 border-teal-200 focus:ring-1 focus:ring-teal-400'
+                                      : 'bg-slate-100 text-slate-700 border-slate-200 focus:ring-1 focus:ring-slate-400'
+                              }`}
+                              title="Click to update order live status"
+                            >
+                              <option value="Placed">⚪ Placed</option>
+                              <option value="Preparing">🟡 Preparing</option>
+                              <option value="Ready">🔵 Ready</option>
+                              <option value="Served">🟢 Served</option>
+                              <option value="Completed">✅ Completed</option>
+                            </select>
+                          );
+                        })()}
                       </td>
 
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center space-x-1">
                           <button
-                            onClick={() => handlePrintKOT(order)}
+                            onClick={() => {
+                              setSelectedOrder(order);
+                              onMarkOrderAsSeen?.(order.id);
+                            }}
+                            className="p-1.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-700 transition cursor-pointer border border-orange-200"
+                            title="View Full Order Breakdown & KOT Receipt"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              handlePrintKOT(order);
+                              onMarkOrderAsSeen?.(order.id);
+                            }}
                             className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer border border-slate-200"
-                            title="Print KOT Tax Bill"
+                            title="Print Thermal KOT Slip"
                           >
                             <Printer className="w-3.5 h-3.5" />
                           </button>
 
-                          {!isCancelled && order.status !== 'Completed' && (
+                          <button
+                            onClick={() => {
+                              downloadSinglePageBillPdf({
+                                order,
+                                restaurantSettings,
+                                customerName: order.customer_name,
+                                customerPhone: order.customer_phone,
+                                currentTable: order.table_number
+                              });
+                              onMarkOrderAsSeen?.(order.id);
+                            }}
+                            className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition cursor-pointer border border-emerald-200"
+                            title="Download 1-Page GST Tax Invoice (PDF)"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+
+                          {!isCancelled && !isCompleted && (
                             <button
                               onClick={() => { setCancellingOrder(order); setCancelReason('Dish ingredients / Batter out of stock'); }}
                               className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition cursor-pointer border border-rose-200"
@@ -479,7 +796,7 @@ export default function OrdersView({
 
       {/* MODAL 1: CASH PAYMENT COLLECTION WITH STAFF ATTRIBUTION */}
       {cashCollectingOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
           <div className={`${cardBg} rounded-2xl p-6 max-w-sm w-full border ${cardBorder} shadow-2xl space-y-4`}>
             <div className={`flex items-center justify-between border-b ${rowBorder} pb-3`}>
               <div>
@@ -527,7 +844,7 @@ export default function OrdersView({
 
       {/* MODAL 2: CANCEL ORDER WITH SPECIFIC REASON */}
       {cancellingOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
           <div className={`${cardBg} rounded-2xl p-6 max-w-md w-full border ${cardBorder} shadow-2xl space-y-4`}>
             <div className={`flex items-center justify-between border-b ${rowBorder} pb-3`}>
               <div>
@@ -586,7 +903,7 @@ export default function OrdersView({
 
       {/* PRINTABLE KOT BILL MODAL */}
       {selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs print:p-0 print:bg-white print:static">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs print:p-0 print:bg-white print:static">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full border border-slate-200 shadow-2xl space-y-4 print:border-none print:shadow-none print:p-0">
             <div className="flex items-center justify-between border-b pb-2 print:hidden">
               <span className="font-heading font-black text-sm text-slate-900">Thermal KOT Tax Receipt</span>
@@ -609,12 +926,17 @@ export default function OrdersView({
               <div className="border-b border-dashed my-2 border-slate-300"></div>
               
               <div className="space-y-1 text-left text-xs">
-                {selectedOrder.items?.map((it, idx) => (
-                  <div key={idx} className="flex justify-between">
-                    <span>{it.qty}x {it.name}</span>
-                    <span>₹{(it.price || it.finalPrice || 0) * it.qty}</span>
-                  </div>
-                ))}
+                {(selectedOrder.items || selectedOrder.order_items || []).map((it, idx) => {
+                  const qty = it.qty || it.quantity || 1;
+                  const price = it.price || it.finalPrice || it.unit_price || 0;
+                  const name = it.name || it.item_name || 'Dish Item';
+                  return (
+                    <div key={idx} className="flex justify-between">
+                      <span>{qty}x {name}</span>
+                      <span>₹{price * qty}</span>
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="border-b border-dashed my-2 border-slate-300"></div>
@@ -636,18 +958,40 @@ export default function OrdersView({
                 <span>TOTAL:</span>
                 <span>₹{selectedOrder.total || selectedOrder.total_amount}</span>
               </div>
-              <div className="text-[10px] text-slate-500 mt-2">
-                Payment: {selectedOrder.payment_mode || 'UPI'} ({selectedOrder.payment_status || 'Paid'})
+              <div className="text-[10px] text-slate-500 mt-2 space-y-0.5">
+                <div>Payment: <span className="font-bold text-slate-700">{selectedOrder.payment_mode || 'UPI'}</span> ({selectedOrder.payment_status || 'Paid'})</div>
+                {selectedOrder.transaction_id && (
+                  <div className="font-mono font-bold text-emerald-700">Payment Ref: {selectedOrder.transaction_id}</div>
+                )}
+                {selectedOrder.paid_collected_by && (
+                  <div className="text-slate-500 text-[9px]">Verified: {selectedOrder.paid_collected_by}</div>
+                )}
               </div>
             </div>
 
-            <button
-              onClick={() => window.print()}
-              className="w-full py-2 bg-slate-900 text-white font-bold text-xs rounded-xl print:hidden flex items-center justify-center gap-1 cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-              <span>Print Tax Receipt</span>
-            </button>
+            <div className="flex items-center gap-2 print:hidden">
+              <button
+                onClick={() => window.print()}
+                className="flex-1 py-2.5 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-bold text-xs rounded-xl shadow-sm shadow-orange-600/20 flex items-center justify-center gap-1.5 cursor-pointer transition"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print Thermal Receipt</span>
+              </button>
+              <button
+                onClick={() => downloadSinglePageBillPdf({
+                  order: selectedOrder,
+                  restaurantSettings,
+                  customerName: selectedOrder.customer_name,
+                  customerPhone: selectedOrder.customer_phone,
+                  currentTable: selectedOrder.table_number
+                })}
+                className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition"
+                title="Download Official 1-Page Tax Invoice (PDF)"
+              >
+                <Download className="w-4 h-4" />
+                <span>PDF Bill</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -10,7 +10,6 @@ import {
   CheckCircle2, 
   X,
   LayoutGrid,
-  Map,
   ArrowRightLeft,
   Receipt,
   Check,
@@ -23,7 +22,6 @@ import {
   Download,
   Copy,
   ExternalLink,
-  Wifi,
   Share2,
   ShieldCheck,
   AlertTriangle,
@@ -32,27 +30,33 @@ import {
   Zap,
   CheckCheck,
   User,
-  Phone
+  Phone,
+  RotateCcw
 } from 'lucide-react';
 import { getTranslation } from '../../lib/translations';
 import { playSound } from '../../lib/sound';
+import { printSinglePageReceipt, downloadSinglePageBillPdf } from '../../lib/generateBillPdf';
+import { getTableQrUrl } from '../../lib/security';
 
 export default function TablesView({ 
   tables, 
-  orders = [],
-  restaurantSettings = {},
+  orders = [], 
+  restaurantSettings = {}, 
   onAddTable, 
   onDeleteTable, 
   onUpdateTable,
-  onSettleTableBill,
-  onShiftTable,
+  onReconcileTables,
+  onSettleTableBill, 
+  onShiftTable, 
   onSelectQRTable, 
   onSimulateCustomer, 
+  onVacateTable,
+  onSnoozeTurnover,
+  onSimulate30m,
   currentLang,
   theme = 'light'
 }) {
   const [selectedZone, setSelectedZone] = useState('All');
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'floorplan'
   const [showAddModal, setShowAddModal] = useState(false);
   const [addStep, setAddStep] = useState('form'); // 'form' or 'created'
   const [createdTable, setCreatedTable] = useState(null);
@@ -62,40 +66,18 @@ export default function TablesView({
   const [shiftTargetTable, setShiftTargetTable] = useState('');
   const [copiedUrl, setCopiedUrl] = useState(null);
   const [autoVacatePaidTables, setAutoVacatePaidTables] = useState(false);
+  const [currentTime, setCurrentTime] = useState(Date.now());
+  const [vacateConfirmState, setVacateConfirmState] = useState(null); // { step: 1 | 2, table, method, amount }
   
   const [newTable, setNewTable] = useState({ number: '', capacity: 4, zone: 'Main Hall' });
 
-  // 30-Minute Automatic Table Vacate Engine for Online Paid Orders
+  // 10-Second Reactive Clock for Dining & Turnover Tracking
   useEffect(() => {
-    if (!autoVacatePaidTables) return;
-    const interval = setInterval(() => {
-      tables.forEach(table => {
-        if (table.status === 'occupied') {
-          const order = getTableActiveOrder(table.number);
-          if (order && (order.status === 'Served' || order.status === 'Ready')) {
-            const isOrderPaid = Boolean(
-              order.payment_status?.toLowerCase() === 'paid' || 
-              order.payment_mode === 'Razorpay' || 
-              order.payment_mode === 'Online' || 
-              order.payment_mode === 'ONLINE_RAZORPAY' ||
-              order.payment_mode === 'UPI' ||
-              order.payment_verified_online === true
-            );
-            const m = (table.timing || '').match(/\d+/);
-            const mins = m ? parseInt(m[0], 10) : 0;
-            // If table dining time reached 30 minutes and bill is already paid online
-            if (isOrderPaid && mins >= 30) {
-              if (onSettleTableBill) {
-                onSettleTableBill(order.id, table.number, order.payment_mode || 'UPI');
-              }
-            }
-          }
-        }
-      });
-    }, 15000);
-    return () => clearInterval(interval);
-  }, [autoVacatePaidTables, tables, orders]);
+    const timer = setInterval(() => setCurrentTime(Date.now()), 10000);
+    return () => clearInterval(timer);
+  }, []);
 
+  // 30-Minute Automatic Table Vacate Engine removed as requested: Tables remain occupied until staff explicitly settles or vacates
   const t = (key) => getTranslation(currentLang, key);
   const zones = ['All', 'Main Hall', 'AC Section', 'Patio Garden', 'Family Section'];
 
@@ -103,23 +85,102 @@ export default function TablesView({
     ? tables 
     : tables.filter(t => t.zone === selectedZone);
 
-  // Financial and occupancy telemetry
-  const totalTables = tables.length;
-  const occupiedTables = tables.filter(t => t.status === 'occupied').length;
-  const vacantTables = totalTables - occupiedTables;
-  const totalCapacity = tables.reduce((sum, t) => sum + (Number(t.capacity) || 0), 0);
-  const activeFloorRevenue = orders
-    .filter(o => o.status !== 'Completed' && o.status !== 'Cancelled')
-    .reduce((sum, o) => sum + (o.total || o.total_amount || 0), 0);
+  const normalizeTable = (val) => {
+    if (!val) return '';
+    const digits = String(val).replace(/[^0-9]/g, '');
+    if (digits) return String(parseInt(digits, 10));
+    return String(val).trim().toLowerCase();
+  };
 
-  // Helper to get active order for a table
-  const getTableActiveOrder = (tableNum) => {
-    return orders.find(o => 
-      (o.table_number === tableNum || o.table_number === `Table ${tableNum}` || o.table_number === tableNum.replace('T', 'Table ')) &&
-      o.status !== 'Completed' && 
-      o.status !== 'Cancelled'
+  const isTableMatch = (t1, t2) => {
+    return normalizeTable(t1) === normalizeTable(t2);
+  };
+
+  // Helper to determine if an order is active for dining / billing
+  const isOrderDiningActive = (o) => {
+    if (!o) return false;
+    const st = String(o.status || '').toLowerCase().trim();
+    const paySt = String(o.payment_status || '').toLowerCase().trim();
+    const isPaid = paySt === 'paid' || paySt === 'void';
+    
+    // 1. Cancelled orders are never active
+    if (st === 'cancelled') return false;
+
+    // 2. Completed, settled, or served orders that are PAID -> dining is finished, table is vacant!
+    if ((st === 'completed' || st === 'settled' || st === 'served') && isPaid) {
+      return false;
+    }
+
+    // 3. Stale orders older than 2 hours that are served or completed are not active dining
+    const orderTime = o.placed_at || o.created_at;
+    const isOlderThan2h = orderTime && (Date.now() - new Date(orderTime).getTime() > 2 * 60 * 60 * 1000);
+    if (isOlderThan2h && (isPaid || st === 'served')) {
+      return false;
+    }
+
+    // 4. Completed or settled but UNPAID -> guest is seated waiting to settle bill with cashier
+    if (st === 'completed' || st === 'settled') {
+      return !isPaid;
+    }
+
+    return true;
+  };
+
+  // Helper to get ALL active orders for a table session (e.g. Round 1 Food + Round 2 Mineral Water)
+  const getTableActiveOrders = (tableNum) => {
+    return orders.filter(o => 
+      isTableMatch(o.table_number, tableNum) &&
+      isOrderDiningActive(o)
     );
   };
+
+  // Helper to get primary active order for a table
+  const getTableActiveOrder = (tableNum) => {
+    const list = getTableActiveOrders(tableNum);
+    return list.length > 0 ? list[0] : null;
+  };
+
+  // Financial and occupancy telemetry:
+  // A table is occupied IF AND ONLY IF it has active orders!
+  const totalTables = tables.length;
+  const occupiedTables = tables.filter(t => getTableActiveOrders(t.number).length > 0).length;
+  const vacantTables = totalTables - occupiedTables;
+  const totalCapacity = tables.reduce((sum, t) => sum + (Number(t.capacity) || 0), 0);
+  const activeFloorRevenue = tables.reduce((sum, t) => {
+    const tableOrders = getTableActiveOrders(t.number);
+    const tableTotal = tableOrders.reduce((ts, o) => ts + Number(o.total || o.total_amount || 0), 0);
+    return sum + tableTotal;
+  }, 0);
+
+  // Helper to dynamically calculate elapsed dining time
+  const getElapsedTiming = (ord) => {
+    if (!ord) return null;
+    if (ord.placed_at) {
+      const mins = Math.max(1, Math.floor((Date.now() - new Date(ord.placed_at).getTime()) / 60000));
+      return `${mins}m`;
+    }
+    if (ord.time) {
+      return ord.time;
+    }
+    return '5m';
+  };
+
+  // Post-delivery Turnover Calculation (Counts 30 minutes from when food was served to table)
+  const getTableFoodDeliveredAt = (table) => {
+    if (table.food_delivered_at) return Number(table.food_delivered_at);
+    const activeOrder = getTableActiveOrder(table.number);
+    if (activeOrder?.food_delivered_at) return Number(activeOrder.food_delivered_at);
+    return null;
+  };
+
+  const getTableMinutesSinceServed = (table) => {
+    const deliveredAt = getTableFoodDeliveredAt(table);
+    if (!deliveredAt) return null;
+    return Math.max(0, Math.floor((currentTime - deliveredAt) / 60000));
+  };
+
+  const isTableTurnoverDue = () => false;
+  const turnoverDueTables = [];
 
   // Auto-calculate next table code (e.g. T17)
   const getNextTableNumber = () => {
@@ -194,18 +255,36 @@ export default function TablesView({
     setTimeout(() => setCopiedUrl(null), 2000);
   };
 
-  const handleQuickSettle = (table, method = 'Cash') => {
+  const promptVacateWithDoubleConfirm = (table, method = 'Cash', amount = 0) => {
+    setVacateConfirmState({
+      step: 1,
+      table,
+      method,
+      amount: Number(amount || 0)
+    });
+  };
+
+  const handleExecuteVacate = () => {
+    if (!vacateConfirmState?.table) return;
+    const { table, method } = vacateConfirmState;
     const activeOrder = getTableActiveOrder(table.number);
     if (onSettleTableBill && activeOrder) {
       onSettleTableBill(activeOrder.id, table.number, method);
-    } else {
-      // Fallback: clear table status
-      if (onUpdateTable) {
-        onUpdateTable(table.id, { status: 'available', current_order_id: null, timing: null });
-      }
+    }
+    if (onVacateTable) {
+      onVacateTable(table.number);
+    } else if (onUpdateTable) {
+      onUpdateTable(table.id, { status: 'available', is_occupied: false, on_hold: false, current_order_id: null, timing: null });
     }
     playSound('cash');
+    setVacateConfirmState(null);
     setSelectedTable(null);
+  };
+
+  const handleQuickSettle = (table, method = 'Cash') => {
+    const activeOrders = getTableActiveOrders(table.number);
+    const balance = activeOrders.reduce((sum, o) => sum + (o.total || o.total_amount || 0), 0);
+    promptVacateWithDoubleConfirm(table, method, balance);
   };
 
   const handleShiftTableSubmit = (e) => {
@@ -220,13 +299,12 @@ export default function TablesView({
     setShiftTargetTable('');
   };
 
-  // Theme palettes
-  const isDark = theme === 'obsidian' || theme === 'sapphire';
-  const isSapphire = theme === 'sapphire';
-  const cardBg = isDark ? (isSapphire ? 'bg-slate-900/90' : 'bg-slate-900') : 'bg-white';
-  const cardBorder = isDark ? (isSapphire ? 'border-sky-900/40' : 'border-slate-800') : 'border-slate-200/80';
-  const textPrimary = isDark ? 'text-slate-100' : 'text-slate-900';
-  const textMuted = isDark ? 'text-slate-400' : 'text-slate-500';
+  // Theme palettes - pure authentic light surfaces
+  const isDark = false;
+  const cardBg = 'bg-white';
+  const cardBorder = 'border-slate-200/80';
+  const textPrimary = 'text-slate-900';
+  const textMuted = 'text-slate-500';
 
   return (
     <div className="space-y-5">
@@ -239,7 +317,7 @@ export default function TablesView({
           </div>
           <div>
             <h2 className={`text-lg font-black ${textPrimary} tracking-tight font-heading`}>
-              Floor Plan & Table Sessions
+              Restaurant Tables & Sessions
             </h2>
             <p className={`text-xs ${textMuted} font-medium`}>
               Real-time table occupancy, QR standees, dining durations, and turnover control.
@@ -247,29 +325,8 @@ export default function TablesView({
           </div>
         </div>
 
-        {/* View Switcher & Add Table Action */}
+        {/* Add Table Action */}
         <div className="flex items-center space-x-2.5">
-          <div className="flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition cursor-pointer font-bold ${
-                viewMode === 'grid' ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Grid Matrix</span>
-            </button>
-            <button
-              onClick={() => setViewMode('floorplan')}
-              className={`px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition cursor-pointer font-bold ${
-                viewMode === 'floorplan' ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Map className="w-3.5 h-3.5" />
-              <span>Floor Map</span>
-            </button>
-          </div>
-
           <button
             onClick={handleOpenAddModal}
             className="px-3.5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs shadow-sm shadow-orange-500/20 transition flex items-center space-x-1.5 cursor-pointer"
@@ -338,7 +395,7 @@ export default function TablesView({
                 onClick={() => setSelectedZone(z)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap flex items-center space-x-1.5 cursor-pointer ${
                   selectedZone === z 
-                    ? 'bg-slate-900 text-white shadow-xs' 
+                    ? 'bg-orange-500 text-white shadow-sm shadow-orange-500/20' 
                     : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
                 }`}
               >
@@ -353,33 +410,61 @@ export default function TablesView({
           })}
         </div>
 
-        {/* 30m Turnover Engine Auto-Vacate Switch */}
-        <button
-          onClick={() => {
-            const nextState = !autoVacatePaidTables;
-            setAutoVacatePaidTables(nextState);
-            playSound(nextState ? 'success' : 'click');
-          }}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-2 shrink-0 border cursor-pointer ${
-            autoVacatePaidTables 
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-300' 
-              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-          }`}
-          title="Turn on 30-minute automatic table vacation for online prepaid orders"
-        >
-          <Zap className={`w-3.5 h-3.5 ${autoVacatePaidTables ? 'text-emerald-600 fill-emerald-600 animate-pulse' : 'text-slate-400'}`} />
-          <span>Auto-Vacate (30m): <strong className={autoVacatePaidTables ? 'text-emerald-700' : 'text-slate-600'}>{autoVacatePaidTables ? 'ON' : 'OFF'}</strong></span>
-        </button>
+        <div className="flex items-center space-x-2 shrink-0">
+          {/* Vacate All Tables Action */}
+          {occupiedTables > 0 && (
+            <button
+              onClick={() => {
+                if (window.confirm('Vacate and mark all floor tables as clean & available?')) {
+                  tables.forEach(t => {
+                    if (onVacateTable) onVacateTable(t.number);
+                  });
+                  if (onReconcileTables) onReconcileTables();
+                }
+              }}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shrink-0 bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100 cursor-pointer shadow-2xs"
+              title="Vacate and clear all floor dining tables"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Vacate All ({occupiedTables})</span>
+            </button>
+          )}
+
+          {/* Sync Floor / Free Empty Tables Button */}
+          {onReconcileTables && (
+            <button
+              onClick={() => {
+                onReconcileTables();
+              }}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shrink-0 border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 cursor-pointer shadow-2xs"
+              title="Clean up and free all tables with no active orders"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+              <span>Sync Floor (Free Empty)</span>
+            </button>
+          )}
+
+
+
+          {/* Test / Simulation 30m Elapsed Trigger */}
+        </div>
       </div>
 
       {/* 4. MAIN TABLE RENDERING */}
-      {viewMode === 'grid' ? (
-        /* GRID VIEW */
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
           {filteredTables.map(table => {
-            const isOccupied = table.status === 'occupied';
-            const activeOrder = getTableActiveOrder(table.number);
-            const orderTotal = activeOrder ? (activeOrder.total || activeOrder.total_amount || 0) : null;
+            const activeOrders = getTableActiveOrders(table.number);
+            // STRICT OPERATIONAL TRUTH: Table is occupied IF AND ONLY IF it has active orders!
+            const isOccupied = activeOrders.length > 0;
+            const activeOrder = activeOrders[0] || null;
+            const orderTotal = activeOrders.length > 0
+              ? activeOrders.reduce((sum, o) => sum + (o.total || o.total_amount || 0), 0)
+              : 0;
+            const totalPaid = activeOrders
+              .filter(o => o.payment_status?.toLowerCase() === 'paid')
+              .reduce((sum, o) => sum + (o.total || o.total_amount || 0), 0);
+            const balanceDue = Math.max(0, orderTotal - totalPaid);
+            const isFullyPaid = isOccupied && balanceDue === 0 && orderTotal > 0;
 
             return (
               <div 
@@ -401,28 +486,13 @@ export default function TablesView({
                   </div>
 
                   {isOccupied ? (
-                    (() => {
-                      const isOrderPaid = Boolean(
-                        activeOrder && (
-                          activeOrder.payment_status === 'Paid' || 
-                          activeOrder.payment_status === 'PAID' || 
-                          activeOrder.payment_mode === 'Razorpay' || 
-                          activeOrder.payment_mode === 'Online' || 
-                          activeOrder.payment_mode === 'ONLINE_RAZORPAY' ||
-                          activeOrder.payment_mode === 'UPI' ||
-                          activeOrder.payment_verified_online === true
-                        )
-                      );
-                      return (
-                        <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${
-                          isOrderPaid 
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                            : 'bg-amber-50 text-amber-700 border border-amber-200'
-                        }`}>
-                          {isOrderPaid ? 'Paid' : 'Cash Due'}
-                        </span>
-                      );
-                    })()
+                    <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${
+                      isFullyPaid 
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                        : 'bg-amber-50 text-amber-700 border border-amber-200'
+                    }`}>
+                      {isFullyPaid ? `Paid • ₹${orderTotal}` : `Due: ₹${balanceDue}`}
+                    </span>
                   ) : (
                     <span className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
                       Vacant
@@ -445,31 +515,35 @@ export default function TablesView({
                     </span>
                   </div>
 
-                  {isOccupied && (
-                    <div className="pt-1.5 border-t border-orange-200 space-y-1">
-                      <div className="flex items-center justify-between text-[11px] gap-1 min-w-0 overflow-hidden">
-                        <span className={`font-bold ${textPrimary} flex items-center gap-1 min-w-0 flex-1 truncate`}>
-                          <User className="w-3 h-3 text-slate-500 shrink-0" />
-                          <span className="truncate">{activeOrder?.customer_name || table.current_customer_name || 'Guest'}</span>
-                        </span>
-                        {(activeOrder?.customer_phone || table.current_customer_phone) && (
-                          <span className="font-mono text-[10px] text-slate-500 font-bold flex items-center gap-0.5 shrink-0">
-                            <Phone className="w-2.5 h-2.5 text-slate-500" />
-                            <span>{(activeOrder?.customer_phone || table.current_customer_phone).slice(-4)}</span>
+                  {isOccupied && (() => {
+                    const minsSinceServed = getTableMinutesSinceServed(table);
+                    const turnoverDue = isTableTurnoverDue(table);
+                    return (
+                      <div className="pt-1.5 border-t border-orange-200 space-y-1.5">
+                        <div className="flex items-center justify-between text-[11px] gap-1 min-w-0 overflow-hidden">
+                          <span className={`font-bold ${textPrimary} flex items-center gap-1 min-w-0 flex-1 truncate`}>
+                            <User className="w-3 h-3 text-slate-500 shrink-0" />
+                            <span className="truncate">{activeOrder?.customer_name || 'Guest'}</span>
                           </span>
-                        )}
+                          {activeOrder?.customer_phone && (
+                            <span className="font-mono text-[10px] text-slate-500 font-bold flex items-center gap-0.5 shrink-0">
+                              <Phone className="w-2.5 h-2.5 text-slate-500" />
+                              <span>{String(activeOrder.customer_phone).slice(-4)}</span>
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between text-orange-700 font-bold font-mono">
+                          <span className="flex items-center space-x-1 text-[10px]">
+                            <Clock className="w-3 h-3" />
+                            <span>{minsSinceServed !== null ? `Served ${minsSinceServed}m ago` : (getElapsedTiming(activeOrder) || table.timing || '5m')}</span>
+                          </span>
+                          {orderTotal > 0 && (
+                            <span className={`text-xs font-black ${textPrimary}`}>₹{orderTotal}</span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between text-orange-700 font-bold font-mono">
-                        <span className="flex items-center space-x-1 text-[10px]">
-                          <Clock className="w-3 h-3" />
-                          <span>{table.timing || '18m'}</span>
-                        </span>
-                        {orderTotal !== null && (
-                          <span className={`text-xs font-black ${textPrimary}`}>₹{orderTotal}</span>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
 
                 {/* Card Bottom Quick Actions */}
@@ -501,71 +575,10 @@ export default function TablesView({
             );
           })}
         </div>
-      ) : (
-        /* 2D VISUAL FLOOR MAP MODE */
-        <div className="bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-800 shadow-2xl space-y-6 text-white">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-            <div>
-              <span className="text-xs font-bold text-orange-400 uppercase tracking-wider">Restaurant Floor Visualizer</span>
-              <h3 className="text-lg font-black font-heading text-white">Atmiya Dosa Hub Floor Plan</h3>
-            </div>
-            <div className="flex items-center space-x-4 text-xs font-bold text-slate-400">
-              <span className="flex items-center space-x-1.5">
-                <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
-                <span>Vacant</span>
-              </span>
-              <span className="flex items-center space-x-1.5">
-                <span className="w-3 h-3 rounded-full bg-orange-500 inline-block animate-pulse"></span>
-                <span>Occupied</span>
-              </span>
-            </div>
-          </div>
-
-          {/* Graphical Zones Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {['Main Hall', 'AC Section', 'Patio Garden', 'Family Section'].map(zoneName => {
-              const zoneTables = tables.filter(t => t.zone === zoneName);
-              return (
-                <div key={zoneName} className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-                    <span className="font-heading font-black text-sm text-slate-200">{zoneName}</span>
-                    <span className="text-xs text-slate-500 font-mono">{zoneTables.length} Tables</span>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3">
-                    {zoneTables.map(tbl => {
-                      const occ = tbl.status === 'occupied';
-                      return (
-                        <div
-                          key={tbl.id}
-                          onClick={() => setSelectedTable(tbl)}
-                          className={`p-3 rounded-2xl border text-center cursor-pointer transition transform hover:scale-105 ${
-                            occ 
-                              ? 'bg-orange-500/20 border-orange-500 text-orange-300 shadow-lg shadow-orange-500/10' 
-                              : 'bg-slate-800/60 border-slate-700 text-slate-300 hover:border-emerald-500'
-                          }`}
-                        >
-                          <div className="text-base font-black font-heading">{tbl.number}</div>
-                          <div className="text-[10px] text-slate-400 font-bold">{tbl.capacity}P</div>
-                          <span className={`inline-block mt-1 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                            occ ? 'bg-orange-500 text-white' : 'bg-emerald-600 text-white'
-                          }`}>
-                            {occ ? 'Eating' : 'Free'}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* 5. INTERACTIVE TABLE OPERATIONS DRAWER / MODAL */}
       {selectedTable && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-lg w-full border border-slate-200 shadow-2xl space-y-5">
             
             {/* Modal Header */}
@@ -594,64 +607,83 @@ export default function TablesView({
 
             {/* Active Ticket Status */}
             {(() => {
-              const activeOrder = getTableActiveOrder(selectedTable.number);
-              if (!activeOrder) {
+              const activeOrders = getTableActiveOrders(selectedTable.number);
+              if (activeOrders.length === 0) {
                 return (
                   <div className="p-6 rounded-2xl bg-emerald-50 border border-emerald-200 text-center space-y-2">
                     <span className="text-2xl">🟢</span>
-                    <h4 className="text-sm font-black text-emerald-900 font-heading">Table is Currently Vacant</h4>
-                    <p className="text-xs text-emerald-700">Ready for walk-in seating or QR customer self-order.</p>
-                    <div className="pt-2 flex items-center justify-center gap-2">
+                    <h4 className="text-sm font-black text-emerald-900 font-heading">Table {selectedTable.number} is Currently Vacant</h4>
+                    <p className="text-xs text-emerald-700">No active dining orders or unpaid tickets. Clean and ready for walk-in seating or QR customer self-order.</p>
+                    <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
                       <button
                         onClick={() => onSimulateCustomer(selectedTable.number)}
-                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow flex items-center space-x-1.5"
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow flex items-center space-x-1.5 cursor-pointer"
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                         <span>Open QR Menu</span>
                       </button>
                       <button
                         onClick={() => setPreviewQRTable(selectedTable)}
-                        className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center space-x-1.5 border border-slate-200"
+                        className="px-4 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center space-x-1.5 border border-slate-200 cursor-pointer"
                       >
                         <QrCode className="w-3.5 h-3.5 text-orange-600" />
                         <span>View QR Standee</span>
                       </button>
+                      {selectedTable.status === 'occupied' && (
+                        <button
+                          onClick={() => {
+                            if (onUpdateTable) {
+                              onUpdateTable(selectedTable.id, { status: 'available', current_order_id: null, timing: null, current_customer_name: null, current_customer_phone: null });
+                            }
+                            setSelectedTable(null);
+                            playSound('success');
+                          }}
+                          className="px-4 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-xs flex items-center space-x-1.5 border border-amber-300 cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Clear Stale Status</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
               }
 
-              const orderItems = activeOrder.items || [];
-              const totalAmt = activeOrder.total || activeOrder.total_amount || 0;
+              const primaryOrder = activeOrders[0];
+              const totalGrossAmt = activeOrders.reduce((sum, o) => sum + (o.total || o.total_amount || 0), 0);
 
               // Authoritative Payment Status Classification
-              const isPaidOnline = Boolean(
-                (activeOrder.payment_status?.toLowerCase() === 'paid' && 
-                 (activeOrder.payment_mode?.toLowerCase().includes('upi') || 
-                  activeOrder.payment_mode?.toLowerCase().includes('razorpay') || 
-                  activeOrder.payment_mode?.toLowerCase().includes('online') || 
-                  activeOrder.payment_verified_online === true)) ||
-                activeOrder.payment_mode === 'ONLINE_RAZORPAY' ||
-                activeOrder.payment_mode === 'Razorpay' ||
-                activeOrder.payment_mode === 'Online (Prepaid)'
+              const isOrderPaidOnline = (o) => Boolean(
+                (o.payment_status?.toLowerCase() === 'paid' && 
+                 (o.payment_mode?.toLowerCase().includes('upi') || 
+                  o.payment_mode?.toLowerCase().includes('razorpay') || 
+                  o.payment_mode?.toLowerCase().includes('online') || 
+                  o.payment_verified_online === true)) ||
+                o.payment_mode === 'ONLINE_RAZORPAY' ||
+                o.payment_mode === 'Razorpay' ||
+                o.payment_mode === 'Online (Prepaid)'
               );
 
-              const isCashPaid = Boolean(
-                !isPaidOnline && 
-                activeOrder.payment_status?.toLowerCase() === 'paid' && 
-                (activeOrder.payment_mode?.toLowerCase().includes('cash') || activeOrder.payment_mode?.toLowerCase().includes('counter'))
+              const isOrderCashPaid = (o) => Boolean(
+                !isOrderPaidOnline(o) && 
+                o.payment_status?.toLowerCase() === 'paid' && 
+                (o.payment_mode?.toLowerCase().includes('cash') || o.payment_mode?.toLowerCase().includes('counter'))
               );
 
-              const isCashUnpaid = Boolean(!isPaidOnline && !isCashPaid);
+              const totalPaidOnline = activeOrders.filter(isOrderPaidOnline).reduce((sum, o) => sum + (o.total || o.total_amount || 0), 0);
+              const totalPaidCash = activeOrders.filter(isOrderCashPaid).reduce((sum, o) => sum + (o.total || o.total_amount || 0), 0);
+              const totalPaidSoFar = totalPaidOnline + totalPaidCash;
+              const balanceDue = Math.max(0, totalGrossAmt - totalPaidSoFar);
 
-              // 30-Minute Turnover Calculation
-              const elapsedMins = (() => {
+              // 30-Minute Turnover Calculation from Food Delivery
+              const minsSinceDelivered = getTableMinutesSinceServed(selectedTable);
+              const elapsedMins = minsSinceDelivered !== null ? minsSinceDelivered : (() => {
                 if (selectedTable?.timing) {
                   const m = selectedTable.timing.match(/\d+/);
                   if (m) return parseInt(m[0], 10);
                 }
-                if (activeOrder.time) {
-                  const m = activeOrder.time.match(/\d+/);
+                if (primaryOrder.time) {
+                  const m = primaryOrder.time.match(/\d+/);
                   if (m) return parseInt(m[0], 10);
                 }
                 return 18;
@@ -665,43 +697,41 @@ export default function TablesView({
               return (
                 <div className="space-y-4">
                   
-                  {/* 1. ORDER OVERVIEW HEADER */}
+                  {/* 1. SESSION OVERVIEW HEADER */}
                   <div className="p-3.5 rounded-2xl bg-orange-50 border border-orange-200/90 flex items-center justify-between text-xs">
                     <div>
                       <div className="flex items-center space-x-1.5">
-                        <span className="font-bold text-orange-900 font-mono text-sm">{activeOrder.id}</span>
+                        <span className="font-bold text-orange-900 font-mono text-sm">{primaryOrder.id}</span>
                         <span className="px-1.5 py-0.5 rounded-md bg-orange-200/80 text-orange-950 text-[10px] font-bold">
-                          {activeOrder.order_source || 'QR Self-Order'}
+                          {activeOrders.length > 1 ? `${activeOrders.length} Rounds Active` : (primaryOrder.order_source || 'QR Self-Order')}
                         </span>
                       </div>
                       <div className="text-[11px] text-orange-700 font-medium mt-0.5">
-                        Guest: <span className="font-bold text-orange-900">{activeOrder.customer_name || 'Guest'}</span>
-                        {(activeOrder.customer_phone || selectedTable.current_customer_phone) && (
+                        Guest: <span className="font-bold text-orange-900">{primaryOrder.customer_name || 'Guest'}</span>
+                        {(primaryOrder.customer_phone || selectedTable.current_customer_phone) && (
                           <span className="ml-2 font-mono text-[10px] bg-orange-200/80 px-2 py-0.5 rounded-full text-orange-950 font-bold">
-                            📞 +91 {activeOrder.customer_phone || selectedTable.current_customer_phone}
+                            📞 +91 {primaryOrder.customer_phone || selectedTable.current_customer_phone}
                           </span>
                         )}
                       </div>
                     </div>
                     <div className="text-right">
                       <span className={`px-2.5 py-0.5 rounded-full font-black text-[10px] uppercase tracking-wider inline-flex items-center space-x-1 ${
-                        activeOrder.status === 'Served'
+                        balanceDue === 0
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                          : activeOrder.status === 'Ready'
-                          ? 'bg-blue-100 text-blue-800 border border-blue-300'
-                          : 'bg-orange-200 text-orange-900'
+                          : 'bg-amber-100 text-amber-900 border border-amber-300'
                       }`}>
                         <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse"></span>
-                        <span>{activeOrder.status}</span>
+                        <span>{balanceDue === 0 ? 'All Paid' : `Collect ₹${balanceDue}`}</span>
                       </span>
                       <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                        Placed: {activeOrder.time || '12m ago'}
+                        First Order: {primaryOrder.time || '12m ago'}
                       </div>
                     </div>
                   </div>
 
                   {/* 2. PROMINENT PAYMENT VERIFICATION BANNER */}
-                  {isPaidOnline ? (
+                  {balanceDue === 0 ? (
                     <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-300/80 shadow-sm flex items-center justify-between">
                       <div className="flex items-center space-x-2.5">
                         <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm shrink-0">
@@ -710,40 +740,20 @@ export default function TablesView({
                         <div>
                           <div className="flex items-center space-x-1.5">
                             <span className="text-xs font-black text-emerald-950 uppercase tracking-wide">
-                              PAID ONLINE (Razorpay / UPI)
+                              ALL ROUNDS 100% PAID
                             </span>
                             <span className="px-1.5 py-0.5 rounded-full bg-emerald-200 text-emerald-900 font-black text-[9px] tracking-wider">
                               VERIFIED
                             </span>
                           </div>
                           <p className="text-[11px] text-emerald-700 font-medium">
-                            Settled directly via Gateway • <strong className="text-emerald-900">₹0.00 Balance Due</strong>
+                            Paid via UPI / Gateway • <strong className="text-emerald-900">₹0.00 Balance Due</strong>
                           </p>
                         </div>
                       </div>
                       <div className="text-right pl-2 shrink-0">
-                        <div className="text-sm font-black text-emerald-900 font-mono">₹{totalAmt}</div>
-                        <div className="text-[9px] font-bold text-emerald-600 uppercase">Paid in Full</div>
-                      </div>
-                    </div>
-                  ) : isCashPaid ? (
-                    <div className="p-3.5 rounded-2xl bg-blue-50 border border-blue-200 shadow-sm flex items-center justify-between">
-                      <div className="flex items-center space-x-2.5">
-                        <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm shrink-0">
-                          <CheckCheck className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <span className="text-xs font-black text-blue-950 uppercase tracking-wide">
-                            Cash Collected at Counter
-                          </span>
-                          <p className="text-[11px] text-blue-700 font-medium">
-                            Collected by {activeOrder.paid_collected_by || 'Cashier'} • ₹0.00 Due
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right pl-2 shrink-0">
-                        <div className="text-sm font-black text-blue-900 font-mono">₹{totalAmt}</div>
-                        <div className="text-[9px] font-bold text-blue-600 uppercase">Settled</div>
+                        <div className="text-sm font-black text-emerald-900 font-mono">₹{totalGrossAmt}</div>
+                        <div className="text-[9px] font-bold text-emerald-600 uppercase">Settled</div>
                       </div>
                     </div>
                   ) : (
@@ -755,169 +765,180 @@ export default function TablesView({
                         <div>
                           <div className="flex items-center space-x-1.5">
                             <span className="text-xs font-black text-amber-950 uppercase tracking-wide">
-                              ⚠️ CASH ON TABLE (UNPAID)
+                              ⚠️ CASH TO COLLECT: ₹{balanceDue}
                             </span>
                             <span className="px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-900 font-black text-[9px] tracking-wider">
-                              COLLECT CASH
+                              PENDING
                             </span>
                           </div>
                           <p className="text-[11px] text-amber-800 font-medium">
-                            Guest chose COD / Cash • Must collect before clearing table!
+                            {totalPaidOnline > 0 ? `Meal (₹${totalPaidOnline}) was paid online. Collect ₹${balanceDue} cash for add-ons (Water/extras)!` : 'Guest selected Cash / Table payment.'}
                           </p>
                         </div>
                       </div>
                       <div className="text-right pl-2 shrink-0">
-                        <div className="text-sm font-black text-rose-600 font-mono">₹{totalAmt}</div>
+                        <div className="text-sm font-black text-rose-600 font-mono">₹{balanceDue}</div>
                         <div className="text-[9px] font-bold text-rose-500 uppercase">Cash Due</div>
                       </div>
                     </div>
                   )}
 
-                  {/* 3. 30-MINUTE DINING TURNOVER ENGINE */}
-                  <div className={`p-3.5 rounded-2xl border transition-all ${
-                    isOvertime 
-                      ? (isPaidOnline ? 'bg-orange-50/70 border-orange-300 ring-1 ring-orange-200' : 'bg-rose-50 border-rose-300 ring-2 ring-rose-200')
-                      : 'bg-slate-50 border-slate-200'
-                  }`}>
-                    <div className="flex items-center justify-between text-xs mb-2">
+                  {/* 3. DINING DURATION TRACKER */}
+                  <div className="p-3 rounded-2xl border bg-slate-50 border-slate-200">
+                    <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center space-x-1.5">
-                        <Clock className={`w-3.5 h-3.5 ${isOvertime ? 'text-rose-600' : 'text-slate-600'}`} />
+                        <Clock className="w-3.5 h-3.5 text-slate-600" />
                         <span className="font-bold text-slate-800 font-heading">
-                          Dining Turnover Tracker
+                          Dining Duration
                         </span>
-                        <span className="text-[10px] text-slate-400 font-mono">(Avg. 30m Target)</span>
                       </div>
-                      <div className="font-mono font-black text-xs">
-                        <span className={isOvertime ? 'text-rose-600' : 'text-slate-900'}>
-                          {elapsedMins}m
-                        </span>
-                        <span className="text-slate-400"> / 30m</span>
+                      <div className="font-mono font-black text-xs text-slate-900">
+                        {elapsedMins} mins elapsed
                       </div>
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full transition-all duration-500 ${
-                          isOvertime ? 'bg-rose-500' : isFinishedEarly ? 'bg-amber-500' : 'bg-emerald-500'
-                        }`}
-                        style={{ width: `${diningProgressPercent}%` }}
-                      />
-                    </div>
-
-                    {/* Turnover Prompts & Edge Cases */}
-                    <div className="mt-2.5">
-                      {isOvertime ? (
-                        isPaidOnline ? (
-                          <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-orange-200 text-xs">
-                            <div className="text-[11px] text-orange-950 font-medium">
-                              ⚡ <span className="font-black">30m Target Reached:</span> Bill is 100% paid online. Free table for waiting guests:
-                            </div>
-                            <button
-                              onClick={() => handleQuickSettle(selectedTable, activeOrder.payment_mode || 'UPI')}
-                              className="ml-2 px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-[11px] shadow whitespace-nowrap transition"
-                            >
-                              Vacate Table Now
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="p-2.5 rounded-xl bg-rose-100 border border-rose-300 text-xs text-rose-950 space-y-1">
-                            <div className="flex items-center space-x-1.5 font-black text-rose-900">
-                              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                              <span>🚨 CRITICAL WALKOUT GUARD: 30+ Mins Elapsed!</span>
-                            </div>
-                            <p className="text-[11px] text-rose-800">
-                              Guest selected COD / Cash on Table. Do <span className="font-bold underline">NOT</span> clear table until <span className="font-bold font-mono">₹{totalAmt}</span> cash is physically collected!
-                            </p>
-                          </div>
-                        )
-                      ) : isFinishedEarly ? (
-                        <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-200 text-xs">
-                          <span className="text-[11px] text-slate-600 font-medium">
-                            Guests finished eating in {elapsedMins} mins?
-                          </span>
-                          <button
-                            onClick={() => {
-                              if (isPaidOnline || isCashPaid) {
-                                handleQuickSettle(selectedTable, activeOrder.payment_mode || 'UPI');
-                              } else {
-                                handleQuickSettle(selectedTable, 'Cash');
-                              }
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-[10px] shadow transition"
-                          >
-                            ⚡ Vacate Early ({elapsedMins}m)
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="text-[11px] text-slate-500 flex items-center justify-between font-medium">
-                          <span>Guests dining comfortably</span>
-                          <span className="font-mono">~{Math.max(30 - elapsedMins, 0)}m typical dining left</span>
-                        </div>
-                      )}
                     </div>
                   </div>
 
-                  {/* 4. ITEMIZED BILL PREVIEW */}
-                  <div className="space-y-1">
-                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Ordered Items</span>
-                    <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1 divide-y divide-slate-100 text-xs bg-slate-50/70 p-2.5 rounded-xl border border-slate-200/80">
-                      {orderItems.map((item, idx) => (
-                        <div key={idx} className="pt-1.5 first:pt-0 flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <span className="font-bold font-mono text-orange-600">{item.qty}x</span>
-                            <span className="font-bold text-slate-800">{item.name}</span>
+                  {/* 4. MULTI-ROUND ITEMIZED ORDERS BREAKDOWN */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-black text-slate-700 uppercase tracking-wide">
+                        Table Session Orders ({activeOrders.length} {activeOrders.length === 1 ? 'Round' : 'Rounds'})
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        Itemized Breakdown
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {activeOrders.map((ord, idx) => {
+                        const ordPaidOnline = isOrderPaidOnline(ord);
+                        const ordCashPaid = isOrderCashPaid(ord);
+                        const ordItems = ord.items || [];
+                        const ordAmt = ord.total || ord.total_amount || 0;
+
+                        return (
+                          <div key={ord.id || idx} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
+                            <div className="flex items-center justify-between border-b border-slate-200/60 pb-1">
+                              <div className="flex items-center space-x-1.5">
+                                <span className="px-1.5 py-0.2 rounded bg-orange-100 text-orange-800 font-black text-[9px] font-mono border border-orange-200">
+                                  R{ord.round || (idx + 1)}
+                                </span>
+                                <span className="font-bold text-slate-800 font-mono text-[11px]">{ord.id}</span>
+                                {ord.is_addon && (
+                                  <span className="px-1.5 py-0.2 rounded bg-cyan-100 text-cyan-800 font-bold text-[9px]">
+                                    💧 Water / Add-On
+                                  </span>
+                                )}
+                              </div>
+                              <div>
+                                {ordPaidOnline ? (
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                    ✅ Paid Online
+                                  </span>
+                                ) : ordCashPaid ? (
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-blue-100 text-blue-800 border border-blue-200">
+                                    ✅ Settled Cash
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-100 text-amber-900 border border-amber-300">
+                                    💵 Collect ₹{ordAmt} Cash
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              {ordItems.map((it, itIdx) => (
+                                <div key={itIdx} className="flex items-center justify-between text-slate-700">
+                                  <span className="font-medium">
+                                    <strong className="text-orange-600 font-mono mr-1.5">{it.qty}x</strong>
+                                    {it.name}
+                                  </span>
+                                  <span className="font-mono font-bold text-slate-900">
+                                    ₹{(it.price || 0) * (it.qty || 1)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+
+                            {ord.special_note && (
+                              <div className="text-[10px] text-slate-500 italic bg-white p-1 rounded border border-slate-100">
+                                Note: {ord.special_note}
+                              </div>
+                            )}
                           </div>
-                          <span className="font-mono font-bold text-slate-900">₹{(item.price || 0) * (item.qty || 1)}</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
 
-                  {/* 5. TOTAL BAR & BALANCE DUE */}
-                  <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
-                    <div>
-                      <span className="text-slate-500 font-medium">Order Subtotal: </span>
-                      <span className="font-bold font-mono text-slate-800">₹{totalAmt}</span>
+                  {/* 5. FINANCIAL RECONCILIATION BAR */}
+                  <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/90 text-slate-900 space-y-1.5 text-xs">
+                    <div className="flex justify-between items-center text-slate-600">
+                      <span>Total Gross Bill:</span>
+                      <span className="font-mono font-bold text-slate-900 text-sm">₹{totalGrossAmt}</span>
                     </div>
-                    <div className="text-right">
-                      {isPaidOnline || isCashPaid ? (
-                        <div className="flex items-center space-x-1.5">
-                          <span className="text-slate-500 font-bold uppercase text-[10px]">Balance Due:</span>
-                          <span className="text-sm font-black font-mono text-emerald-600">₹0.00 (PAID)</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center space-x-1.5">
-                          <span className="text-slate-900 font-bold uppercase text-[10px]">Cash To Collect:</span>
-                          <span className="text-base font-black font-mono text-rose-600">₹{totalAmt}</span>
-                        </div>
-                      )}
+                    {totalPaidOnline > 0 && (
+                      <div className="flex justify-between items-center text-emerald-700">
+                        <span>Paid Online (UPI / Gateway):</span>
+                        <span className="font-mono font-bold">-₹{totalPaidOnline}</span>
+                      </div>
+                    )}
+                    {totalPaidCash > 0 && (
+                      <div className="flex justify-between items-center text-blue-700">
+                        <span>Paid Cash at Counter:</span>
+                        <span className="font-mono font-bold">-₹{totalPaidCash}</span>
+                      </div>
+                    )}
+                    <div className="pt-2 border-t border-amber-200/80 flex justify-between items-center">
+                      <span className="font-black uppercase tracking-wider text-xs">
+                        {balanceDue > 0 ? '⚠️ Cash Balance to Collect:' : '✅ Table Session Status:'}
+                      </span>
+                      <span className={`text-base font-black font-mono ${balanceDue > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                        {balanceDue > 0 ? `₹${balanceDue}` : 'Fully Settled (₹0.00 Due)'}
+                      </span>
                     </div>
                   </div>
 
                   {/* 6. CONTEXT-AWARE ACTION BUTTONS */}
-                  {isPaidOnline || isCashPaid ? (
+                  {balanceDue === 0 ? (
                     <div className="space-y-2 pt-1">
                       <button
-                        onClick={() => handleQuickSettle(selectedTable, activeOrder.payment_mode || 'UPI')}
-                        className="w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/20 flex items-center justify-center space-x-2 transition"
+                        onClick={() => promptVacateWithDoubleConfirm(selectedTable, totalPaidOnline > 0 ? 'UPI' : 'Cash', totalGrossAmt)}
+                        className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/20 flex items-center justify-center space-x-2 transition cursor-pointer"
                       >
                         <Zap className="w-4 h-4 fill-white" />
-                        <span>⚡ Vacate & Clean Table (Bill Already Paid Online)</span>
+                        <span>⚡ Vacate Table (All ₹{totalGrossAmt} Paid in Full)</span>
                       </button>
 
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           onClick={() => setShowShiftModal(true)}
-                          className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1.5 transition border border-slate-200"
+                          className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1.5 transition border border-slate-200 cursor-pointer"
                         >
                           <ArrowRightLeft className="w-3.5 h-3.5" />
                           <span>Shift Table</span>
                         </button>
 
                         <button
-                          onClick={() => window.print()}
-                          className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1.5 transition border border-slate-200"
+                          onClick={() => {
+                            const allItems = activeOrders.flatMap(o => Array.isArray(o.items) ? o.items : []);
+                            const primaryOrder = activeOrders[0] || {};
+                            printSinglePageReceipt({
+                              order: {
+                                ...primaryOrder,
+                                id: primaryOrder.id || `TBL-${selectedTable.number}`,
+                                table_number: selectedTable.number,
+                                total: totalGrossAmt,
+                                payment_mode: totalPaidOnline > 0 ? 'UPI' : 'Cash',
+                                payment_status: 'Paid',
+                                items: allItems.length > 0 ? allItems : (primaryOrder.items || [])
+                              },
+                              restaurantSettings,
+                              currentTable: selectedTable.number
+                            });
+                          }}
+                          className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1.5 transition border border-slate-200 cursor-pointer"
                         >
                           <Printer className="w-3.5 h-3.5" />
                           <span>Print Tax Invoice</span>
@@ -928,34 +949,50 @@ export default function TablesView({
                     <div className="space-y-2 pt-1">
                       <div className="grid grid-cols-2 gap-2">
                         <button
-                          onClick={() => handleQuickSettle(selectedTable, 'Cash')}
-                          className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow flex items-center justify-center space-x-1.5 transition"
+                          onClick={() => promptVacateWithDoubleConfirm(selectedTable, 'Cash', balanceDue)}
+                          className="px-4 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow flex items-center justify-center space-x-1.5 transition cursor-pointer"
                         >
                           <Banknote className="w-4 h-4" />
-                          <span>Collect ₹{totalAmt} Cash & Vacate</span>
+                          <span>Collect ₹{balanceDue} Cash & Vacate</span>
                         </button>
 
                         <button
-                          onClick={() => handleQuickSettle(selectedTable, 'UPI')}
-                          className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow flex items-center justify-center space-x-1.5 transition"
+                          onClick={() => promptVacateWithDoubleConfirm(selectedTable, 'UPI', balanceDue)}
+                          className="px-4 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow flex items-center justify-center space-x-1.5 transition cursor-pointer"
                         >
                           <Sparkles className="w-4 h-4" />
-                          <span>Collect via QR UPI & Vacate</span>
+                          <span>Collect ₹{balanceDue} via UPI & Vacate</span>
                         </button>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           onClick={() => setShowShiftModal(true)}
-                          className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1.5 transition border border-slate-200"
+                          className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1.5 transition border border-slate-200 cursor-pointer"
                         >
                           <ArrowRightLeft className="w-3.5 h-3.5" />
                           <span>Shift Table</span>
                         </button>
 
                         <button
-                          onClick={() => window.print()}
-                          className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1.5 transition border border-slate-200"
+                          onClick={() => {
+                            const allItems = activeOrders.flatMap(o => Array.isArray(o.items) ? o.items : []);
+                            const primaryOrder = activeOrders[0] || {};
+                            printSinglePageReceipt({
+                              order: {
+                                ...primaryOrder,
+                                id: primaryOrder.id || `TBL-${selectedTable.number}`,
+                                table_number: selectedTable.number,
+                                total: totalGrossAmt,
+                                payment_mode: 'Cash on Delivery',
+                                payment_status: 'Payment Due',
+                                items: allItems.length > 0 ? allItems : (primaryOrder.items || [])
+                              },
+                              restaurantSettings,
+                              currentTable: selectedTable.number
+                            });
+                          }}
+                          className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1.5 transition border border-slate-200 cursor-pointer"
                         >
                           <Printer className="w-3.5 h-3.5" />
                           <span>Print KOT / Bill</span>
@@ -985,7 +1022,7 @@ export default function TablesView({
 
       {/* 6. SHIFT TABLE MODAL */}
       {showShiftModal && selectedTable && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full border border-slate-200 shadow-2xl space-y-4">
             <h3 className="text-base font-black text-slate-900 font-heading">
               Transfer Table {selectedTable.number}
@@ -1037,7 +1074,7 @@ export default function TablesView({
 
       {/* 7. DYNAMIC ADD TABLE & QR STANDEE GENERATOR MODAL */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/75 backdrop-blur-sm animate-fadeIn overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/40 backdrop-blur-xs animate-fadeIn overflow-y-auto">
           <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-4xl w-full border border-slate-200 shadow-2xl space-y-6 my-auto">
             
             {/* Modal Header */}
@@ -1123,7 +1160,7 @@ export default function TablesView({
                           onClick={() => setNewTable({ ...newTable, capacity: seats })}
                           className={`py-1.5 rounded-xl text-xs font-black transition border ${
                             Number(newTable.capacity) === seats 
-                              ? 'bg-slate-900 text-white border-slate-900 shadow-sm' 
+                              ? 'bg-orange-600 text-white border-orange-600 shadow-sm shadow-orange-600/20' 
                               : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
                           }`}
                         >
@@ -1237,7 +1274,7 @@ export default function TablesView({
                     <div className="p-3 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-300 inline-block shadow-inner">
                       <QRCodeSVG
                         id="qr-svg-new-table"
-                        value={`${window.location.origin}/?table=${encodeURIComponent((newTable.number || 'T00').trim().toUpperCase())}`}
+                        value={getTableQrUrl(newTable.number || 'T00')}
                         size={160}
                         level="H"
                         includeMargin={true}
@@ -1253,13 +1290,10 @@ export default function TablesView({
                       <p className="text-[11px] font-black text-orange-600">
                         Scan to View Menu, Order & Pay
                       </p>
-                      <div className="text-[9px] font-mono text-slate-400">
-                        Wi-Fi: <span className="font-bold text-slate-600">Atmiya_Guest</span> | Pass: <span className="font-bold text-slate-600">delicious123</span>
-                      </div>
                     </div>
 
                     <div className="text-[8px] font-bold text-slate-400 pt-2 border-t border-slate-100">
-                      Powered by Appwrite Real-Time Cloud
+                      Pure Veg Kitchen • Clean & Hygienic
                     </div>
                   </div>
 
@@ -1343,7 +1377,7 @@ export default function TablesView({
                     <div className="p-3 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-300 inline-block shadow-inner">
                       <QRCodeSVG
                         id="qr-svg-created-table"
-                        value={`${window.location.origin}/?table=${encodeURIComponent(createdTable.number)}`}
+                        value={getTableQrUrl(createdTable.number)}
                         size={170}
                         level="H"
                         includeMargin={true}
@@ -1359,13 +1393,10 @@ export default function TablesView({
                       <p className="text-xs font-black text-orange-600">
                         Scan to View Menu, Order & Pay
                       </p>
-                      <div className="text-[10px] font-mono text-slate-400">
-                        Wi-Fi: <span className="font-bold text-slate-600">Atmiya_Guest</span> | Pass: <span className="font-bold text-slate-600">delicious123</span>
-                      </div>
                     </div>
 
                     <div className="text-[9px] font-bold text-slate-400 pt-2 border-t border-slate-100">
-                      Powered by Appwrite Real-Time Cloud
+                      Pure Veg Kitchen • Clean & Hygienic
                     </div>
                   </div>
                 </div>
@@ -1382,7 +1413,7 @@ export default function TablesView({
 
                   <button
                     onClick={() => window.print()}
-                    className="px-5 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs shadow flex items-center space-x-2 transition"
+                    className="px-5 py-2.5 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 font-bold text-xs shadow-xs flex items-center space-x-2 transition cursor-pointer"
                   >
                     <Printer className="w-4 h-4" />
                     <span>Print Standee Card</span>
@@ -1419,7 +1450,7 @@ export default function TablesView({
                     }}
                     className="px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow transition"
                   >
-                    <span>Done (View Floor Map)</span>
+                    <span>Done (View Tables)</span>
                   </button>
                 </div>
 
@@ -1432,7 +1463,7 @@ export default function TablesView({
 
       {/* 8. QUICK QR STANDEE MODAL FOR ANY TABLE */}
       {previewQRTable && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full border border-slate-200 shadow-2xl space-y-5">
             
             {/* Header */}
@@ -1477,7 +1508,7 @@ export default function TablesView({
                 <div className="p-3 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-300 inline-block shadow-inner">
                   <QRCodeSVG
                     id="qr-svg-preview-table"
-                    value={`${window.location.origin}/?table=${encodeURIComponent(previewQRTable.number)}`}
+                    value={getTableQrUrl(previewQRTable.number)}
                     size={170}
                     level="H"
                     includeMargin={true}
@@ -1493,13 +1524,10 @@ export default function TablesView({
                   <p className="text-xs font-black text-orange-600">
                     Scan to View Menu, Order & Pay
                   </p>
-                  <div className="text-[10px] font-mono text-slate-400">
-                    Wi-Fi: <span className="font-bold text-slate-600">Atmiya_Guest</span> | Pass: <span className="font-bold text-slate-600">delicious123</span>
-                  </div>
                 </div>
 
                 <div className="text-[9px] font-bold text-slate-400 pt-2 border-t border-slate-100">
-                  Powered by Appwrite Real-Time Cloud
+                  Pure Veg Kitchen • Clean & Hygienic
                 </div>
               </div>
             </div>
@@ -1516,14 +1544,14 @@ export default function TablesView({
 
               <button
                 onClick={() => window.print()}
-                className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs shadow flex items-center justify-center space-x-1.5 transition"
+                className="px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 font-bold text-xs shadow-xs flex items-center justify-center space-x-1.5 transition cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" />
                 <span>Print Standee</span>
               </button>
 
               <button
-                onClick={() => handleCopyLink(`${window.location.origin}/?table=${previewQRTable.number}`)}
+                onClick={() => handleCopyLink(getTableQrUrl(previewQRTable.number))}
                 className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1.5 transition"
               >
                 {copiedUrl ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
@@ -1531,7 +1559,7 @@ export default function TablesView({
               </button>
 
               <a
-                href={`${window.location.origin}/?table=${previewQRTable.number}`}
+                href={getTableQrUrl(previewQRTable.number)}
                 target="_blank"
                 rel="noreferrer"
                 className="px-3 py-2 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-700 font-bold text-xs flex items-center justify-center space-x-1.5 border border-orange-200 transition"
@@ -1540,6 +1568,112 @@ export default function TablesView({
                 <span>Test Live Menu</span>
               </a>
             </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* 2-STEP CONFIRMATION MODAL: CASH RECEIVED & VACATE TABLE */}
+      {vacateConfirmState && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full border-2 border-slate-200 shadow-2xl space-y-4 text-center">
+            
+            {vacateConfirmState.step === 1 ? (
+              <>
+                <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto text-2xl shadow-xs">
+                  💵
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-900 border border-amber-300">
+                    Step 1 of 2 • Cash Verification
+                  </span>
+                  <h3 className="text-base font-black text-slate-900 font-heading">
+                    Did you receive the cash?
+                  </h3>
+                  <p className="text-xs text-slate-600">
+                    Table <strong>{vacateConfirmState.table?.number}</strong> bill balance:
+                  </p>
+                  <div className="text-3xl font-black font-mono text-emerald-700 py-1">
+                    ₹{vacateConfirmState.amount}
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Please confirm that the guest has finished dining and the cash amount has been handed over.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setVacateConfirmState(null)}
+                    className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                  >
+                    Not Yet / Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVacateConfirmState(prev => ({ ...prev, step: 2 }))}
+                    className="py-2.5 px-3 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-xs shadow-xs transition flex items-center justify-center space-x-1 cursor-pointer"
+                  >
+                    <span>Yes, Cash Received</span>
+                    <span>→</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-2xl shadow-xs">
+                  ⚡
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-900 border border-emerald-300">
+                    Step 2 of 2 • Final Confirmation
+                  </span>
+                  <h3 className="text-base font-black text-slate-900 font-heading">
+                    Double Check: Settle & Vacate?
+                  </h3>
+                  <p className="text-xs text-slate-600">
+                    Are you 100% sure you received <strong>₹{vacateConfirmState.amount} in cash</strong>?
+                  </p>
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-left text-[11px] text-slate-700 space-y-1.5">
+                    <div className="flex items-center space-x-2 text-emerald-800 font-bold">
+                      <span className="text-emerald-600 font-black">✓</span>
+                      <span>Orders marked COMPLETED & PAID</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-emerald-800 font-bold">
+                      <span className="text-emerald-600 font-black">✓</span>
+                      <span>Remove all holds from orders and KDS</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-emerald-800 font-bold">
+                      <span className="text-emerald-600 font-black">✓</span>
+                      <span>Remove hold from Table {vacateConfirmState.table?.number} & mark VACANT</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-emerald-800 font-bold">
+                      <span className="text-emerald-600 font-black">✓</span>
+                      <span>🧹 Auto-dispatch cleaning alert to floor waiters</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setVacateConfirmState(null)}
+                    className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                  >
+                    Back / Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExecuteVacate}
+                    className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/30 transition flex items-center justify-center space-x-1 cursor-pointer"
+                  >
+                    <span>✓ Confirm & Vacate</span>
+                  </button>
+                </div>
+              </>
+            )}
 
           </div>
         </div>

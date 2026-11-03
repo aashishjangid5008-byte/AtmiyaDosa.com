@@ -31,7 +31,7 @@ export default function QuickPosModal({
   onClose, 
   currentStaff = { name: 'Darshit Rana', role: 'Admin' } 
 }) {
-  const [selectedChannel, setSelectedChannel] = useState('Dine-In'); // 'Dine-In', 'Takeaway', 'Delivery'
+  const [selectedChannel, setSelectedChannel] = useState('Dine-In'); // 'Dine-In' or 'Takeaway'
   const [selectedTable, setSelectedTable] = useState('T01');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -43,7 +43,7 @@ export default function QuickPosModal({
   const [cart, setCart] = useState([]);
   const [promoCode, setPromoCode] = useState('');
   const [appliedDiscount, setAppliedDiscount] = useState(0);
-  const [paymentMode, setPaymentMode] = useState('UPI');
+  const [paymentMode, setPaymentMode] = useState('Cash');
   const [splitCount, setSplitCount] = useState(1);
   const [showSplitDrawer, setShowSplitDrawer] = useState(false);
 
@@ -186,33 +186,33 @@ export default function QuickPosModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
       <div className="bg-white rounded-3xl max-w-6xl w-full h-[94vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200">
         
         {/* Top Header */}
-        <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+        <div className="px-6 py-4 bg-white text-slate-900 flex items-center justify-between border-b border-slate-200">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-orange-500 text-white flex items-center justify-center font-heading shadow-md">
+            <div className="w-10 h-10 rounded-2xl bg-orange-500 text-white flex items-center justify-center font-heading shadow-md shadow-orange-500/20">
               <ShoppingBag className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h2 className="text-lg font-black font-heading text-white tracking-tight">
+                <h2 className="text-lg font-black font-heading text-slate-900 tracking-tight">
                   ⚡ Rapid Counter POS & Order Punch
                 </h2>
-                <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-mono text-[10px] font-bold border border-orange-500/30">
+                <span className="px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 font-mono text-[10px] font-bold border border-orange-200">
                   CASHIER DESK
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">
-                Staff: <span className="text-white font-bold">{currentStaff.name}</span> ({currentStaff.role})
+              <p className="text-[11px] text-slate-500 font-medium">
+                Staff: <span className="text-slate-900 font-bold">{currentStaff.name}</span> ({currentStaff.role})
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+            className="p-2 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -227,7 +227,7 @@ export default function QuickPosModal({
             {/* Channel & Table Selector Bar */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm">
               <div className="flex items-center space-x-1.5 p-1 rounded-xl bg-slate-100 text-xs font-bold">
-                {['Dine-In', 'Takeaway', 'Delivery'].map(ch => (
+                {['Dine-In', 'Takeaway'].map(ch => (
                   <button
                     key={ch}
                     onClick={() => setSelectedChannel(ch)}
@@ -343,8 +343,8 @@ export default function QuickPosModal({
                     onClick={() => setSelectedCategory(cat)}
                     className={`px-3 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap transition ${
                       selectedCategory === cat 
-                        ? 'bg-slate-900 text-white shadow-sm font-black' 
-                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                        ? 'bg-orange-500 text-white shadow-sm font-black shadow-orange-500/20' 
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
                     }`}
                   >
                     {cat}
@@ -354,7 +354,7 @@ export default function QuickPosModal({
             </div>
 
             {/* Dish Touch Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 flex-1 overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 flex-1 overflow-y-auto pr-1">
               {filteredDishes.map(dish => {
                 const currentPrice = dish.finalPrice || dish.price;
                 return (
@@ -506,22 +506,6 @@ export default function QuickPosModal({
             {/* Calculations & Payment Controls */}
             <div className="space-y-3 pt-3 border-t border-slate-200">
               
-              {/* Promo code input */}
-              <div className="flex items-center space-x-2">
-                <input
-                  type="text"
-                  placeholder="Coupon Code"
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value)}
-                  className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-mono font-bold uppercase focus:outline-none focus:border-orange-500"
-                />
-                <button
-                  onClick={handleApplyPromo}
-                  className="px-3 py-1.5 rounded-xl bg-slate-900 text-white font-bold text-xs"
-                >
-                  Apply
-                </button>
-              </div>
 
               {/* Bill Breakdown */}
               <div className="space-y-1 text-xs text-slate-600 font-mono">
@@ -545,21 +529,17 @@ export default function QuickPosModal({
                 </div>
               </div>
 
-              {/* Payment Mode Selector */}
-              <div className="grid grid-cols-3 gap-2 pt-1">
-                {['UPI', 'Cash', 'Card'].map(m => (
-                  <button
-                    key={m}
-                    onClick={() => setPaymentMode(m)}
-                    className={`py-2 rounded-xl text-xs font-bold transition text-center border ${
-                      paymentMode === m 
-                        ? 'bg-orange-500 text-white border-orange-600 shadow' 
-                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    {m}
-                  </button>
-                ))}
+              {/* Payment Mode Selector - Pure Cash / COD */}
+              <div className="pt-1">
+                <div className="py-2.5 px-3 rounded-xl text-xs font-bold bg-amber-50 text-amber-900 border border-amber-300 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <span>💵</span>
+                    <span>Cash on Delivery / Counter (COD)</span>
+                  </span>
+                  <span className="text-[10px] bg-amber-200/80 text-amber-950 px-2 py-0.5 rounded-md font-black">
+                    Selected
+                  </span>
+                </div>
               </div>
 
               {/* Fire KOT Action Button */}

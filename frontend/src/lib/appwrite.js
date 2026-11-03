@@ -7,23 +7,24 @@ export { supabase, RESTAURANT_ID };
 // LocalStorage Persistence Layer with Real-Time Event Dispatching
 export const getLocalStore = (key, fallback) => {
   try {
-    const item = localStorage.getItem(`restaurant_${key}`);
-    if (!item) return fallback;
-    const parsed = JSON.parse(item);
-    // Ensure authentic menu items (ATM0001 - ATM0177) with strictly NO images as requested
+    const raw = localStorage.getItem(`restaurant_${key}`) || localStorage.getItem(`atmiya_${key}`);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
     if (key === 'menu_items' && Array.isArray(parsed)) {
-      if (parsed.length === 0 || !parsed.some(d => d.id && d.id.startsWith('ATM'))) {
-        return fallback;
-      }
-      return parsed.map(dish => ({
-        ...dish,
-        image_url: null
-      }));
+      if (parsed.length === 0) return fallback;
+      return parsed.map(dish => {
+        const photo = dish.image_url || dish.imageUrl || dish.image || dish.photo || null;
+        return {
+          ...dish,
+          image_url: photo,
+          imageUrl: photo,
+          image: photo,
+          photo: photo
+        };
+      });
     }
     if (key === 'categories' && Array.isArray(parsed)) {
-      if (parsed.length === 0 || !parsed.some(c => c.name === 'Plain Paper Dosa')) {
-        return fallback;
-      }
+      if (parsed.length === 0) return fallback;
     }
     return parsed;
   } catch (e) {
@@ -34,8 +35,11 @@ export const getLocalStore = (key, fallback) => {
 
 export const setLocalStore = (key, value) => {
   try {
-    localStorage.setItem(`restaurant_${key}`, JSON.stringify(value));
+    const serialized = JSON.stringify(value);
+    localStorage.setItem(`restaurant_${key}`, serialized);
+    localStorage.setItem(`atmiya_${key}`, serialized);
     window.dispatchEvent(new Event('restaurant_data_updated'));
+    window.dispatchEvent(new Event('atmiya_data_updated'));
   } catch (e) {
     console.error('Storage Write Error:', e);
   }
@@ -118,8 +122,27 @@ export const setAuthUser = (user) => {
 };
 
 export const logoutAuthUser = () => {
-  localStorage.removeItem('restaurant_auth_user');
-  window.dispatchEvent(new Event('restaurant_data_updated'));
+  try {
+    localStorage.removeItem('restaurant_auth_user');
+    localStorage.removeItem('atmiya_auth_user');
+    localStorage.removeItem('auth_user');
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('atmiya_auth_token');
+    sessionStorage.removeItem('restaurant_auth_user');
+    sessionStorage.removeItem('atmiya_auth_user');
+    sessionStorage.removeItem('auth_user');
+    sessionStorage.removeItem('auth_token');
+    sessionStorage.removeItem('atmiya_auth_token');
+    sessionStorage.removeItem('atmiya_customer_mode');
+    sessionStorage.removeItem('atmiya_bound_table');
+    sessionStorage.removeItem('atmiya_seen_landing');
+  } catch (e) {
+    console.error('Logout Storage Cleanup Error:', e);
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('restaurant_data_updated'));
+    window.dispatchEvent(new Event('atmiya_data_updated'));
+  }
 };
 
 // Real Atmiya Dosa Hub Settings from Uploaded Menu
@@ -131,7 +154,10 @@ export const INITIAL_SETTINGS = {
   gstin: "24AAACA1234A1Z5",
   currency: "₹",
   language: "en",
-  instagram: "@ATMIYA_DOSA_HUB"
+  instagram: "@ATMIYA_DOSA_HUB",
+  upiId: "ranadarshit99@okicici",
+  payeeName: "darshit rana",
+  productionDomain: ""
 };
 
 export const INITIAL_TABLES = Array.from({ length: 16 }, (_, i) => {
@@ -181,30 +207,96 @@ export const INITIAL_ACTIVITY = [];
 export const INITIAL_EMPLOYEES = [
   { id: 'emp1', name: 'Darshit Rana', username: 'admin', role: 'Admin / Owner', password: 'password123', phone: '+91 63530 59221', shift: 'Full Day', active: true, createdAt: '2026-09-01' },
   { id: 'emp2', name: 'Amit Kumar', username: 'chef_amit', role: 'Head Chef', password: 'password123', phone: '+91 97123 45678', shift: 'Morning Shift', active: true, createdAt: '2026-09-10' },
-  { id: 'emp3', name: 'Riya Patel', username: 'waiter_riya', role: 'Senior Waiter', password: 'password123', phone: '+91 99245 67890', shift: 'Morning Shift', active: true, createdAt: '2026-09-15' },
+  { id: 'emp3', waiter_id: 'WTR-101', name: 'Riya Patel', username: 'waiter_riya', role: 'Waiter', password: 'password123', pin: '1001', phone: '+91 99245 67890', shift: 'Morning Shift', active: true, createdAt: '2026-09-15' },
+  { id: 'emp3_b', waiter_id: 'WTR-102', name: 'Rajesh Kumar', username: 'waiter_rajesh', role: 'Waiter', password: 'password123', pin: '1002', phone: '+91 98251 22334', shift: 'Evening Shift', active: true, createdAt: '2026-09-20' },
+  { id: 'emp3_c', waiter_id: 'WTR-103', name: 'Vikram Shah', username: 'waiter_vikram', role: 'Waiter', password: 'password123', pin: '1003', phone: '+91 97140 44556', shift: 'Full Day', active: true, createdAt: '2026-10-02' },
   { id: 'emp4', name: 'Anjali Patel', username: 'cashier_anjali', role: 'Cashier & POS Lead', password: 'password123', phone: '+91 98980 11223', shift: 'Evening Shift', active: true, createdAt: '2026-10-01' },
   { id: 'emp5', name: 'Rohan Verma', username: 'kitchen_rohan', role: 'Kitchen Helper', password: 'password123', phone: '+91 98220 55667', shift: 'Evening Shift', active: true, createdAt: '2026-10-05' }
 ];
 
-// Coupons (Section 5 of Admin.txt)
+// Coupons & Promotional Discounts (Section 5 of Admin.txt & Hotel Promotions)
 export const INITIAL_COUPONS = [
-  { id: 'c1', code: 'WELCOME50', discount: 50, type: 'flat', min_order: 250, active: true },
-  { id: 'c2', code: 'DOSA20', discount: 20, type: 'percentage', min_order: 300, active: true },
-  { id: 'c3', code: 'FESTIVE100', discount: 100, type: 'flat', min_order: 500, active: true }
+  {
+    id: 'c_bogo_dosa',
+    code: 'DOSABOGO',
+    title: 'Buy 2 Dosa & Get 1 Free',
+    description: 'Order any 2 Dosas and get 1 Dosa free! Lowest priced Dosa is on the house.',
+    type: 'bogo',
+    target_category: 'Dosa',
+    buy_qty: 2,
+    get_qty: 1,
+    discount: 0,
+    min_order: 130,
+    active: true,
+    badgeText: '🔥 Buy 2 Get 1 Free',
+    famousPreset: 'bogo'
+  },
+  {
+    id: 'c_flat_20',
+    code: 'ATMIYA20',
+    title: 'Flat 20% Off Feast',
+    description: 'Get 20% off on all dine-in orders above ₹399. Max discount ₹100.',
+    type: 'percentage',
+    discount: 20,
+    max_discount: 100,
+    min_order: 399,
+    active: true,
+    badgeText: '⚡ 20% OFF',
+    famousPreset: 'percentage'
+  },
+  {
+    id: 'c_welcome_50',
+    code: 'WELCOME50',
+    title: 'Welcome ₹50 Off First Dine-In',
+    description: 'Flat ₹50 instant discount on table bills above ₹250.',
+    type: 'flat',
+    discount: 50,
+    min_order: 250,
+    active: true,
+    badgeText: '💰 Flat ₹50 OFF',
+    famousPreset: 'flat'
+  },
+  {
+    id: 'c_free_chaas',
+    code: 'FREECHAAS',
+    title: 'Free Masala Chaas on Bills > ₹250',
+    description: 'Enjoy a chilled glass of Amul Masala Chaas free on orders above ₹250.',
+    type: 'free_item',
+    free_item_name: 'Amul Masala Chaas',
+    free_item_value: 20,
+    discount: 20,
+    min_order: 250,
+    active: true,
+    badgeText: '🥤 Free Chaas',
+    famousPreset: 'free_item'
+  },
+  {
+    id: 'c_pav_20',
+    code: 'PAV20',
+    title: 'Pav Bhaji & Pulao Special 20% Off',
+    description: '20% off on all Pav Bhaji, Cheese Pav Bhaji, and Pulao items.',
+    type: 'category',
+    target_category: 'Pav Bhaji & Pulao',
+    discount: 20,
+    min_order: 120,
+    active: true,
+    badgeText: '🍛 20% Off Pav Bhaji',
+    famousPreset: 'category'
+  },
+  {
+    id: 'c_festive_100',
+    code: 'FESTIVE100',
+    title: 'Family Feast ₹100 Off',
+    description: 'Flat ₹100 off on large family table dining orders above ₹500.',
+    type: 'flat',
+    discount: 100,
+    min_order: 500,
+    active: true,
+    badgeText: '🎉 Flat ₹100 OFF',
+    famousPreset: 'flat'
+  }
 ];
 
-// Raw Ingredients & Inventory Stock Control (Enterprise Feature)
-export const INITIAL_INVENTORY = [
-  { id: 'inv_1', name: 'Special Dosa Batter', category: 'Raw Batter', currentStock: 18, unit: 'kg', minThreshold: 8, costPerUnit: 45, supplier: 'Atmiya Central Prep' },
-  { id: 'inv_2', name: 'Amul Salted Butter', category: 'Dairy & Fats', currentStock: 24, unit: 'blocks (500g)', minThreshold: 10, costPerUnit: 275, supplier: 'Amul Authorized Distributor' },
-  { id: 'inv_3', name: 'Amul Processed Cheese', category: 'Dairy & Fats', currentStock: 12, unit: 'tins (1kg)', minThreshold: 5, costPerUnit: 520, supplier: 'Amul Authorized Distributor' },
-  { id: 'inv_4', name: 'Fresh Malai Paneer', category: 'Dairy & Fats', currentStock: 6.5, unit: 'kg', minThreshold: 4, costPerUnit: 340, supplier: 'Local Anand Dairy' },
-  { id: 'inv_5', name: 'Pav Bread Fresh Loaves', category: 'Bakery', currentStock: 45, unit: 'packets', minThreshold: 20, costPerUnit: 25, supplier: 'Petlad Bakery Express' },
-  { id: 'inv_6', name: 'Fresh Potatoes (Boiled)', category: 'Vegetables', currentStock: 28, unit: 'kg', minThreshold: 12, costPerUnit: 22, supplier: 'Petlad APMC Mandi' },
-  { id: 'inv_7', name: 'Mysore Red Chilli Paste', category: 'Spices & Chutneys', currentStock: 4.2, unit: 'kg', minThreshold: 3, costPerUnit: 180, supplier: 'House Made' },
-  { id: 'inv_8', name: 'Fresh Coconut Chutney', category: 'Chutneys', currentStock: 9, unit: 'liters', minThreshold: 4, costPerUnit: 60, supplier: 'House Daily Grind' },
-  { id: 'inv_9', name: 'Toor Dal Sambhar Base', category: 'Gravies', currentStock: 15, unit: 'liters', minThreshold: 6, costPerUnit: 55, supplier: 'Kitchen Base Batch' }
-];
 
 // Live Table Service Requests (Cleaned of demo requests)
 export const INITIAL_SERVICE_CALLS = [];

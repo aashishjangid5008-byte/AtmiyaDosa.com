@@ -5,7 +5,13 @@ from app.config import settings
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
-    Enterprise-grade security headers middleware equivalent to Helmet.js
+    Enterprise-grade HTTP security headers middleware (Helmet equivalent):
+    - Strict Content Security Policy
+    - MIME type sniffing prevention (X-Content-Type-Options: nosniff)
+    - Clickjacking protection (X-Frame-Options: DENY)
+    - HSTS for production HTTPS
+    - Referrer & Permissions isolation
+    - Conceal backend framework identifiers
     """
     async def dispatch(self, request: Request, call_next):
         response: Response = await call_next(request)
@@ -19,24 +25,45 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # 3. Restrict browser referrers
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
-        # 4. Strict Content Security Policy
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-            "font-src 'self' https://fonts.gstatic.com; "
-            "img-src 'self' data: https: blob:; "
-            "connect-src 'self' https://cloud.appwrite.io http://localhost:* https://*; "
-            "frame-ancestors 'none';"
+        # 4. Device and Hardware Isolation Policy
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=(), usb=(), interest-cohort=()"
         )
 
-        # 5. Enforce HSTS (Strict-Transport-Security) in production
+        # 5. Isolation from external window contexts
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
+        response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
+
+        # 6. Content Security Policy (Allows Swagger UI & APIs)
+        if request.url.path.startswith("/docs") or request.url.path.startswith("/redoc"):
+            # Permissive CSP for OpenAPI documentation pages
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+                "font-src 'self' https://fonts.gstatic.com; "
+                "img-src 'self' data: https: blob:; "
+                "frame-ancestors 'none';"
+            )
+        else:
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "font-src 'self' https://fonts.gstatic.com; "
+                "img-src 'self' data: https: blob:; "
+                "connect-src 'self' https://* http://* wss://* ws://*; "
+                "frame-ancestors 'none';"
+            )
+
+        # 7. Strict-Transport-Security (HSTS) in production
         if settings.is_production:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
 
-        # 6. Hide server backend technologies
+        # 8. Strip revealing server fingerprint headers
         if "server" in response.headers:
             del response.headers["server"]
-        response.headers["X-Powered-By"] = "Atmiya-Shield-FastAPI"
+        if "x-powered-by" in response.headers:
+            del response.headers["x-powered-by"]
 
         return response

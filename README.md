@@ -1,105 +1,137 @@
-# 🍽️ Restaurant POS & Smart QR Ordering Suite
+# Atmiya Dosa Hub — Pure Veg Restaurant POS & Touchless QR Ordering System
 
-An enterprise-grade, modern Restaurant Management System, Kitchen Display System (KDS), and touchless Table QR Ordering Portal. Built with **React 18**, **Vite**, **Tailwind CSS**, and **Appwrite Cloud**.
+> **Enterprise-Grade, Multi-Tenant Ready Restaurant ERP & Touchless Dining Platform**  
+> Built with **React 18**, **FastAPI (Python 3.11)**, **Supabase PostgreSQL (Realtime RLS)**, and **Tailwind CSS**. Optimized for containerized zero-downtime deployment on **Google Cloud Run**.
 
 ---
 
-## 📁 Senior-Level Folder Structure
+## 🌟 System Overview
+
+**Atmiya Dosa Hub** is a full-stack, real-time restaurant management solution engineered for high-throughput Indian dining operations. It eliminates order bottlenecks by giving guests touchless QR table ordering with zero login barrier, while providing staff with specialized real-time terminals (Kitchen KDS, Floor Waiter Terminal, Cashier POS, and Executive Analytics).
+
+---
+
+## 🚀 Core Modules & Architecture
+
+### 1. Touchless QR Dining Menu (Customer Experience)
+- **Zero-Barrier Ordering**: Guests scan table QR standees to instantly open the interactive menu in Gujarati, Hindi, or English.
+- **Deterministic Anti-Tamper Security**: Cryptographic URL verification (`&tsec=...`) binds the session to the physical dining table, strictly preventing URL table hijacking (`?table=T01` vs `?table=T02`).
+- **Multi-Round Running Bill**: Guests can add starters, main courses, and beverages across multiple dining rounds into a unified running ticket.
+- **Instant Floor Calls**: 1-tap service requests for Water Refill, Waiter Assistance, Bill Request, and Table Cleaning.
+- **UPI QR Direct Payment**: Dynamic UPI deep-linking supporting Google Pay, PhonePe, and Paytm with zero payment gateway transaction fees.
+
+### 2. Kitchen Display System (KDS)
+- **Real-Time Dish Dispatch**: Orders dispatch instantly to the kitchen queue via Supabase Realtime broadcast websockets.
+- **Item-Level Status Tracking**: Chefs mark individual items as *Cooking*, *Ready*, or *Served*.
+- **Visual Station Timers**: Color-coded urgency alerts for orders exceeding target preparation times.
+- **Audio Chimes**: High-clarity chime alerts for incoming orders and critical updates.
+
+### 3. Floor Service & Waiter Terminal
+- **Visual Floor Map**: Live 16-table dining floor status (*Available*, *Occupied*, *Food Ready*, *Bill Due*, *Cleaning Needed*).
+- **Food Runner Alerts**: Waiters receive immediate notifications the moment dishes are plated and ready at the kitchen pass.
+- **Floor Call Dispatch**: Sound-alerted queues for guest water refills and concierge assistance with 1-tap "Attend" resolution.
+
+### 4. Cashier POS & Table Operations
+- **Quick POS Terminal**: Walk-in and phone takeaway order entry with instant item search and custom notes.
+- **Table Turnover & Vacate Engine**: 1-tap table settlement and vacate workflow that automatically dispatches cleaning alerts to floor staff.
+- **Shift & Day Settlement (Z-Report)**: Automated end-of-day statutory GST financial auditing.
+- **Direct Thermal & Audit Downloads**: Direct PDF generation for 80mm thermal receipts and A4 GST audit ledgers, plus Excel-ready CSV export.
+
+---
+
+## 🛠️ Technology Stack
+
+| Layer | Technologies |
+| :--- | :--- |
+| **Frontend** | React 18, Vite, Tailwind CSS, Lucide React, KaTeX, jsPDF, html2canvas |
+| **Backend API** | FastAPI (Python 3.11), Pydantic v2, Uvicorn, SlowAPI (Rate Limiting) |
+| **Database & Realtime** | Supabase PostgreSQL, Row-Level Security (RLS), Realtime Broadcast Channels |
+| **Container & Cloud** | Docker, Nginx Alpine, Google Cloud Run (Continuous Deployment) |
+| **Security** | Stateless JWT tokens, XSS payload sanitization, brute-force PIN lockout, Anti-tamper table salts |
+
+---
+
+## 📁 Repository Structure
 
 ```
-HOTEL MANAGE MENT/
+├── backend/                  # FastAPI Python Backend
+│   ├── app/
+│   │   ├── middleware/       # Rate limiting, security headers, payload validation
+│   │   ├── routers/          # API endpoints (orders, menu, tables, qr, auth, payments)
+│   │   ├── schemas/          # Pydantic v2 data validation models
+│   │   ├── database.py       # Canonical datastore & Supabase sync layer
+│   │   └── security.py       # Password hashing, JWT creation & verification
+│   ├── Dockerfile            # Container definition for backend API
+│   ├── requirements.txt      # Python dependencies
+│   └── run.py                # Local API entrypoint (Port 5000)
 │
-├── frontend/                      # React 18 + Vite Frontend Application
-│   ├── public/                    # Static favicon and assets
+├── frontend/                 # React 18 + Vite SPA
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── admin/             # 10 Dedicated Restaurant Admin Modules
-│   │   │   │   ├── ExecutiveDashboard.jsx   # Exact match to reference UI (KPIs, Charts, Orders)
-│   │   │   │   ├── OrdersView.jsx           # Order audit, statuses, bill printing
-│   │   │   │   ├── KitchenPanelView.jsx     # Kitchen Display System (KDS) with audio chimes
-│   │   │   │   ├── TablesView.jsx           # Visual table occupancy & zones
-│   │   │   │   ├── MenuManagementView.jsx   # Recipe catalog & dish image uploader
-│   │   │   │   ├── EmployeesView.jsx        # Staff roster & shifts
-│   │   │   │   ├── ReportsAnalytics.jsx     # Daily sales & 5% GST tax audit ledger
-│   │   │   │   ├── OffersView.jsx           # Promo discount coupon engine
-│   │   │   │   ├── QRManagementView.jsx     # Scannable QR code generator & acrylic standee
-│   │   │   │   ├── SettingsView.jsx         # Universal restaurant profile settings
-│   │   │   │   └── PetpoojaSync.jsx         # Aggregator POS integration (Zomato/Swiggy)
-│   │   │   ├── auth/
-│   │   │   │   └── AuthPage.jsx             # Staff Login & Sign Up Gate
-│   │   │   └── CustomerMenu.jsx             # Mobile touchless ordering menu (Bypasses Login)
-│   │   ├── lib/
-│   │   │   ├── appwrite.js        # Appwrite Cloud SDK & state persistence layer
-│   │   │   ├── translations.js    # 4-Language Translation (EN, HI, GU, Hinglish)
-│   │   │   └── sound.js           # Web Audio API KOT chime synthesizer
-│   │   ├── App.jsx                # Application Master Router
-│   │   ├── index.css              # Custom styling, print format & fonts
-│   │   └── main.jsx               # React DOM Entry
-│   ├── index.html                 # HTML entry with Outfit & Inter fonts
-│   ├── package.json               # Frontend dependencies
-│   ├── vite.config.js             # Vite configuration
-│   └── .env.example               # Frontend environment template
+│   │   │   ├── admin/        # Dashboard, Orders, KDS, POS, Reports, QR Studio
+│   │   │   ├── waiter/       # Waiter Terminal & Floor Service Map
+│   │   │   ├── auth/         # Secure Staff Login & Role Wall
+│   │   │   └── CustomerMenu.jsx # Guest touchless menu & ordering interface
+│   │   ├── lib/              # Security, Supabase, PDF generation, sounds, translations
+│   │   └── App.jsx           # Root orchestrator & routing layer
+│   ├── Dockerfile            # Multi-stage production container with Nginx
+│   ├── nginx.conf            # Single-page application routing & gzip compression
+│   └── package.json          # Node dependencies & Vite build scripts
 │
-├── backend/                       # Appwrite Cloud Integration & Server Services
-│   ├── collections/               # Appwrite Database Collection Schemas (JSON)
-│   │   ├── tables.json
-│   │   ├── categories.json
-│   │   ├── menu_items.json
-│   │   ├── orders.json
-│   │   ├── employees.json
-│   │   └── settings.json
-│   ├── scripts/
-│   │   ├── test_connection.js     # Health check & Appwrite Cloud ping script
-│   │   └── seed_database.js       # Database seeder utility
-│   ├── server.js                  # Express API & Petpooja webhook receiver
-│   ├── package.json               # Backend dependencies
-│   ├── .env.example               # Backend environment template
-│   └── README.md                  # Backend documentation
-│
-├── .gitignore                     # Git ignore rules
-├── package.json                   # Root monorepo workspace scripts
-└── README.md                      # Complete Project Documentation
+├── Dockerfile                # Root unified container definition for Google Cloud Run
+└── README.md                 # System documentation
 ```
 
 ---
 
-## 🚀 Quick Start Guide
+## 💻 Local Development Setup
 
-### 1. Run the Frontend (POS & Guest Menu)
+### Prerequisites
+- Node.js 18+ and npm
+- Python 3.11+
+- Git
+
+### 1. Backend Setup
 ```bash
-# From root directory:
-npm run dev
+cd backend
+python -m venv .venv
+# Windows:
+.\.venv\Scripts\activate
+# Linux/macOS:
+source .venv/bin/activate
 
-# Or directly inside frontend/:
+pip install -r requirements.txt
+python run.py
+# Backend runs on http://localhost:5000 (Swagger docs at /docs)
+```
+
+### 2. Frontend Setup
+```bash
 cd frontend
+npm install
 npm run dev
-```
-Open **`http://localhost:5173/`** in your browser.
-
-### 2. Test Customer QR Ordering (Bypasses Login Wall)
-Open with any table query parameter:
-```
-http://localhost:5173/?table=T04
-```
-
-### 3. Run Backend Services (Optional)
-```bash
-npm run backend
+# Frontend runs on http://localhost:5173
 ```
 
 ---
 
-## 🌐 4-Language System
-Toggle instantly between:
-1. 🇬🇧 **English**
-2. 🇮🇳 **हिन्दी (Hindi)**
-3. 🇮🇳 **ગુજરાતી (Gujarati)**
-4. 🇮🇳 **Hinglish** (e.g. *"Aaj ke Orders"*, *"Khana Taiyar Hai"*)
+## ☁️ Production Deployment (Google Cloud Run)
+
+### Continuous Deployment via GitHub:
+1. Push repository changes to `main`:
+   ```bash
+   git add -A
+   git commit -m "feat(core): production release v2.0"
+   git push origin main
+   ```
+2. In **Google Cloud Console** > **Cloud Run**:
+   - Create Service > Select **Continuously deploy from a repository**.
+   - Select `AtmiyaDosa.com` repository and `main` branch.
+   - Region: `asia-south1` (Mumbai).
+   - Allow unauthenticated invocations for public customer QR ordering.
+   - Google Cloud Build will automatically build and deploy with zero downtime.
 
 ---
 
-## ☁️ Deployment Instructions (GitHub + Vercel)
-1. Push this repository to GitHub.
-2. In Vercel or Netlify, select your repo.
-3. Set **Root Directory** to `frontend`.
-4. Deploy! All QR codes dynamically adapt to your live domain via `window.location.origin`.
+## 📄 License
+Proprietary software developed for **Atmiya Dosa Hub**. All rights reserved.

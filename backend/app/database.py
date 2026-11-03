@@ -326,6 +326,34 @@ try:
 except Exception as _ex:
     print(f"Warning: could not load authentic_menu_data.json: {_ex}")
 
+CUSTOM_MENU_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "custom_menu.json"))
+
+def save_custom_menu():
+    """Persist all custom created and updated menu items with their photos to disk."""
+    try:
+        os.makedirs(os.path.dirname(CUSTOM_MENU_FILE), exist_ok=True)
+        with open(CUSTOM_MENU_FILE, "w", encoding="utf-8") as f:
+            json.dump(CANONICAL_MENU, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Notice: Failed to persist custom menu to disk: {e}")
+
+def load_custom_menu():
+    """Load previously saved custom menu items and photos into memory."""
+    try:
+        if os.path.exists(CUSTOM_MENU_FILE):
+            with open(CUSTOM_MENU_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    for k, v in data.items():
+                        CANONICAL_MENU[k] = v
+            print(f"[MENU PERSISTENCE] Loaded {len(CANONICAL_MENU)} items (including custom items/photos) from disk.")
+    except Exception as e:
+        print(f"Notice: Failed to load custom menu: {e}")
+
+# Load custom items on startup
+load_custom_menu()
+
+
 CANONICAL_CATEGORIES = [
     {"id": "cat_mysore", "name": "Mysore Dosa", "icon": "Flame"},
     {"id": "cat_fancy", "name": "Fancy Dosa", "icon": "Sparkles"},
@@ -360,107 +388,184 @@ CANONICAL_TABLES: Dict[str, Dict[str, Any]] = {
         "number": f"T{i:02d}",
         "capacity": 4 if i <= 10 else (6 if i <= 14 else 8),
         "zone": "Main Hall" if i <= 6 else ("AC Section" if i <= 10 else ("Patio Garden" if i <= 13 else "Family Section")),
-        "status": "occupied" if i in [2, 4, 7] else "available",
-        "current_order_id": "#ORD1048" if i == 4 else None,
-        "timing": "18m" if i == 4 else (None if i not in [2, 7] else "12m")
+        "status": "available",
+        "current_order_id": None,
+        "timing": None
     }
     for i in range(1, 17)
 }
 
-# Initial Orders
-CANONICAL_ORDERS: List[Dict[str, Any]] = [
-    {
-        "id": "#ORD1048",
-        "table_number": "T04",
-        "customer_name": "Rahul Sharma",
-        "items": [
-            {"id": "item_atmiya_01", "name": "Mysore Masala Dosa", "price": 130.0, "qty": 2, "line_total": 260.0, "notes": "Medium spicy"},
-            {"id": "item_atmiya_22", "name": "Cold Drink", "price": 40.0, "qty": 1, "line_total": 40.0, "notes": "Chilled"}
-        ],
-        "items_summary": "2x Mysore Masala, 1x Cold Drink",
-        "subtotal": 300.0,
-        "discount": 0.0,
-        "tax": 15.0,
-        "total_amount": 315.0,
-        "status": "Preparing",
-        "payment_mode": "UPI",
-        "payment_status": "Paid",
-        "placed_at": datetime.now(timezone.utc).isoformat(),
-        "estimated_time_mins": 15
-    },
-    {
-        "id": "#ORD1047",
-        "table_number": "T02",
-        "customer_name": "Priya Shah",
-        "items": [
-            {"id": "item_atmiya_06", "name": "Jini Roll Dosa", "price": 200.0, "qty": 1, "line_total": 200.0, "notes": "Jain preparation"},
-            {"id": "item_atmiya_15", "name": "Amul Butter Pav Bhaji", "price": 80.0, "qty": 1, "line_total": 80.0, "notes": "Extra butter"}
-        ],
-        "items_summary": "1x Jini Roll, 1x Amul Butter Pav Bhaji",
-        "subtotal": 280.0,
-        "discount": 0.0,
-        "tax": 14.0,
-        "total_amount": 294.0,
-        "status": "Cooking",
-        "payment_mode": "Cash",
-        "payment_status": "Pending",
-        "placed_at": datetime.now(timezone.utc).isoformat(),
-        "estimated_time_mins": 12
-    }
-]
+# Initial Orders (Clean start for live restaurant operations, persisted to disk)
+CANONICAL_ORDERS: List[Dict[str, Any]] = []
 
-# Initial Inventory
-CANONICAL_INVENTORY: Dict[str, Dict[str, Any]] = {
-    "inv_01": {"id": "inv_01", "name": "Dosa Batter (ખીરું)", "category": "Base Ingredients", "stock": 42.5, "unit": "kg", "threshold": 15.0, "cost_per_unit": 45.0, "supplier": "Fresh Daily Mills", "last_restocked": "Today 06:00 AM"},
-    "inv_02": {"id": "inv_02", "name": "Amul Butter (અમૂલ બટર)", "category": "Dairy", "stock": 8.0, "unit": "kg", "threshold": 5.0, "cost_per_unit": 540.0, "supplier": "Amul Parlour Petlad", "last_restocked": "Yesterday"},
-    "inv_03": {"id": "inv_03", "name": "Processed Cheese (ચીઝ)", "category": "Dairy", "stock": 3.2, "unit": "kg", "threshold": 4.0, "cost_per_unit": 480.0, "supplier": "Amul Parlour Petlad", "last_restocked": "2 days ago"},
-    "inv_04": {"id": "inv_04", "name": "Potatoes (બટાટા)", "category": "Vegetables", "stock": 35.0, "unit": "kg", "threshold": 10.0, "cost_per_unit": 25.0, "supplier": "Petlad Mandi", "last_restocked": "Today 07:00 AM"},
-    "inv_05": {"id": "inv_05", "name": "Tomatoes & Capsicum", "category": "Vegetables", "stock": 18.0, "unit": "kg", "threshold": 6.0, "cost_per_unit": 40.0, "supplier": "Petlad Mandi", "last_restocked": "Today 07:00 AM"},
-    "inv_06": {"id": "inv_06", "name": "Pav Buns (લાદી પાવ)", "category": "Bakery", "stock": 65.0, "unit": "pack", "threshold": 20.0, "cost_per_unit": 25.0, "supplier": "Surat Bakery", "last_restocked": "Today 06:30 AM"},
-    "inv_07": {"id": "inv_07", "name": "Mysore Special Masala", "category": "Spices", "stock": 6.5, "unit": "kg", "threshold": 2.0, "cost_per_unit": 350.0, "supplier": "House Blend", "last_restocked": "3 days ago"},
-    "inv_08": {"id": "inv_08", "name": "Sambhar Daal & Spices", "category": "Groceries", "stock": 25.0, "unit": "kg", "threshold": 8.0, "cost_per_unit": 160.0, "supplier": "Local Grain Store", "last_restocked": "This week"},
-    "inv_09": {"id": "inv_09", "name": "Cooking Oil (તેલ)", "category": "Oils", "stock": 28.0, "unit": "litres", "threshold": 10.0, "cost_per_unit": 140.0, "supplier": "Tirupati Oil Agency", "last_restocked": "Yesterday"}
-}
+ORDERS_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "orders.json"))
+
+def save_orders():
+    """Persist all live orders to disk so they survive backend restarts."""
+    try:
+        os.makedirs(os.path.dirname(ORDERS_FILE), exist_ok=True)
+        with open(ORDERS_FILE, "w", encoding="utf-8") as f:
+            json.dump(CANONICAL_ORDERS, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Notice: Failed to persist orders to disk: {e}")
+
+def load_orders():
+    """Load previously saved live orders from disk into CANONICAL_ORDERS."""
+    global CANONICAL_ORDERS
+    try:
+        if os.path.exists(ORDERS_FILE):
+            with open(ORDERS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    CANONICAL_ORDERS.clear()
+                    CANONICAL_ORDERS.extend(data)
+            print(f"[ORDERS PERSISTENCE] Loaded {len(CANONICAL_ORDERS)} orders from disk.")
+    except Exception as e:
+        print(f"Notice: Failed to load orders from disk: {e}")
+
+# Load orders on startup
+load_orders()
+
+
 
 # Pre-configured Staff credentials
 CANONICAL_STAFF: Dict[str, Dict[str, Any]] = {
     "admin": {
         "username": "admin",
+        "email": "ranadarshit99@gmail.com",
         "name": "Darshit Rana",
         "role": "Admin",
         "password_hash": "$2a$10$wEkgzJ9nQOwh6d203m0Q7u7Lw3mFqfN3/b3j62l4h6Z8s2M1v7zqu",  # admin123
         "phone": "+91 63530 59221",
         "shift": "Full Day",
-        "is_active": True
+        "is_active": True,
+        "is_primary_owner": True
     },
     "chef": {
         "username": "chef",
+        "email": "kitchen@atmiyadosa.com",
         "name": "Amit Kumar",
         "role": "Kitchen",
         "password_hash": "$2a$10$wEkgzJ9nQOwh6d203m0Q7u7Lw3mFqfN3/b3j62l4h6Z8s2M1v7zqu",
         "phone": "+91 98250 11223",
         "shift": "Kitchen Head",
-        "is_active": True
+        "is_active": True,
+        "is_primary_owner": False
     },
     "cashier": {
         "username": "cashier",
+        "email": "cashier@atmiyadosa.com",
         "name": "Anjali Patel",
         "role": "Cashier",
         "password_hash": "$2a$10$wEkgzJ9nQOwh6d203m0Q7u7Lw3mFqfN3/b3j62l4h6Z8s2M1v7zqu",
         "phone": "+91 97240 33445",
         "shift": "Evening",
-        "is_active": True
+        "is_active": True,
+        "is_primary_owner": False
     },
     "waiter": {
         "username": "waiter",
+        "email": "waiter@atmiyadosa.com",
         "name": "Riya Patel",
         "role": "Waiter",
+        "waiter_id": "WTR-101",
         "password_hash": "$2a$10$wEkgzJ9nQOwh6d203m0Q7u7Lw3mFqfN3/b3j62l4h6Z8s2M1v7zqu",
         "phone": "+91 94280 55667",
         "shift": "Morning",
-        "is_active": True
+        "is_active": True,
+        "is_primary_owner": False
+    },
+    "waiter_riya": {
+        "username": "waiter_riya",
+        "email": "riya@atmiyadosa.com",
+        "name": "Riya Patel",
+        "role": "Waiter",
+        "waiter_id": "WTR-101",
+        "password_hash": "$2a$10$wEkgzJ9nQOwh6d203m0Q7u7Lw3mFqfN3/b3j62l4h6Z8s2M1v7zqu",
+        "phone": "+91 99245 67890",
+        "shift": "Morning Shift",
+        "is_active": True,
+        "is_primary_owner": False
+    },
+    "waiter_rajesh": {
+        "username": "waiter_rajesh",
+        "email": "rajesh@atmiyadosa.com",
+        "name": "Rajesh Kumar",
+        "role": "Waiter",
+        "waiter_id": "WTR-102",
+        "password_hash": "$2a$10$wEkgzJ9nQOwh6d203m0Q7u7Lw3mFqfN3/b3j62l4h6Z8s2M1v7zqu",
+        "phone": "+91 98251 22334",
+        "shift": "Evening Shift",
+        "is_active": True,
+        "is_primary_owner": False
+    },
+    "waiter_vikram": {
+        "username": "waiter_vikram",
+        "email": "vikram@atmiyadosa.com",
+        "name": "Vikram Shah",
+        "role": "Waiter",
+        "waiter_id": "WTR-103",
+        "password_hash": "$2a$10$wEkgzJ9nQOwh6d203m0Q7u7Lw3mFqfN3/b3j62l4h6Z8s2M1v7zqu",
+        "phone": "+91 97140 44556",
+        "shift": "Full Day",
+        "is_active": True,
+        "is_primary_owner": False
+    },
+    "chef_amit": {
+        "username": "chef_amit",
+        "email": "amit@atmiyadosa.com",
+        "name": "Amit Kumar",
+        "role": "Kitchen",
+        "password_hash": "$2a$10$wEkgzJ9nQOwh6d203m0Q7u7Lw3mFqfN3/b3j62l4h6Z8s2M1v7zqu",
+        "phone": "+91 97123 45678",
+        "shift": "Morning Shift",
+        "is_active": True,
+        "is_primary_owner": False
     }
 }
+
+def find_staff_member(identifier: str) -> Optional[Dict[str, Any]]:
+    """Find staff member by username, email, waiter_id, or name (case-insensitive)."""
+    clean_id = (identifier or "").strip().lower()
+    for staff in CANONICAL_STAFF.values():
+        if (
+            staff.get("username", "").lower() == clean_id or 
+            staff.get("email", "").lower() == clean_id or
+            staff.get("waiter_id", "").lower() == clean_id or
+            staff.get("name", "").lower() == clean_id
+        ):
+            return staff
+    return None
+
+def register_new_staff(name: str, email: str, role: str, password_hash: str, phone: str = "") -> Dict[str, Any]:
+    """Register a new verified staff member into the canonical staff store."""
+    clean_email = (email or "").strip().lower()
+    base_user = clean_email.split("@")[0].replace(".", "_")
+    username = base_user
+    counter = 1
+    while username in CANONICAL_STAFF:
+        username = f"{base_user}_{counter}"
+        counter += 1
+
+    formatted_role = role.capitalize()
+    if formatted_role.lower() in ["chef", "kitchen"]:
+        formatted_role = "Kitchen"
+    elif formatted_role.lower() in ["waiter", "floor"]:
+        formatted_role = "Waiter"
+
+    new_staff = {
+        "username": username,
+        "email": clean_email,
+        "name": name.strip(),
+        "role": formatted_role,
+        "password_hash": password_hash,
+        "phone": phone.strip() if phone else "+91 98000 00000",
+        "shift": "General Shift",
+        "is_active": True,
+        "is_primary_owner": False
+    }
+    CANONICAL_STAFF[username] = new_staff
+    return new_staff
 
 CANONICAL_AUDIT_LOGS: List[Dict[str, Any]] = [
     {
@@ -485,6 +590,8 @@ RESTAURANT_ID = "11111111-1111-1111-1111-111111111111"
 
 async def sync_order_to_supabase(order_data: Dict[str, Any]) -> None:
     """Asynchronously sync an order to Supabase Cloud DB with real-time session tracking."""
+    if os.environ.get("TESTING") == "1" or settings.ENVIRONMENT == "test":
+        return
     api_key = settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_ANON_KEY
     if not api_key:
         return
@@ -596,6 +703,28 @@ async def sync_order_to_supabase(order_data: Dict[str, Any]) -> None:
             ord_resp = await client.post(f"{base_url}/orders", headers=headers, json=order_payload)
             if ord_resp.status_code in [200, 201]:
                 print(f"[SUPABASE] Cloud Order {order_num} synced successfully with session {session_id}.")
+                try:
+                    resp_json = ord_resp.json()
+                    created_ord_id = resp_json[0]["id"] if isinstance(resp_json, list) and len(resp_json) > 0 else None
+                    raw_items = order_data.get("items", [])
+                    if created_ord_id and raw_items:
+                        item_rows = []
+                        for item in raw_items:
+                            qty = int(item.get("qty") or item.get("quantity") or 1)
+                            unit_p = float(item.get("price") or item.get("unit_price") or 0.0)
+                            item_rows.append({
+                                "order_id": created_ord_id,
+                                "item_name": item.get("name") or "Dish Item",
+                                "quantity": qty,
+                                "unit_price": unit_p,
+                                "total_price": round(unit_p * qty, 2),
+                                "cooking_note": item.get("notes") or item.get("cooking_note") or None,
+                                "status": "PLACED"
+                            })
+                        if item_rows:
+                            await client.post(f"{base_url}/order_items", headers=headers, json=item_rows)
+                except Exception as item_err:
+                    print(f"[SUPABASE] Cloud order_items insertion notice: {str(item_err)}")
             else:
                 print(f"[SUPABASE] Cloud Order sync notice ({ord_resp.status_code}): {ord_resp.text}")
 
@@ -604,6 +733,109 @@ async def sync_order_to_supabase(order_data: Dict[str, Any]) -> None:
 
 # Backward-compatible alias
 sync_order_to_appwrite = sync_order_to_supabase
+
+async def sync_settle_session_to_supabase(
+    table_number: str,
+    order_id: Optional[str] = None,
+    payment_method: str = "Cash",
+    session_id: Optional[str] = None,
+    waiter_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Authoritative server-side table session termination and bill settlement in Supabase Cloud.
+    1. Resolves table and terminates active session in `table_sessions` (status: COMPLETED, closed_at: now).
+    2. Marks `restaurant_tables` status as VACANT.
+    3. Updates all orders for this table to status: SERVED / Completed, payment_status: PAID.
+    """
+    api_key = settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_ANON_KEY
+    if not api_key:
+        return {"success": True, "offline": True}
+
+    headers = {
+        "apikey": api_key,
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+    }
+    base_url = f"{settings.SUPABASE_URL}/rest/v1"
+
+    # Normalize table number to T-01 format
+    raw_tbl = str(table_number or "01")
+    digits = "".join([c for c in raw_tbl if c.isdigit()])
+    table_num = f"T-{digits.zfill(2)}" if digits else "T-01"
+
+    pay_method = "CASH" if (payment_method or "").upper() == "CASH" else "UPI_COUNTER"
+    closed_at = datetime.now(timezone.utc).isoformat()
+
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        try:
+            # 1. Resolve table_id
+            table_id = None
+            t_resp = await client.get(
+                f"{base_url}/restaurant_tables?table_number=eq.{table_num}&select=id",
+                headers=headers
+            )
+            if t_resp.status_code == 200 and t_resp.json():
+                table_id = t_resp.json()[0]["id"]
+
+            # 2. Terminate active session in table_sessions
+            terminated_sessions = []
+            if session_id:
+                sess_patch = await client.patch(
+                    f"{base_url}/table_sessions?id=eq.{session_id}",
+                    headers=headers,
+                    json={
+                        "status": "COMPLETED",
+                        "closed_at": closed_at
+                    }
+                )
+                if sess_patch.status_code in [200, 204]:
+                    terminated_sessions.append(session_id)
+            elif table_id:
+                sess_patch = await client.patch(
+                    f"{base_url}/table_sessions?table_id=eq.{table_id}&status=eq.ACTIVE",
+                    headers=headers,
+                    json={
+                        "status": "COMPLETED",
+                        "closed_at": closed_at
+                    }
+                )
+                if sess_patch.status_code == 200:
+                    data = sess_patch.json()
+                    if isinstance(data, list):
+                        terminated_sessions = [s.get("id") for s in data]
+
+            # 3. Mark Table as VACANT
+            if table_id:
+                await client.patch(
+                    f"{base_url}/restaurant_tables?id=eq.{table_id}",
+                    headers=headers,
+                    json={"status": "VACANT"}
+                )
+
+            # 4. Settle all active orders for this table
+            await client.patch(
+                f"{base_url}/orders?table_number=eq.{table_num}&status=neq.CANCELLED",
+                headers=headers,
+                json={
+                    "status": "COMPLETED",
+                    "payment_status": "PAID",
+                    "payment_method": pay_method,
+                    "served_at": closed_at
+                }
+            )
+
+            print(f"[SUPABASE] Successfully terminated session(s) for Table {table_num} and marked VACANT.")
+            return {
+                "success": True,
+                "table_number": table_num,
+                "terminated_sessions": terminated_sessions,
+                "closed_at": closed_at
+            }
+        except Exception as e:
+            print(f"[SUPABASE] Session settlement notice: {str(e)}")
+            return {"success": False, "error": str(e)}
+
 
 async def log_admin_action(
     employee_name: str,

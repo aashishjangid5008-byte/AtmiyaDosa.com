@@ -13,16 +13,17 @@ from app.schemas.table import (
 from app.database import (
     CANONICAL_TABLES,
     CANONICAL_ORDERS,
-    log_admin_action
+    log_admin_action,
+    sync_settle_session_to_supabase
 )
 from app.security import get_current_user
+from app.routers.qr import build_table_qr_url
 
 router = APIRouter(prefix="/tables", tags=["Dining Floor & Live Table Management"])
 
 def _build_table_response(table_dict: dict, request: Optional[Request] = None) -> TableResponse:
-    base_url = str(request.base_url).rstrip("/") if request else "http://localhost:5173"
-    # Touchless direct link that bypasses admin barrier
-    qr_url = f"{base_url}/?table={table_dict['number']}"
+    # Dynamic, secure touchless link that works on Cloud Run and local dev
+    qr_url = build_table_qr_url(table_dict["number"], request)
     return TableResponse(
         id=table_dict["id"],
         number=table_dict["number"],
@@ -209,31 +210,85 @@ async def settle_table_bill(
     body: SettleBillRequest,
     current_user: dict = Depends(get_current_user)
 ):
-    """Settle the running bill for a table and mark it available for the next guests."""
+    """
+    Settle the running bill for a table, terminate active session in Supabase Cloud,
+    free table to vacant, and mark all associated orders paid.
+    """
     clean_num = table_number.strip().upper()
     table = CANONICAL_TABLES.get(clean_num)
     if not table:
         raise HTTPException(status_code=404, detail=f"Table '{clean_num}' not found.")
 
-    order_id = table.get("current_order_id")
-    if order_id:
-        order = next((o for o in CANONICAL_ORDERS if o["id"] == order_id), None)
-        if order:
-            order["status"] = "Completed"
-            order["payment_status"] = "Paid"
-            order["payment_mode"] = body.payment_method
+    def _digits_of(val: str) -> str:
+        return "".join(filter(str.isdigit, str(val)))
 
+    def _is_table_match(t1: str, t2: str) -> bool:
+        d1, d2 = _digits_of(t1), _digits_of(t2)
+        if d1 and d2:
+            return d1 == d2
+        return str(t1).strip().upper() == str(t2).strip().upper()
+
+    # Settle all active orders for this table (Multi-round tickets)
+    active_orders = [
+        o for o in CANONICAL_ORDERS
+        if _is_table_match(o.get("table_number", ""), clean_num)
+        and (o.get("status") or "").lower() not in ["completed", "cancelled"]
+    ]
+
+    total_amount = sum(float(o.get("total_amount") or o.get("total", 0.0)) for o in active_orders)
+    settled_order_ids = []
+
+    waiter_id_val = body.waiter_id or current_user.get("sub") or current_user.get("username")
+
+    for order in active_orders:
+        order["status"] = "Completed"
+        order["payment_status"] = "Paid"
+        order["payment_mode"] = body.payment_method
+        if waiter_id_val:
+            order["paid_collected_by_id"] = waiter_id_val
+        if body.settled_by:
+            order["paid_collected_by"] = body.settled_by
+        settled_order_ids.append(order["id"])
+
+    # Vacate table
     table["status"] = "available"
     table["current_order_id"] = None
     table["timing"] = None
 
-    await log_admin_action(
-        employee_name=current_user.get("name", "Staff"),
-        employee_role=current_user.get("role", "Staff"),
-        action_type="BILL_SETTLED",
-        details=f"Settled bill for table {clean_num} via {body.payment_method}",
+    # Server-side Supabase Cloud session termination
+    supabase_sync = await sync_settle_session_to_supabase(
         table_number=clean_num,
-        order_id=order_id
+        order_id=settled_order_ids[0] if settled_order_ids else None,
+        payment_method=body.payment_method,
+        session_id=body.session_id,
+        waiter_id=waiter_id_val
     )
 
-    return {"success": True, "message": f"Bill for Table {clean_num} settled via {body.payment_method}."}
+    staff_name = body.settled_by or current_user.get("name", "Staff")
+    staff_role = current_user.get("role", "Staff")
+
+    audit_detail = f"Settled bill for Table {clean_num} (₹{total_amount:.2f}, {len(active_orders)} tickets) via {body.payment_method}"
+    if waiter_id_val:
+        audit_detail += f" [Collected by Waiter ID: {waiter_id_val}]"
+    audit_detail += ". Table vacated and session terminated."
+
+    await log_admin_action(
+        employee_name=staff_name,
+        employee_role=staff_role,
+        action_type="TABLE_BILL_SETTLED",
+        details=audit_detail,
+        table_number=clean_num,
+        order_id=settled_order_ids[0] if settled_order_ids else None
+    )
+
+    return {
+        "success": True,
+        "message": f"Bill for Table {clean_num} settled via {body.payment_method}.",
+        "table_number": clean_num,
+        "total_amount": total_amount,
+        "settled_orders": settled_order_ids,
+        "session_terminated": True,
+        "status": "COMPLETED",
+        "vacated": True,
+        "supabase_sync": supabase_sync
+    }

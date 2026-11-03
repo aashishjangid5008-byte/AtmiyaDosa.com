@@ -58,8 +58,8 @@ export default function CustomerCRM({
     switch (tier) {
       case 'VIP Platinum':
         return (
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-slate-900 text-white border border-slate-700 shadow-sm flex items-center space-x-1 inline-flex">
-            <Sparkles className="w-3 h-3 text-amber-400" />
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-purple-600 text-white border border-purple-500 shadow-sm flex items-center space-x-1 inline-flex">
+            <Sparkles className="w-3 h-3 text-amber-300" />
             <span>Platinum VIP</span>
           </span>
         );
@@ -215,8 +215,8 @@ export default function CustomerCRM({
                 onClick={() => setSelectedTier(tier)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
                   selectedTier === tier 
-                    ? 'bg-slate-900 text-white shadow-xs font-black' 
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    ? 'bg-orange-500 text-white shadow-xs font-black' 
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
                 {tier}
@@ -251,8 +251,8 @@ export default function CustomerCRM({
                   </td>
                 </tr>
               ) : (
-                filteredCustomers.map(customer => (
-                  <tr key={customer.id} className="hover:bg-slate-50/70 transition">
+                filteredCustomers.map((customer, idx) => (
+                  <tr key={`${customer.id || customer.phone || 'cust'}-${idx}`} className="hover:bg-slate-50/70 transition">
                     <td className="p-4">
                       <div className="font-black text-slate-950 font-heading text-sm">
                         {customer.name}
@@ -331,7 +331,7 @@ export default function CustomerCRM({
 
       {/* 4. Customer History Drawer / Modal */}
       {selectedCustomerHistory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
@@ -409,7 +409,7 @@ export default function CustomerCRM({
 
       {/* 5. Add New Customer Modal */}
       {showAddCustomerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
           <form onSubmit={handleCreateCustomer} className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-black text-slate-900 font-heading">

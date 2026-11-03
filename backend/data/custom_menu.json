@@ -1,0 +1,3014 @@
+{
+  "item_atmiya_01": {
+    "id": "item_atmiya_01",
+    "name": "Mysore Masala Dosa",
+    "gujarati_name": "માયસોર મસાલા ઢોસા",
+    "price": 130.0,
+    "category": "Mysore Dosa",
+    "description": "Crisp golden dosa coated with spicy red garlic chutney, filled with potato bhaji.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Bestseller",
+      "Spicy"
+    ]
+  },
+  "item_atmiya_02": {
+    "id": "item_atmiya_02",
+    "name": "Paneer Mysore Dosa",
+    "gujarati_name": "પનીર માયસોર ઢોસા",
+    "price": 150.0,
+    "category": "Mysore Dosa",
+    "description": "Stuffed with fresh malai paneer and Mysore spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Chef Special"
+    ]
+  },
+  "item_atmiya_03": {
+    "id": "item_atmiya_03",
+    "name": "Cheese Mysore Dosa",
+    "gujarati_name": "ચીઝ માયસોર ઢોસા",
+    "price": 160.0,
+    "category": "Mysore Dosa",
+    "description": "Generously loaded with melted Amul cheese and Mysore paste.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 11,
+    "tags": [
+      "Kids Favorite"
+    ]
+  },
+  "item_atmiya_04": {
+    "id": "item_atmiya_04",
+    "name": "S.P. Atmiya Mysore",
+    "gujarati_name": "સ્પે. આત્મીય માયસોર",
+    "price": 210.0,
+    "category": "Mysore Dosa",
+    "description": "House signature double butter, paneer, dry fruits, and rich cheese filling.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 13,
+    "tags": [
+      "Signature",
+      "Must Try"
+    ]
+  },
+  "item_atmiya_05": {
+    "id": "item_atmiya_05",
+    "name": "Cheese Bhurji Mysore",
+    "gujarati_name": "ચીઝ ભુરજી માયસોર",
+    "price": 230.0,
+    "category": "Mysore Dosa",
+    "description": "Shredded paneer and Amul cheese tossed with capsicum and Mysore masala.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 12,
+    "tags": [
+      "Rich"
+    ]
+  },
+  "item_atmiya_06": {
+    "id": "item_atmiya_06",
+    "name": "Jini Roll Dosa",
+    "gujarati_name": "જીની રોલ ઢોસા",
+    "price": 200.0,
+    "category": "Fancy Dosa",
+    "description": "Sliced crispy dosa rolls topped with sweet and spicy chutneys and shredded cheese.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 12,
+    "tags": [
+      "Trending"
+    ]
+  },
+  "item_atmiya_07": {
+    "id": "item_atmiya_07",
+    "name": "Chinese Dosa",
+    "gujarati_name": "ચાઈનીઝ ઢોસા",
+    "price": 200.0,
+    "category": "Fancy Dosa",
+    "description": "Fusion dosa filled with Hakka noodles, cabbage, and Manchurian sauce.",
+    "is_available": true,
+    "is_jain_available": false,
+    "prep_time_mins": 12,
+    "tags": [
+      "Fusion"
+    ]
+  },
+  "item_atmiya_08": {
+    "id": "item_atmiya_08",
+    "name": "Spring Roll Dosa",
+    "gujarati_name": "સ્પ્રિંગ રોલ ઢોસા",
+    "price": 250.0,
+    "category": "Fancy Dosa",
+    "description": "Crispy rolled dosa stuffed with sautéed Asian veggies and Schezwan sauce.",
+    "is_available": true,
+    "is_jain_available": false,
+    "prep_time_mins": 14,
+    "tags": [
+      "Crunchy"
+    ]
+  },
+  "item_atmiya_09": {
+    "id": "item_atmiya_09",
+    "name": "Surti Gotala Dosa",
+    "gujarati_name": "સુરતી ગોટાળા ઢોસા",
+    "price": 220.0,
+    "category": "Fancy Dosa",
+    "description": "Surat specialty spicy gravy with mashed vegetables, paneer, and two crisp dosas.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 15,
+    "tags": [
+      "Famous"
+    ]
+  },
+  "item_atmiya_10": {
+    "id": "item_atmiya_10",
+    "name": "Bahubali Dosa",
+    "gujarati_name": "બાહુબલી ઢોસા",
+    "price": 350.0,
+    "category": "Fancy Dosa",
+    "description": "Enormous family-sized grand dosa platter with four specialty gravies and rich toppings.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 18,
+    "tags": [
+      "Family Pack",
+      "Grand"
+    ]
+  },
+  "item_atmiya_11": {
+    "id": "item_atmiya_11",
+    "name": "Mataka Dosa",
+    "gujarati_name": "મટકા ઢોસા",
+    "price": 300.0,
+    "category": "Fancy Dosa",
+    "description": "Clay pot-infused steaming cheese-butter gravy poured over fresh rolled dosas.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 16,
+    "tags": [
+      "Unique"
+    ]
+  },
+  "item_atmiya_12": {
+    "id": "item_atmiya_12",
+    "name": "Plain Paper Dosa",
+    "gujarati_name": "સાદા પેપર ઢોસા",
+    "price": 60.0,
+    "category": "Plain Paper Dosa",
+    "description": "Classic thin, super-crispy wafer dosa served with coconut chutney and hot sambhar.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 7,
+    "tags": [
+      "Classic"
+    ]
+  },
+  "item_atmiya_13": {
+    "id": "item_atmiya_13",
+    "name": "Butter Paper Dosa",
+    "gujarati_name": "બટર પેપર ઢોસા",
+    "price": 75.0,
+    "category": "Plain Paper Dosa",
+    "description": "Thin crispy paper dosa brushed with pure Amul butter.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Popular"
+    ]
+  },
+  "item_atmiya_14": {
+    "id": "item_atmiya_14",
+    "name": "Cheese Paper Dosa",
+    "gujarati_name": "ચીઝ પેપર ઢોસા",
+    "price": 90.0,
+    "category": "Plain Paper Dosa",
+    "description": "Crispy paper dosa filled with melted mozzarella and processed cheese.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 9,
+    "tags": [
+      "Cheesy"
+    ]
+  },
+  "item_atmiya_15": {
+    "id": "item_atmiya_15",
+    "name": "Amul Butter Pav Bhaji",
+    "gujarati_name": "અમૂલ બટર પાવભાજી",
+    "price": 80.0,
+    "category": "Pav Bhaji & Pulao",
+    "description": "Slow-cooked mashed vegetable gravy topped with Amul butter slab and toasted pavs.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Comfort Food"
+    ]
+  },
+  "item_atmiya_16": {
+    "id": "item_atmiya_16",
+    "name": "Cheese Pav Bhaji",
+    "gujarati_name": "ચીઝ પાવભાજી",
+    "price": 140.0,
+    "category": "Pav Bhaji & Pulao",
+    "description": "Creamy Pav Bhaji blanketed with grated Amul cheese.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 9,
+    "tags": [
+      "Bestseller"
+    ]
+  },
+  "item_atmiya_17": {
+    "id": "item_atmiya_17",
+    "name": "Sp. Atmiya Pulao",
+    "gujarati_name": "સ્પે. આત્મીય પુલાવ",
+    "price": 150.0,
+    "category": "Pav Bhaji & Pulao",
+    "description": "Fragrant Basmati rice stir-fried on the tawa with aromatic spices, paneer, and veggies.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Tawa Pulao"
+    ]
+  },
+  "item_atmiya_18": {
+    "id": "item_atmiya_18",
+    "name": "Veg Manchurian Dry",
+    "gujarati_name": "વેજ મંચુરિયન ડ્રાય",
+    "price": 120.0,
+    "category": "Chinese & Starters",
+    "description": "Crispy vegetable dumplings tossed in garlic, ginger, and soy glaze.",
+    "is_available": true,
+    "is_jain_available": false,
+    "prep_time_mins": 10,
+    "tags": [
+      "Starters"
+    ]
+  },
+  "item_atmiya_19": {
+    "id": "item_atmiya_19",
+    "name": "Hakka Noodles",
+    "gujarati_name": "હક્કા નૂડલ્સ",
+    "price": 120.0,
+    "category": "Chinese & Starters",
+    "description": "Wok-tossed noodles with crunchy capsicum, cabbage, and carrots.",
+    "is_available": true,
+    "is_jain_available": false,
+    "prep_time_mins": 10,
+    "tags": [
+      "Wok Fresh"
+    ]
+  },
+  "item_atmiya_20": {
+    "id": "item_atmiya_20",
+    "name": "Paneer Chilli Dry",
+    "gujarati_name": "પનીર ચીલી ડ્રાય",
+    "price": 160.0,
+    "category": "Chinese & Starters",
+    "description": "Wok-seared paneer cubes with green chilies, bell peppers, and scallions.",
+    "is_available": true,
+    "is_jain_available": false,
+    "prep_time_mins": 11,
+    "tags": [
+      "Spicy Starters"
+    ]
+  },
+  "item_atmiya_21": {
+    "id": "item_atmiya_21",
+    "name": "Masala Chaas",
+    "gujarati_name": "મસાલા છાશ",
+    "price": 25.0,
+    "category": "Beverages",
+    "description": "Chilled roasted-cumin spiced buttermilk.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 2,
+    "tags": [
+      "Refreshing"
+    ]
+  },
+  "item_atmiya_22": {
+    "id": "item_atmiya_22",
+    "name": "Cold Drink",
+    "gujarati_name": "ઠંડુ પીણું",
+    "price": 40.0,
+    "category": "Beverages",
+    "description": "Assorted chilled sodas (Coke, Thums Up, Sprite - 300ml).",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 1,
+    "tags": [
+      "Chilled"
+    ]
+  },
+  "item_atmiya_23": {
+    "id": "item_atmiya_23",
+    "name": "Packaged Water (1L)",
+    "gujarati_name": "મિનરલ વોટર",
+    "price": 20.0,
+    "category": "Beverages",
+    "description": "Sealed mineral water bottle.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 1,
+    "tags": [
+      "Essential"
+    ]
+  },
+  "ATM0001": {
+    "id": "ATM0001",
+    "name": "Plain Paper",
+    "gujarati_name": "Plain Paper",
+    "price": 60.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Plain Paper made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0002": {
+    "id": "ATM0002",
+    "name": "Baby Paper",
+    "gujarati_name": "Baby Paper",
+    "price": 60.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Baby Paper made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0003": {
+    "id": "ATM0003",
+    "name": "Naylon Paper",
+    "gujarati_name": "Naylon Paper",
+    "price": 60.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Naylon Paper made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0004": {
+    "id": "ATM0004",
+    "name": "Onion Paper",
+    "gujarati_name": "Onion Paper",
+    "price": 60.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Onion Paper made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0005": {
+    "id": "ATM0005",
+    "name": "Garlic Paper",
+    "gujarati_name": "Garlic Paper",
+    "price": 80.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Garlic Paper made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0006": {
+    "id": "ATM0006",
+    "name": "Panner Paper",
+    "gujarati_name": "Panner Paper",
+    "price": 90.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Panner Paper made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0007": {
+    "id": "ATM0007",
+    "name": "Chocolate Paper",
+    "gujarati_name": "Chocolate Paper",
+    "price": 70.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Chocolate Paper made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0008": {
+    "id": "ATM0008",
+    "name": "Panner Sezwan Paper",
+    "gujarati_name": "Panner Sezwan Paper",
+    "price": 100.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Panner Sezwan Paper made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0009": {
+    "id": "ATM0009",
+    "name": "Cheese Paper",
+    "gujarati_name": "Cheese Paper",
+    "price": 90.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Cheese Paper made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0010": {
+    "id": "ATM0010",
+    "name": "Cheese Garlic Paper",
+    "gujarati_name": "Cheese Garlic Paper",
+    "price": 100.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Cheese Garlic Paper made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0011": {
+    "id": "ATM0011",
+    "name": "Panner Cheese Paper",
+    "gujarati_name": "Panner Cheese Paper",
+    "price": 120.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Panner Cheese Paper made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0012": {
+    "id": "ATM0012",
+    "name": "Salad Paper",
+    "gujarati_name": "Salad Paper",
+    "price": 90.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Salad Paper made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0013": {
+    "id": "ATM0013",
+    "name": "Crunchy Paper",
+    "gujarati_name": "Crunchy Paper",
+    "price": 60.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Crunchy Paper made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0014": {
+    "id": "ATM0014",
+    "name": "Panner Khakra",
+    "gujarati_name": "Panner Khakra",
+    "price": 100.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Panner Khakra made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0015": {
+    "id": "ATM0015",
+    "name": "Plain Khakra",
+    "gujarati_name": "Plain Khakra",
+    "price": 70.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Plain Khakra made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0016": {
+    "id": "ATM0016",
+    "name": "Peri Peri Khakra",
+    "gujarati_name": "Peri Peri Khakra",
+    "price": 80.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Peri Peri Khakra made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0017": {
+    "id": "ATM0017",
+    "name": "Garlic Khakra",
+    "gujarati_name": "Garlic Khakra",
+    "price": 90.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Garlic Khakra made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0018": {
+    "id": "ATM0018",
+    "name": "Cheese Khakra",
+    "gujarati_name": "Cheese Khakra",
+    "price": 100.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Cheese Khakra made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0019": {
+    "id": "ATM0019",
+    "name": "Jera Mari Khakra",
+    "gujarati_name": "Jera Mari Khakra",
+    "price": 90.0,
+    "category": "Plain Paper Dosa",
+    "description": "Fresh authentic pure-veg Jera Mari Khakra made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Plain Paper Dosa"
+    ]
+  },
+  "ATM0020": {
+    "id": "ATM0020",
+    "name": "Masala Dosa",
+    "gujarati_name": "Masala Dosa",
+    "price": 110.0,
+    "category": "Masala Dosa",
+    "description": "Fresh authentic pure-veg Masala Dosa made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Masala Dosa"
+    ]
+  },
+  "ATM0021": {
+    "id": "ATM0021",
+    "name": "Onion Masala",
+    "gujarati_name": "Onion Masala",
+    "price": 120.0,
+    "category": "Masala Dosa",
+    "description": "Fresh authentic pure-veg Onion Masala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Masala Dosa"
+    ]
+  },
+  "ATM0022": {
+    "id": "ATM0022",
+    "name": "Garlic Masala",
+    "gujarati_name": "Garlic Masala",
+    "price": 130.0,
+    "category": "Masala Dosa",
+    "description": "Fresh authentic pure-veg Garlic Masala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Masala Dosa"
+    ]
+  },
+  "ATM0023": {
+    "id": "ATM0023",
+    "name": "Sezwan Masala",
+    "gujarati_name": "Sezwan Masala",
+    "price": 130.0,
+    "category": "Masala Dosa",
+    "description": "Fresh authentic pure-veg Sezwan Masala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Masala Dosa"
+    ]
+  },
+  "ATM0024": {
+    "id": "ATM0024",
+    "name": "Panner Masala",
+    "gujarati_name": "Panner Masala",
+    "price": 140.0,
+    "category": "Masala Dosa",
+    "description": "Fresh authentic pure-veg Panner Masala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Masala Dosa"
+    ]
+  },
+  "ATM0025": {
+    "id": "ATM0025",
+    "name": "Cheese Masala",
+    "gujarati_name": "Cheese Masala",
+    "price": 160.0,
+    "category": "Masala Dosa",
+    "description": "Fresh authentic pure-veg Cheese Masala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Masala Dosa"
+    ]
+  },
+  "ATM0026": {
+    "id": "ATM0026",
+    "name": "Panner Sezwan Masala",
+    "gujarati_name": "Panner Sezwan Masala",
+    "price": 170.0,
+    "category": "Masala Dosa",
+    "description": "Fresh authentic pure-veg Panner Sezwan Masala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Masala Dosa"
+    ]
+  },
+  "ATM0027": {
+    "id": "ATM0027",
+    "name": "Palak Sezwan Masala",
+    "gujarati_name": "Palak Sezwan Masala",
+    "price": 130.0,
+    "category": "Masala Dosa",
+    "description": "Fresh authentic pure-veg Palak Sezwan Masala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Masala Dosa"
+    ]
+  },
+  "ATM0028": {
+    "id": "ATM0028",
+    "name": "Panner Cheese Masala",
+    "gujarati_name": "Panner Cheese Masala",
+    "price": 130.0,
+    "category": "Masala Dosa",
+    "description": "Fresh authentic pure-veg Panner Cheese Masala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Masala Dosa"
+    ]
+  },
+  "ATM0029": {
+    "id": "ATM0029",
+    "name": "Cheese Palak Masala",
+    "gujarati_name": "Cheese Palak Masala",
+    "price": 170.0,
+    "category": "Masala Dosa",
+    "description": "Fresh authentic pure-veg Cheese Palak Masala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Masala Dosa"
+    ]
+  },
+  "ATM0030": {
+    "id": "ATM0030",
+    "name": "Palak Panner Masala",
+    "gujarati_name": "Palak Panner Masala",
+    "price": 170.0,
+    "category": "Masala Dosa",
+    "description": "Fresh authentic pure-veg Palak Panner Masala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Masala Dosa"
+    ]
+  },
+  "ATM0031": {
+    "id": "ATM0031",
+    "name": "Cheese Palak Masala",
+    "gujarati_name": "Cheese Palak Masala",
+    "price": 180.0,
+    "category": "Masala Dosa",
+    "description": "Duplicate menu entry; verify price/name",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Masala Dosa"
+    ]
+  },
+  "ATM0032": {
+    "id": "ATM0032",
+    "name": "Mix Masala",
+    "gujarati_name": "Mix Masala",
+    "price": 190.0,
+    "category": "Masala Dosa",
+    "description": "Fresh authentic pure-veg Mix Masala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Masala Dosa"
+    ]
+  },
+  "ATM0033": {
+    "id": "ATM0033",
+    "name": "Hayderabad Masala",
+    "gujarati_name": "Hayderabad Masala",
+    "price": 180.0,
+    "category": "Masala Dosa",
+    "description": "Fresh authentic pure-veg Hayderabad Masala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Masala Dosa"
+    ]
+  },
+  "ATM0034": {
+    "id": "ATM0034",
+    "name": "Sp. Atmiya Masala",
+    "gujarati_name": "Sp. Atmiya Masala",
+    "price": 220.0,
+    "category": "Masala Dosa",
+    "description": "Fresh authentic pure-veg Sp. Atmiya Masala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Masala Dosa"
+    ]
+  },
+  "ATM0035": {
+    "id": "ATM0035",
+    "name": "Cheese Sezwan Masala",
+    "gujarati_name": "Cheese Sezwan Masala",
+    "price": 210.0,
+    "category": "Masala Dosa",
+    "description": "Fresh authentic pure-veg Cheese Sezwan Masala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Masala Dosa"
+    ]
+  },
+  "ATM0036": {
+    "id": "ATM0036",
+    "name": "Veg. Fry Rice",
+    "gujarati_name": "Veg. Fry Rice",
+    "price": 90.0,
+    "category": "Chinese Rice",
+    "description": "Fresh authentic pure-veg Veg. Fry Rice made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Chinese Rice"
+    ]
+  },
+  "ATM0037": {
+    "id": "ATM0037",
+    "name": "Mushroom Fry Rice",
+    "gujarati_name": "Mushroom Fry Rice",
+    "price": 100.0,
+    "category": "Chinese Rice",
+    "description": "Fresh authentic pure-veg Mushroom Fry Rice made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Chinese Rice"
+    ]
+  },
+  "ATM0038": {
+    "id": "ATM0038",
+    "name": "Panner Fry Rice",
+    "gujarati_name": "Panner Fry Rice",
+    "price": 110.0,
+    "category": "Chinese Rice",
+    "description": "Fresh authentic pure-veg Panner Fry Rice made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Chinese Rice"
+    ]
+  },
+  "ATM0039": {
+    "id": "ATM0039",
+    "name": "Veg. Triple Fry Rice",
+    "gujarati_name": "Veg. Triple Fry Rice",
+    "price": 130.0,
+    "category": "Chinese Rice",
+    "description": "Fresh authentic pure-veg Veg. Triple Fry Rice made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Chinese Rice"
+    ]
+  },
+  "ATM0040": {
+    "id": "ATM0040",
+    "name": "Veg. Sezwan Rice",
+    "gujarati_name": "Veg. Sezwan Rice",
+    "price": 100.0,
+    "category": "Chinese Rice",
+    "description": "Fresh authentic pure-veg Veg. Sezwan Rice made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Chinese Rice"
+    ]
+  },
+  "ATM0041": {
+    "id": "ATM0041",
+    "name": "Manchurian Rice",
+    "gujarati_name": "Manchurian Rice",
+    "price": 120.0,
+    "category": "Chinese Rice",
+    "description": "Fresh authentic pure-veg Manchurian Rice made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Chinese Rice"
+    ]
+  },
+  "ATM0042": {
+    "id": "ATM0042",
+    "name": "Sezwan Manchurian Rice",
+    "gujarati_name": "Sezwan Manchurian Rice",
+    "price": 130.0,
+    "category": "Chinese Rice",
+    "description": "Fresh authentic pure-veg Sezwan Manchurian Rice made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Chinese Rice"
+    ]
+  },
+  "ATM0043": {
+    "id": "ATM0043",
+    "name": "Veg. Garlic Rice",
+    "gujarati_name": "Veg. Garlic Rice",
+    "price": 100.0,
+    "category": "Chinese Rice",
+    "description": "Fresh authentic pure-veg Veg. Garlic Rice made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Chinese Rice"
+    ]
+  },
+  "ATM0044": {
+    "id": "ATM0044",
+    "name": "Veg. Singapuri Rice",
+    "gujarati_name": "Veg. Singapuri Rice",
+    "price": 140.0,
+    "category": "Chinese Rice",
+    "description": "Fresh authentic pure-veg Veg. Singapuri Rice made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Chinese Rice"
+    ]
+  },
+  "ATM0045": {
+    "id": "ATM0045",
+    "name": "Jeera Rice",
+    "gujarati_name": "Jeera Rice",
+    "price": 70.0,
+    "category": "Chinese Rice",
+    "description": "Fresh authentic pure-veg Jeera Rice made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Chinese Rice"
+    ]
+  },
+  "ATM0046": {
+    "id": "ATM0046",
+    "name": "Kaju Panner Rice",
+    "gujarati_name": "Kaju Panner Rice",
+    "price": 100.0,
+    "category": "Chinese Rice",
+    "description": "Fresh authentic pure-veg Kaju Panner Rice made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Chinese Rice"
+    ]
+  },
+  "ATM0047": {
+    "id": "ATM0047",
+    "name": "Panner Manchurian Rice",
+    "gujarati_name": "Panner Manchurian Rice",
+    "price": 120.0,
+    "category": "Chinese Rice",
+    "description": "Fresh authentic pure-veg Panner Manchurian Rice made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Chinese Rice"
+    ]
+  },
+  "ATM0048": {
+    "id": "ATM0048",
+    "name": "Panner Manchurian Sezwan Rice",
+    "gujarati_name": "Panner Manchurian Sezwan Rice",
+    "price": 130.0,
+    "category": "Chinese Rice",
+    "description": "Fresh authentic pure-veg Panner Manchurian Sezwan Rice made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Chinese Rice"
+    ]
+  },
+  "ATM0049": {
+    "id": "ATM0049",
+    "name": "Veg. Chilly Rice",
+    "gujarati_name": "Veg. Chilly Rice",
+    "price": 140.0,
+    "category": "Chinese Rice",
+    "description": "Fresh authentic pure-veg Veg. Chilly Rice made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Chinese Rice"
+    ]
+  },
+  "ATM0050": {
+    "id": "ATM0050",
+    "name": "Mushroom Sezwan Fry Rice",
+    "gujarati_name": "Mushroom Sezwan Fry Rice",
+    "price": 130.0,
+    "category": "Chinese Rice",
+    "description": "Fresh authentic pure-veg Mushroom Sezwan Fry Rice made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Chinese Rice"
+    ]
+  },
+  "ATM0051": {
+    "id": "ATM0051",
+    "name": "Veg. Sezwan Fry Rice",
+    "gujarati_name": "Veg. Sezwan Fry Rice",
+    "price": 110.0,
+    "category": "Chinese Rice",
+    "description": "Fresh authentic pure-veg Veg. Sezwan Fry Rice made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Chinese Rice"
+    ]
+  },
+  "ATM0052": {
+    "id": "ATM0052",
+    "name": "Sp. Atmiya Fry Rice",
+    "gujarati_name": "Sp. Atmiya Fry Rice",
+    "price": 150.0,
+    "category": "Chinese Rice",
+    "description": "Fresh authentic pure-veg Sp. Atmiya Fry Rice made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Chinese Rice"
+    ]
+  },
+  "ATM0053": {
+    "id": "ATM0053",
+    "name": "Manchurian Dry",
+    "gujarati_name": "Manchurian Dry",
+    "price": 120.0,
+    "category": "Starter",
+    "description": "Fresh authentic pure-veg Manchurian Dry made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Starter"
+    ]
+  },
+  "ATM0054": {
+    "id": "ATM0054",
+    "name": "Manchurian Gravy",
+    "gujarati_name": "Manchurian Gravy",
+    "price": 130.0,
+    "category": "Starter",
+    "description": "Fresh authentic pure-veg Manchurian Gravy made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Starter"
+    ]
+  },
+  "ATM0055": {
+    "id": "ATM0055",
+    "name": "Panner Manchurian Dry",
+    "gujarati_name": "Panner Manchurian Dry",
+    "price": 150.0,
+    "category": "Starter",
+    "description": "Fresh authentic pure-veg Panner Manchurian Dry made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Starter"
+    ]
+  },
+  "ATM0056": {
+    "id": "ATM0056",
+    "name": "Sezwan Manchurian Dry",
+    "gujarati_name": "Sezwan Manchurian Dry",
+    "price": 160.0,
+    "category": "Starter",
+    "description": "Fresh authentic pure-veg Sezwan Manchurian Dry made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Starter"
+    ]
+  },
+  "ATM0057": {
+    "id": "ATM0057",
+    "name": "Panner Chilly Dry",
+    "gujarati_name": "Panner Chilly Dry",
+    "price": 170.0,
+    "category": "Starter",
+    "description": "Fresh authentic pure-veg Panner Chilly Dry made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Starter"
+    ]
+  },
+  "ATM0058": {
+    "id": "ATM0058",
+    "name": "Panner Chilly Gravy",
+    "gujarati_name": "Panner Chilly Gravy",
+    "price": 180.0,
+    "category": "Starter",
+    "description": "Fresh authentic pure-veg Panner Chilly Gravy made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Starter"
+    ]
+  },
+  "ATM0059": {
+    "id": "ATM0059",
+    "name": "Chilly Potato",
+    "gujarati_name": "Chilly Potato",
+    "price": 150.0,
+    "category": "Starter",
+    "description": "Fresh authentic pure-veg Chilly Potato made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Starter"
+    ]
+  },
+  "ATM0060": {
+    "id": "ATM0060",
+    "name": "Panner 65",
+    "gujarati_name": "Panner 65",
+    "price": 160.0,
+    "category": "Starter",
+    "description": "Fresh authentic pure-veg Panner 65 made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Starter"
+    ]
+  },
+  "ATM0061": {
+    "id": "ATM0061",
+    "name": "Mushroom Chilly Dry",
+    "gujarati_name": "Mushroom Chilly Dry",
+    "price": 170.0,
+    "category": "Starter",
+    "description": "Fresh authentic pure-veg Mushroom Chilly Dry made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Starter"
+    ]
+  },
+  "ATM0062": {
+    "id": "ATM0062",
+    "name": "Mushroom Chilly Gravy",
+    "gujarati_name": "Mushroom Chilly Gravy",
+    "price": 180.0,
+    "category": "Starter",
+    "description": "Fresh authentic pure-veg Mushroom Chilly Gravy made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Starter"
+    ]
+  },
+  "ATM0063": {
+    "id": "ATM0063",
+    "name": "Chinese Bhel",
+    "gujarati_name": "Chinese Bhel",
+    "price": 100.0,
+    "category": "Starter",
+    "description": "Fresh authentic pure-veg Chinese Bhel made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Starter"
+    ]
+  },
+  "ATM0064": {
+    "id": "ATM0064",
+    "name": "Bombay Bhel",
+    "gujarati_name": "Bombay Bhel",
+    "price": 110.0,
+    "category": "Starter",
+    "description": "Fresh authentic pure-veg Bombay Bhel made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Starter"
+    ]
+  },
+  "ATM0065": {
+    "id": "ATM0065",
+    "name": "Panner Bhel",
+    "gujarati_name": "Panner Bhel",
+    "price": 150.0,
+    "category": "Starter",
+    "description": "Fresh authentic pure-veg Panner Bhel made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Starter"
+    ]
+  },
+  "ATM0066": {
+    "id": "ATM0066",
+    "name": "Mysore Masala",
+    "gujarati_name": "Mysore Masala",
+    "price": 130.0,
+    "category": "Mysore Dosa",
+    "description": "Fresh authentic pure-veg Mysore Masala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Mysore Dosa"
+    ]
+  },
+  "ATM0067": {
+    "id": "ATM0067",
+    "name": "Garlic Mysore",
+    "gujarati_name": "Garlic Mysore",
+    "price": 140.0,
+    "category": "Mysore Dosa",
+    "description": "Fresh authentic pure-veg Garlic Mysore made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Mysore Dosa"
+    ]
+  },
+  "ATM0068": {
+    "id": "ATM0068",
+    "name": "Panner Mysore",
+    "gujarati_name": "Panner Mysore",
+    "price": 150.0,
+    "category": "Mysore Dosa",
+    "description": "Fresh authentic pure-veg Panner Mysore made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Mysore Dosa"
+    ]
+  },
+  "ATM0069": {
+    "id": "ATM0069",
+    "name": "Cheese Mysore",
+    "gujarati_name": "Cheese Mysore",
+    "price": 160.0,
+    "category": "Mysore Dosa",
+    "description": "Fresh authentic pure-veg Cheese Mysore made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Mysore Dosa"
+    ]
+  },
+  "ATM0070": {
+    "id": "ATM0070",
+    "name": "Sweet Corn Mysore",
+    "gujarati_name": "Sweet Corn Mysore",
+    "price": 170.0,
+    "category": "Mysore Dosa",
+    "description": "Fresh authentic pure-veg Sweet Corn Mysore made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Mysore Dosa"
+    ]
+  },
+  "ATM0071": {
+    "id": "ATM0071",
+    "name": "Palak Panner Mysore",
+    "gujarati_name": "Palak Panner Mysore",
+    "price": 180.0,
+    "category": "Mysore Dosa",
+    "description": "Fresh authentic pure-veg Palak Panner Mysore made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Mysore Dosa"
+    ]
+  },
+  "ATM0072": {
+    "id": "ATM0072",
+    "name": "Panner Sweet Corn Mysore",
+    "gujarati_name": "Panner Sweet Corn Mysore",
+    "price": 200.0,
+    "category": "Mysore Dosa",
+    "description": "Fresh authentic pure-veg Panner Sweet Corn Mysore made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Mysore Dosa"
+    ]
+  },
+  "ATM0073": {
+    "id": "ATM0073",
+    "name": "Panner Tukada Mysore",
+    "gujarati_name": "Panner Tukada Mysore",
+    "price": 200.0,
+    "category": "Mysore Dosa",
+    "description": "Fresh authentic pure-veg Panner Tukada Mysore made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Mysore Dosa"
+    ]
+  },
+  "ATM0074": {
+    "id": "ATM0074",
+    "name": "Panner Cheese Mysore",
+    "gujarati_name": "Panner Cheese Mysore",
+    "price": 220.0,
+    "category": "Mysore Dosa",
+    "description": "Fresh authentic pure-veg Panner Cheese Mysore made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Mysore Dosa"
+    ]
+  },
+  "ATM0075": {
+    "id": "ATM0075",
+    "name": "Panner Sweet Corn Mysore",
+    "gujarati_name": "Panner Sweet Corn Mysore",
+    "price": 210.0,
+    "category": "Mysore Dosa",
+    "description": "Duplicate menu entry with different price; verify",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Mysore Dosa"
+    ]
+  },
+  "ATM0076": {
+    "id": "ATM0076",
+    "name": "Cheese Bhurji Mysore",
+    "gujarati_name": "Cheese Bhurji Mysore",
+    "price": 230.0,
+    "category": "Mysore Dosa",
+    "description": "Fresh authentic pure-veg Cheese Bhurji Mysore made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Mysore Dosa"
+    ]
+  },
+  "ATM0077": {
+    "id": "ATM0077",
+    "name": "S.P. Atmiya Mysore",
+    "gujarati_name": "S.P. Atmiya Mysore",
+    "price": 210.0,
+    "category": "Mysore Dosa",
+    "description": "Fresh authentic pure-veg S.P. Atmiya Mysore made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Mysore Dosa"
+    ]
+  },
+  "ATM0078": {
+    "id": "ATM0078",
+    "name": "Open Cheese Mysore",
+    "gujarati_name": "Open Cheese Mysore",
+    "price": 200.0,
+    "category": "Mysore Dosa",
+    "description": "Fresh authentic pure-veg Open Cheese Mysore made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Mysore Dosa"
+    ]
+  },
+  "ATM0079": {
+    "id": "ATM0079",
+    "name": "Kaju Mysore Bhurji",
+    "gujarati_name": "Kaju Mysore Bhurji",
+    "price": 200.0,
+    "category": "Mysore Dosa",
+    "description": "Fresh authentic pure-veg Kaju Mysore Bhurji made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Mysore Dosa"
+    ]
+  },
+  "ATM0080": {
+    "id": "ATM0080",
+    "name": "Sweet Corn Dosa",
+    "gujarati_name": "Sweet Corn Dosa",
+    "price": 250.0,
+    "category": "Fancy Dosa",
+    "description": "Fresh authentic pure-veg Sweet Corn Dosa made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0081": {
+    "id": "ATM0081",
+    "name": "Chinese",
+    "gujarati_name": "Chinese",
+    "price": 200.0,
+    "category": "Fancy Dosa",
+    "description": "Fresh authentic pure-veg Chinese made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0082": {
+    "id": "ATM0082",
+    "name": "Panner Frankie",
+    "gujarati_name": "Panner Frankie",
+    "price": 220.0,
+    "category": "Fancy Dosa",
+    "description": "Fresh authentic pure-veg Panner Frankie made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0083": {
+    "id": "ATM0083",
+    "name": "Panner Sweet Corn",
+    "gujarati_name": "Panner Sweet Corn",
+    "price": 230.0,
+    "category": "Fancy Dosa",
+    "description": "Fresh authentic pure-veg Panner Sweet Corn made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0084": {
+    "id": "ATM0084",
+    "name": "Spring Roll",
+    "gujarati_name": "Spring Roll",
+    "price": 250.0,
+    "category": "Fancy Dosa",
+    "description": "Fresh authentic pure-veg Spring Roll made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0085": {
+    "id": "ATM0085",
+    "name": "Italian",
+    "gujarati_name": "Italian",
+    "price": 300.0,
+    "category": "Fancy Dosa",
+    "description": "Fresh authentic pure-veg Italian made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0086": {
+    "id": "ATM0086",
+    "name": "Dilkush",
+    "gujarati_name": "Dilkush",
+    "price": 220.0,
+    "category": "Fancy Dosa",
+    "description": "Fresh authentic pure-veg Dilkush made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0087": {
+    "id": "ATM0087",
+    "name": "Cheese Frankie",
+    "gujarati_name": "Cheese Frankie",
+    "price": 240.0,
+    "category": "Fancy Dosa",
+    "description": "Fresh authentic pure-veg Cheese Frankie made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0088": {
+    "id": "ATM0088",
+    "name": "Panner Chilly",
+    "gujarati_name": "Panner Chilly",
+    "price": 250.0,
+    "category": "Fancy Dosa",
+    "description": "Fresh authentic pure-veg Panner Chilly made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0089": {
+    "id": "ATM0089",
+    "name": "Cheese Chilly",
+    "gujarati_name": "Cheese Chilly",
+    "price": 260.0,
+    "category": "Fancy Dosa",
+    "description": "Fresh authentic pure-veg Cheese Chilly made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0090": {
+    "id": "ATM0090",
+    "name": "Jeeni Roll",
+    "gujarati_name": "Jeeni Roll",
+    "price": 200.0,
+    "category": "Fancy Dosa",
+    "description": "Fresh authentic pure-veg Jeeni Roll made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0091": {
+    "id": "ATM0091",
+    "name": "Raja Rani",
+    "gujarati_name": "Raja Rani",
+    "price": 220.0,
+    "category": "Fancy Dosa",
+    "description": "Fresh authentic pure-veg Raja Rani made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0092": {
+    "id": "ATM0092",
+    "name": "Panner Cheese Frankie",
+    "gujarati_name": "Panner Cheese Frankie",
+    "price": 200.0,
+    "category": "Fancy Dosa",
+    "description": "Fresh authentic pure-veg Panner Cheese Frankie made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0093": {
+    "id": "ATM0093",
+    "name": "Pizza",
+    "gujarati_name": "Pizza",
+    "price": 200.0,
+    "category": "Fancy Dosa",
+    "description": "Fresh authentic pure-veg Pizza made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0094": {
+    "id": "ATM0094",
+    "name": "Gotala",
+    "gujarati_name": "Gotala",
+    "price": 220.0,
+    "category": "Fancy Dosa",
+    "description": "Fresh authentic pure-veg Gotala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0095": {
+    "id": "ATM0095",
+    "name": "Green Gotala",
+    "gujarati_name": "Green Gotala",
+    "price": 250.0,
+    "category": "Fancy Dosa",
+    "description": "Fresh authentic pure-veg Green Gotala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0096": {
+    "id": "ATM0096",
+    "name": "Cheese Maggi",
+    "gujarati_name": "Cheese Maggi",
+    "price": 220.0,
+    "category": "Fancy Dosa",
+    "description": "Fresh authentic pure-veg Cheese Maggi made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0097": {
+    "id": "ATM0097",
+    "name": "Surti Mysore Bhaji",
+    "gujarati_name": "Surti Mysore Bhaji",
+    "price": 150.0,
+    "category": "Fancy Dosa",
+    "description": "Handwritten corrected price appears 150",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Fancy Dosa"
+    ]
+  },
+  "ATM0098": {
+    "id": "ATM0098",
+    "name": "Plain Maggi",
+    "gujarati_name": "Plain Maggi",
+    "price": 50.0,
+    "category": "Maggi",
+    "description": "Menu text looks like 'Plan Maggi'",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Maggi"
+    ]
+  },
+  "ATM0099": {
+    "id": "ATM0099",
+    "name": "Vegetable Maggi",
+    "gujarati_name": "Vegetable Maggi",
+    "price": 60.0,
+    "category": "Maggi",
+    "description": "Fresh authentic pure-veg Vegetable Maggi made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Maggi"
+    ]
+  },
+  "ATM0100": {
+    "id": "ATM0100",
+    "name": "Cheese Maggi",
+    "gujarati_name": "Cheese Maggi",
+    "price": 80.0,
+    "category": "Maggi",
+    "description": "Fresh authentic pure-veg Cheese Maggi made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Maggi"
+    ]
+  },
+  "ATM0101": {
+    "id": "ATM0101",
+    "name": "Butter Maggi",
+    "gujarati_name": "Butter Maggi",
+    "price": 80.0,
+    "category": "Maggi",
+    "description": "Fresh authentic pure-veg Butter Maggi made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Maggi"
+    ]
+  },
+  "ATM0102": {
+    "id": "ATM0102",
+    "name": "Panner Maggi",
+    "gujarati_name": "Panner Maggi",
+    "price": 90.0,
+    "category": "Maggi",
+    "description": "Fresh authentic pure-veg Panner Maggi made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Maggi"
+    ]
+  },
+  "ATM0103": {
+    "id": "ATM0103",
+    "name": "Cheese Panner Maggi",
+    "gujarati_name": "Cheese Panner Maggi",
+    "price": 110.0,
+    "category": "Maggi",
+    "description": "Fresh authentic pure-veg Cheese Panner Maggi made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Maggi"
+    ]
+  },
+  "ATM0104": {
+    "id": "ATM0104",
+    "name": "Mattar Maggi",
+    "gujarati_name": "Mattar Maggi",
+    "price": 80.0,
+    "category": "Maggi",
+    "description": "Fresh authentic pure-veg Mattar Maggi made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Maggi"
+    ]
+  },
+  "ATM0105": {
+    "id": "ATM0105",
+    "name": "Chilly Garlic Maggi",
+    "gujarati_name": "Chilly Garlic Maggi",
+    "price": 100.0,
+    "category": "Maggi",
+    "description": "Fresh authentic pure-veg Chilly Garlic Maggi made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Maggi"
+    ]
+  },
+  "ATM0106": {
+    "id": "ATM0106",
+    "name": "Sp. Atmiya Maggi",
+    "gujarati_name": "Sp. Atmiya Maggi",
+    "price": 130.0,
+    "category": "Maggi",
+    "description": "Fresh authentic pure-veg Sp. Atmiya Maggi made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Maggi"
+    ]
+  },
+  "ATM0107": {
+    "id": "ATM0107",
+    "name": "Hakka Noodles",
+    "gujarati_name": "Hakka Noodles",
+    "price": 120.0,
+    "category": "Noodles",
+    "description": "Fresh authentic pure-veg Hakka Noodles made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Noodles"
+    ]
+  },
+  "ATM0108": {
+    "id": "ATM0108",
+    "name": "Veg. Sezwan Noodles",
+    "gujarati_name": "Veg. Sezwan Noodles",
+    "price": 130.0,
+    "category": "Noodles",
+    "description": "Fresh authentic pure-veg Veg. Sezwan Noodles made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Noodles"
+    ]
+  },
+  "ATM0109": {
+    "id": "ATM0109",
+    "name": "Veg. Chilly Garlic Noodles",
+    "gujarati_name": "Veg. Chilly Garlic Noodles",
+    "price": 130.0,
+    "category": "Noodles",
+    "description": "Fresh authentic pure-veg Veg. Chilly Garlic Noodles made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Noodles"
+    ]
+  },
+  "ATM0110": {
+    "id": "ATM0110",
+    "name": "Manchurian Noodles",
+    "gujarati_name": "Manchurian Noodles",
+    "price": 140.0,
+    "category": "Noodles",
+    "description": "Fresh authentic pure-veg Manchurian Noodles made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Noodles"
+    ]
+  },
+  "ATM0111": {
+    "id": "ATM0111",
+    "name": "Panner Sezwan Noodles",
+    "gujarati_name": "Panner Sezwan Noodles",
+    "price": 140.0,
+    "category": "Noodles",
+    "description": "Fresh authentic pure-veg Panner Sezwan Noodles made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Noodles"
+    ]
+  },
+  "ATM0112": {
+    "id": "ATM0112",
+    "name": "Singapuri Noodles",
+    "gujarati_name": "Singapuri Noodles",
+    "price": 150.0,
+    "category": "Noodles",
+    "description": "Fresh authentic pure-veg Singapuri Noodles made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Noodles"
+    ]
+  },
+  "ATM0113": {
+    "id": "ATM0113",
+    "name": "Panner Noodles",
+    "gujarati_name": "Panner Noodles",
+    "price": 160.0,
+    "category": "Noodles",
+    "description": "Fresh authentic pure-veg Panner Noodles made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Noodles"
+    ]
+  },
+  "ATM0114": {
+    "id": "ATM0114",
+    "name": "Sezwan Noodles",
+    "gujarati_name": "Sezwan Noodles",
+    "price": 170.0,
+    "category": "Noodles",
+    "description": "Fresh authentic pure-veg Sezwan Noodles made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Noodles"
+    ]
+  },
+  "ATM0115": {
+    "id": "ATM0115",
+    "name": "Sezwan Mushroom Noodles",
+    "gujarati_name": "Sezwan Mushroom Noodles",
+    "price": 150.0,
+    "category": "Noodles",
+    "description": "Fresh authentic pure-veg Sezwan Mushroom Noodles made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Noodles"
+    ]
+  },
+  "ATM0116": {
+    "id": "ATM0116",
+    "name": "Mushroom Noodles",
+    "gujarati_name": "Mushroom Noodles",
+    "price": 130.0,
+    "category": "Noodles",
+    "description": "Fresh authentic pure-veg Mushroom Noodles made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Noodles"
+    ]
+  },
+  "ATM0117": {
+    "id": "ATM0117",
+    "name": "Manchaw Soup",
+    "gujarati_name": "Manchaw Soup",
+    "price": 70.0,
+    "category": "Soup",
+    "description": "Fresh authentic pure-veg Manchaw Soup made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 5,
+    "tags": [
+      "Authentic",
+      "Soup"
+    ]
+  },
+  "ATM0118": {
+    "id": "ATM0118",
+    "name": "Manchuriyan Soup",
+    "gujarati_name": "Manchuriyan Soup",
+    "price": 90.0,
+    "category": "Soup",
+    "description": "Fresh authentic pure-veg Manchuriyan Soup made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 5,
+    "tags": [
+      "Authentic",
+      "Soup"
+    ]
+  },
+  "ATM0119": {
+    "id": "ATM0119",
+    "name": "Tomanto Soup",
+    "gujarati_name": "Tomanto Soup",
+    "price": 70.0,
+    "category": "Soup",
+    "description": "Fresh authentic pure-veg Tomanto Soup made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 5,
+    "tags": [
+      "Authentic",
+      "Soup"
+    ]
+  },
+  "ATM0120": {
+    "id": "ATM0120",
+    "name": "Hot & Sour Soup",
+    "gujarati_name": "Hot & Sour Soup",
+    "price": 90.0,
+    "category": "Soup",
+    "description": "Fresh authentic pure-veg Hot & Sour Soup made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 5,
+    "tags": [
+      "Authentic",
+      "Soup"
+    ]
+  },
+  "ATM0121": {
+    "id": "ATM0121",
+    "name": "Vegetable Soup",
+    "gujarati_name": "Vegetable Soup",
+    "price": 80.0,
+    "category": "Soup",
+    "description": "Fresh authentic pure-veg Vegetable Soup made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 5,
+    "tags": [
+      "Authentic",
+      "Soup"
+    ]
+  },
+  "ATM0122": {
+    "id": "ATM0122",
+    "name": "Sp. Atmiya Soup",
+    "gujarati_name": "Sp. Atmiya Soup",
+    "price": 100.0,
+    "category": "Soup",
+    "description": "Fresh authentic pure-veg Sp. Atmiya Soup made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 5,
+    "tags": [
+      "Authentic",
+      "Soup"
+    ]
+  },
+  "ATM0123": {
+    "id": "ATM0123",
+    "name": "Rosted Papad",
+    "gujarati_name": "Rosted Papad",
+    "price": 20.0,
+    "category": "Papad",
+    "description": "Fresh authentic pure-veg Rosted Papad made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 5,
+    "tags": [
+      "Authentic",
+      "Papad"
+    ]
+  },
+  "ATM0124": {
+    "id": "ATM0124",
+    "name": "Fry Papad",
+    "gujarati_name": "Fry Papad",
+    "price": 30.0,
+    "category": "Papad",
+    "description": "Fresh authentic pure-veg Fry Papad made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 5,
+    "tags": [
+      "Authentic",
+      "Papad"
+    ]
+  },
+  "ATM0125": {
+    "id": "ATM0125",
+    "name": "Masala Papad",
+    "gujarati_name": "Masala Papad",
+    "price": 50.0,
+    "category": "Papad",
+    "description": "Fresh authentic pure-veg Masala Papad made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 5,
+    "tags": [
+      "Authentic",
+      "Papad"
+    ]
+  },
+  "ATM0126": {
+    "id": "ATM0126",
+    "name": "Cheese Masala Papad",
+    "gujarati_name": "Cheese Masala Papad",
+    "price": 60.0,
+    "category": "Papad",
+    "description": "Fresh authentic pure-veg Cheese Masala Papad made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 5,
+    "tags": [
+      "Authentic",
+      "Papad"
+    ]
+  },
+  "ATM0127": {
+    "id": "ATM0127",
+    "name": "Cheese Panner Masala Papad",
+    "gujarati_name": "Cheese Panner Masala Papad",
+    "price": 80.0,
+    "category": "Papad",
+    "description": "Fresh authentic pure-veg Cheese Panner Masala Papad made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 5,
+    "tags": [
+      "Authentic",
+      "Papad"
+    ]
+  },
+  "ATM0128": {
+    "id": "ATM0128",
+    "name": "Franch Fries",
+    "gujarati_name": "Franch Fries",
+    "price": 70.0,
+    "category": "Papad",
+    "description": "Fresh authentic pure-veg Franch Fries made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 5,
+    "tags": [
+      "Authentic",
+      "Papad"
+    ]
+  },
+  "ATM0129": {
+    "id": "ATM0129",
+    "name": "Peri Peri Franch Fries",
+    "gujarati_name": "Peri Peri Franch Fries",
+    "price": 80.0,
+    "category": "Papad",
+    "description": "Fresh authentic pure-veg Peri Peri Franch Fries made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 5,
+    "tags": [
+      "Authentic",
+      "Papad"
+    ]
+  },
+  "ATM0130": {
+    "id": "ATM0130",
+    "name": "Pasta Dosa",
+    "gujarati_name": "Pasta Dosa",
+    "price": 200.0,
+    "category": "Special Item",
+    "description": "Fresh authentic pure-veg Pasta Dosa made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Special Item"
+    ]
+  },
+  "ATM0131": {
+    "id": "ATM0131",
+    "name": "Dilbhar Dosa",
+    "gujarati_name": "Dilbhar Dosa",
+    "price": 240.0,
+    "category": "Special Item",
+    "description": "Fresh authentic pure-veg Dilbhar Dosa made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Special Item"
+    ]
+  },
+  "ATM0132": {
+    "id": "ATM0132",
+    "name": "Mataka Dosa",
+    "gujarati_name": "Mataka Dosa",
+    "price": 300.0,
+    "category": "Special Item",
+    "description": "Fresh authentic pure-veg Mataka Dosa made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Special Item"
+    ]
+  },
+  "ATM0133": {
+    "id": "ATM0133",
+    "name": "Bahubali Dosa",
+    "gujarati_name": "Bahubali Dosa",
+    "price": 350.0,
+    "category": "Special Item",
+    "description": "Fresh authentic pure-veg Bahubali Dosa made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Special Item"
+    ]
+  },
+  "ATM0134": {
+    "id": "ATM0134",
+    "name": "Burji Kalifa Dosa",
+    "gujarati_name": "Burji Kalifa Dosa",
+    "price": 350.0,
+    "category": "Special Item",
+    "description": "Fresh authentic pure-veg Burji Kalifa Dosa made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Special Item"
+    ]
+  },
+  "ATM0135": {
+    "id": "ATM0135",
+    "name": "Atmiya Sp. Fancy",
+    "gujarati_name": "Atmiya Sp. Fancy",
+    "price": 360.0,
+    "category": "Special Item",
+    "description": "Fresh authentic pure-veg Atmiya Sp. Fancy made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Special Item"
+    ]
+  },
+  "ATM0136": {
+    "id": "ATM0136",
+    "name": "Maharaja Dosa",
+    "gujarati_name": "Maharaja Dosa",
+    "price": 290.0,
+    "category": "Special Item",
+    "description": "Fresh authentic pure-veg Maharaja Dosa made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Special Item"
+    ]
+  },
+  "ATM0137": {
+    "id": "ATM0137",
+    "name": "Double Cheese Pizza",
+    "gujarati_name": "Double Cheese Pizza",
+    "price": 220.0,
+    "category": "Special Item",
+    "description": "Fresh authentic pure-veg Double Cheese Pizza made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Special Item"
+    ]
+  },
+  "ATM0138": {
+    "id": "ATM0138",
+    "name": "Pavu Bhaji",
+    "gujarati_name": "Pavu Bhaji",
+    "price": 70.0,
+    "category": "Pav Bhaji",
+    "description": "Fresh authentic pure-veg Pavu Bhaji made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pav Bhaji"
+    ]
+  },
+  "ATM0139": {
+    "id": "ATM0139",
+    "name": "Lashaniya Pavu Bhaji",
+    "gujarati_name": "Lashaniya Pavu Bhaji",
+    "price": 80.0,
+    "category": "Pav Bhaji",
+    "description": "Fresh authentic pure-veg Lashaniya Pavu Bhaji made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pav Bhaji"
+    ]
+  },
+  "ATM0140": {
+    "id": "ATM0140",
+    "name": "Butter Pavu Bhaji",
+    "gujarati_name": "Butter Pavu Bhaji",
+    "price": 80.0,
+    "category": "Pav Bhaji",
+    "description": "Fresh authentic pure-veg Butter Pavu Bhaji made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pav Bhaji"
+    ]
+  },
+  "ATM0141": {
+    "id": "ATM0141",
+    "name": "Panner Pavu Bhaji",
+    "gujarati_name": "Panner Pavu Bhaji",
+    "price": 130.0,
+    "category": "Pav Bhaji",
+    "description": "Fresh authentic pure-veg Panner Pavu Bhaji made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pav Bhaji"
+    ]
+  },
+  "ATM0142": {
+    "id": "ATM0142",
+    "name": "Cheese Pavu Bhaji",
+    "gujarati_name": "Cheese Pavu Bhaji",
+    "price": 140.0,
+    "category": "Pav Bhaji",
+    "description": "Fresh authentic pure-veg Cheese Pavu Bhaji made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pav Bhaji"
+    ]
+  },
+  "ATM0143": {
+    "id": "ATM0143",
+    "name": "Panner Cheese Pavu Bhaji",
+    "gujarati_name": "Panner Cheese Pavu Bhaji",
+    "price": 150.0,
+    "category": "Pav Bhaji",
+    "description": "Fresh authentic pure-veg Panner Cheese Pavu Bhaji made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pav Bhaji"
+    ]
+  },
+  "ATM0144": {
+    "id": "ATM0144",
+    "name": "Green Pavu Bhaji",
+    "gujarati_name": "Green Pavu Bhaji",
+    "price": 90.0,
+    "category": "Pav Bhaji",
+    "description": "Fresh authentic pure-veg Green Pavu Bhaji made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pav Bhaji"
+    ]
+  },
+  "ATM0145": {
+    "id": "ATM0145",
+    "name": "Jain Pavu Bhaji",
+    "gujarati_name": "Jain Pavu Bhaji",
+    "price": 100.0,
+    "category": "Pav Bhaji",
+    "description": "Fresh authentic pure-veg Jain Pavu Bhaji made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pav Bhaji"
+    ]
+  },
+  "ATM0146": {
+    "id": "ATM0146",
+    "name": "Swami Narayan Pavu Bhaji",
+    "gujarati_name": "Swami Narayan Pavu Bhaji",
+    "price": 90.0,
+    "category": "Pav Bhaji",
+    "description": "Fresh authentic pure-veg Swami Narayan Pavu Bhaji made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pav Bhaji"
+    ]
+  },
+  "ATM0147": {
+    "id": "ATM0147",
+    "name": "Sp. Atmiya Pavu Bhaji",
+    "gujarati_name": "Sp. Atmiya Pavu Bhaji",
+    "price": 160.0,
+    "category": "Pav Bhaji",
+    "description": "Fresh authentic pure-veg Sp. Atmiya Pavu Bhaji made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pav Bhaji"
+    ]
+  },
+  "ATM0148": {
+    "id": "ATM0148",
+    "name": "Regular Pulav",
+    "gujarati_name": "Regular Pulav",
+    "price": 70.0,
+    "category": "Pulav",
+    "description": "Fresh authentic pure-veg Regular Pulav made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pulav"
+    ]
+  },
+  "ATM0149": {
+    "id": "ATM0149",
+    "name": "Panner Pulav",
+    "gujarati_name": "Panner Pulav",
+    "price": 90.0,
+    "category": "Pulav",
+    "description": "Fresh authentic pure-veg Panner Pulav made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pulav"
+    ]
+  },
+  "ATM0150": {
+    "id": "ATM0150",
+    "name": "Cheese Pulav",
+    "gujarati_name": "Cheese Pulav",
+    "price": 110.0,
+    "category": "Pulav",
+    "description": "Fresh authentic pure-veg Cheese Pulav made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pulav"
+    ]
+  },
+  "ATM0151": {
+    "id": "ATM0151",
+    "name": "Cheese Panner Pulav",
+    "gujarati_name": "Cheese Panner Pulav",
+    "price": 120.0,
+    "category": "Pulav",
+    "description": "Fresh authentic pure-veg Cheese Panner Pulav made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pulav"
+    ]
+  },
+  "ATM0152": {
+    "id": "ATM0152",
+    "name": "Butter Pulav",
+    "gujarati_name": "Butter Pulav",
+    "price": 90.0,
+    "category": "Pulav",
+    "description": "Fresh authentic pure-veg Butter Pulav made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pulav"
+    ]
+  },
+  "ATM0153": {
+    "id": "ATM0153",
+    "name": "Kashmiri Pulav",
+    "gujarati_name": "Kashmiri Pulav",
+    "price": 120.0,
+    "category": "Pulav",
+    "description": "Fresh authentic pure-veg Kashmiri Pulav made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pulav"
+    ]
+  },
+  "ATM0154": {
+    "id": "ATM0154",
+    "name": "Hyderabadi Pulav",
+    "gujarati_name": "Hyderabadi Pulav",
+    "price": 110.0,
+    "category": "Pulav",
+    "description": "Fresh authentic pure-veg Hyderabadi Pulav made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pulav"
+    ]
+  },
+  "ATM0155": {
+    "id": "ATM0155",
+    "name": "Palak Pulav",
+    "gujarati_name": "Palak Pulav",
+    "price": 120.0,
+    "category": "Pulav",
+    "description": "Fresh authentic pure-veg Palak Pulav made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pulav"
+    ]
+  },
+  "ATM0156": {
+    "id": "ATM0156",
+    "name": "Matar Pulav",
+    "gujarati_name": "Matar Pulav",
+    "price": 80.0,
+    "category": "Pulav",
+    "description": "Fresh authentic pure-veg Matar Pulav made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pulav"
+    ]
+  },
+  "ATM0157": {
+    "id": "ATM0157",
+    "name": "Palak Kaju Pulav",
+    "gujarati_name": "Palak Kaju Pulav",
+    "price": 130.0,
+    "category": "Pulav",
+    "description": "Fresh authentic pure-veg Palak Kaju Pulav made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pulav"
+    ]
+  },
+  "ATM0158": {
+    "id": "ATM0158",
+    "name": "Sp. Atmiya Pulav",
+    "gujarati_name": "Sp. Atmiya Pulav",
+    "price": 150.0,
+    "category": "Pulav",
+    "description": "Fresh authentic pure-veg Sp. Atmiya Pulav made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Pulav"
+    ]
+  },
+  "ATM0159": {
+    "id": "ATM0159",
+    "name": "Mix Uttapam",
+    "gujarati_name": "Mix Uttapam",
+    "price": 150.0,
+    "category": "Uttapam",
+    "description": "Fresh authentic pure-veg Mix Uttapam made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Uttapam"
+    ]
+  },
+  "ATM0160": {
+    "id": "ATM0160",
+    "name": "Masala Uttapam",
+    "gujarati_name": "Masala Uttapam",
+    "price": 150.0,
+    "category": "Uttapam",
+    "description": "Fresh authentic pure-veg Masala Uttapam made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Uttapam"
+    ]
+  },
+  "ATM0161": {
+    "id": "ATM0161",
+    "name": "Cheese Uttapam",
+    "gujarati_name": "Cheese Uttapam",
+    "price": 200.0,
+    "category": "Uttapam",
+    "description": "Fresh authentic pure-veg Cheese Uttapam made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Uttapam"
+    ]
+  },
+  "ATM0162": {
+    "id": "ATM0162",
+    "name": "Cheese Panner Uttapam",
+    "gujarati_name": "Cheese Panner Uttapam",
+    "price": 220.0,
+    "category": "Uttapam",
+    "description": "Fresh authentic pure-veg Cheese Panner Uttapam made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Uttapam"
+    ]
+  },
+  "ATM0163": {
+    "id": "ATM0163",
+    "name": "Onion Uttapam",
+    "gujarati_name": "Onion Uttapam",
+    "price": 160.0,
+    "category": "Uttapam",
+    "description": "Fresh authentic pure-veg Onion Uttapam made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Uttapam"
+    ]
+  },
+  "ATM0164": {
+    "id": "ATM0164",
+    "name": "Sp. Atmiya Uttapam",
+    "gujarati_name": "Sp. Atmiya Uttapam",
+    "price": 250.0,
+    "category": "Uttapam",
+    "description": "Fresh authentic pure-veg Sp. Atmiya Uttapam made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Uttapam"
+    ]
+  },
+  "ATM0165": {
+    "id": "ATM0165",
+    "name": "Plain Idali",
+    "gujarati_name": "Plain Idali",
+    "price": 40.0,
+    "category": "Idali",
+    "description": "Fresh authentic pure-veg Plain Idali made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Idali"
+    ]
+  },
+  "ATM0166": {
+    "id": "ATM0166",
+    "name": "Masala Idali",
+    "gujarati_name": "Masala Idali",
+    "price": 60.0,
+    "category": "Idali",
+    "description": "Fresh authentic pure-veg Masala Idali made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Idali"
+    ]
+  },
+  "ATM0167": {
+    "id": "ATM0167",
+    "name": "Fry Idali",
+    "gujarati_name": "Fry Idali",
+    "price": 80.0,
+    "category": "Idali",
+    "description": "Fresh authentic pure-veg Fry Idali made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Idali"
+    ]
+  },
+  "ATM0168": {
+    "id": "ATM0168",
+    "name": "Thati Idali",
+    "gujarati_name": "Thati Idali",
+    "price": 70.0,
+    "category": "Idali",
+    "description": "Fresh authentic pure-veg Thati Idali made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Idali"
+    ]
+  },
+  "ATM0169": {
+    "id": "ATM0169",
+    "name": "Thati Idali Ghee Puti",
+    "gujarati_name": "Thati Idali Ghee Puti",
+    "price": 100.0,
+    "category": "Idali",
+    "description": "Fresh authentic pure-veg Thati Idali Ghee Puti made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Idali"
+    ]
+  },
+  "ATM0170": {
+    "id": "ATM0170",
+    "name": "Mendu Vada",
+    "gujarati_name": "Mendu Vada",
+    "price": 40.0,
+    "category": "Vada & Dhokala",
+    "description": "Fresh authentic pure-veg Mendu Vada made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Vada & Dhokala"
+    ]
+  },
+  "ATM0171": {
+    "id": "ATM0171",
+    "name": "Dahi Vada",
+    "gujarati_name": "Dahi Vada",
+    "price": 40.0,
+    "category": "Vada & Dhokala",
+    "description": "Fresh authentic pure-veg Dahi Vada made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Vada & Dhokala"
+    ]
+  },
+  "ATM0172": {
+    "id": "ATM0172",
+    "name": "Blue Dahi Vada",
+    "gujarati_name": "Blue Dahi Vada",
+    "price": 50.0,
+    "category": "Vada & Dhokala",
+    "description": "Fresh authentic pure-veg Blue Dahi Vada made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Vada & Dhokala"
+    ]
+  },
+  "ATM0173": {
+    "id": "ATM0173",
+    "name": "Dhokala",
+    "gujarati_name": "Dhokala",
+    "price": 40.0,
+    "category": "Vada & Dhokala",
+    "description": "Fresh authentic pure-veg Dhokala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Vada & Dhokala"
+    ]
+  },
+  "ATM0174": {
+    "id": "ATM0174",
+    "name": "Fry Dhokala",
+    "gujarati_name": "Fry Dhokala",
+    "price": 60.0,
+    "category": "Vada & Dhokala",
+    "description": "Fresh authentic pure-veg Fry Dhokala made to order with traditional Atmiya Hub spices.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Vada & Dhokala"
+    ]
+  },
+  "ATM0175": {
+    "id": "ATM0175",
+    "name": "Unlimited Masala Dosa",
+    "gujarati_name": "Unlimited Masala Dosa",
+    "price": 130.0,
+    "category": "Unlimited - Masala Dosa",
+    "description": "Per person; child price 100. Includes masala dosa, peri peri masala dosa, jeera mari masala, onion masala, garlic masala (Gujarati text; verify exact inclusion list).",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "tags": [
+      "Authentic",
+      "Unlimited - Masala Dosa"
+    ]
+  },
+  "ATM0176": {
+    "id": "ATM0176",
+    "name": "Unlimited Chinese",
+    "gujarati_name": "Unlimited Chinese",
+    "price": 160.0,
+    "category": "Unlimited - Chinese",
+    "description": "Per person; child price 110. Includes noodles, Manchurian fry, Manchurian rice, Chinese bhel, Manchaw soup / hot & sour soup (verify exact inclusion list).",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Unlimited - Chinese"
+    ]
+  },
+  "ATM0177": {
+    "id": "ATM0177",
+    "name": "Pav Bhaji + Pulav + Cold Drinks",
+    "gujarati_name": "Pav Bhaji + Pulav + Cold Drinks",
+    "price": 100.0,
+    "category": "Combo",
+    "description": "Per person; child price 80.",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 8,
+    "tags": [
+      "Authentic",
+      "Combo"
+    ]
+  },
+  "m_1793591175635": {
+    "id": "m_1793591175635",
+    "name": "khaman  (khaman)",
+    "english_name": "khaman  (khaman)",
+    "gujarati_name": "khaman",
+    "price": 191.0,
+    "category": "Vada & Dhokala",
+    "cuisine": "south_indian",
+    "description": "",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "image_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQTfxKGW4gCHOVoj0647eFkvwCj_YBRdAN1WLUxT2I0geeMsD7u9k0uMSKLRtO8f-j3ZFfw4VGANkNpjw5ue_J94UDAtRRoELTVUG975YgDYw&s=10",
+    "tags": [
+      "New Item"
+    ]
+  },
+  "cd3d48a1-c409-5f14-a554-ae75b8083f90": {
+    "id": "cd3d48a1-c409-5f14-a554-ae75b8083f90",
+    "name": "Dish",
+    "english_name": "Dish",
+    "gujarati_name": null,
+    "price": 0.0,
+    "category": "Other",
+    "cuisine": "south_indian",
+    "description": "",
+    "is_available": true,
+    "is_jain_available": true,
+    "prep_time_mins": 10,
+    "image_url": null,
+    "tags": []
+  }
+}

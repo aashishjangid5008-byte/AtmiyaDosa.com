@@ -18,7 +18,8 @@ from app.database import (
     CANONICAL_ORDERS,
     CANONICAL_TABLES,
     sync_order_to_supabase,
-    log_admin_action
+    log_admin_action,
+    save_orders
 )
 from app.security import get_current_user
 
@@ -70,7 +71,7 @@ async def place_guest_order(request: Request, body: GuestOrderCreate):
         and (o.get("status") or "").lower() not in ["completed", "cancelled"]
     ), None)
 
-    if active_order:
+    if active_order and not (body.is_addon or body.parent_order_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Table {clean_table} already has an active order ({active_order['id']}) in status '{active_order['status']}'. QR ordering is locked for this table until the current order is completed."
@@ -89,15 +90,15 @@ async def place_guest_order(request: Request, body: GuestOrderCreate):
                 detail=f"Dish identifier '{item.id}' is invalid or discontinued."
             )
         
-        qty = max(1, min(20, item.qty))
-        line_total = canonical["price"] * qty
+        unit_price = float(canonical.get("final_price") if canonical.get("has_discount") and canonical.get("final_price") is not None else canonical["price"])
+        line_total = unit_price * qty
         verified_subtotal += line_total
 
         verified_items.append(
             OrderItemDetail(
                 id=item.id,
                 name=canonical["name"],
-                price=canonical["price"],
+                price=unit_price,
                 qty=qty,
                 line_total=line_total,
                 notes=html.escape(item.notes.strip()) if item.notes else None,
@@ -117,7 +118,36 @@ async def place_guest_order(request: Request, body: GuestOrderCreate):
             elif promo["discount_type"] == "percentage":
                 verified_discount = round((verified_subtotal * promo["discount"]) / 100.0, 2)
 
-    # 6. 5% GST Calculation (2.5% CGST + 2.5% SGST)
+    # If this is an add-on to an existing active table order, MERGE directly into running bill!
+    if active_order and (body.is_addon or body.parent_order_id):
+        existing_items = active_order.get("items", [])
+        for new_item in verified_items:
+            match = next((i for i in existing_items if i.get("id") == new_item.id and i.get("name") == new_item.name), None)
+            if match:
+                match["qty"] = match.get("qty", 1) + new_item.qty
+                match["line_total"] = round(match["qty"] * match["price"], 2)
+            else:
+                existing_items.append(new_item.model_dump())
+
+        new_subtotal = round(float(active_order.get("subtotal", 0.0)) + verified_subtotal, 2)
+        new_discount = round(float(active_order.get("discount", 0.0)) + verified_discount, 2)
+        taxable_amount = max(0.0, new_subtotal - new_discount)
+        new_tax = round(taxable_amount * 0.05, 2)
+        new_total = round(taxable_amount + new_tax, 2)
+
+        active_order["items"] = existing_items
+        active_order["items_summary"] = ", ".join(f"{it['qty']}x {it['name']}" for it in existing_items)
+        active_order["subtotal"] = new_subtotal
+        active_order["discount"] = new_discount
+        active_order["tax"] = new_tax
+        active_order["total_amount"] = new_total
+        active_order["status"] = "Placed"
+        save_orders()
+
+        await sync_order_to_supabase(active_order)
+        return OrderResponse(**active_order)
+
+    # 6. 5% GST Calculation for new order
     taxable_amount = max(0.0, verified_subtotal - verified_discount)
     tax = round(taxable_amount * 0.05, 2)
     authoritative_total = round(taxable_amount + tax, 2)
@@ -144,6 +174,7 @@ async def place_guest_order(request: Request, body: GuestOrderCreate):
 
     # Prepend to live orders list
     CANONICAL_ORDERS.insert(0, new_order_dict)
+    save_orders()
 
     # Update Table status to occupied
     if clean_table in CANONICAL_TABLES:
@@ -191,6 +222,7 @@ async def update_order_status(
 
     prev_status = order["status"]
     order["status"] = body.status
+    save_orders()
 
     # If completed or cancelled, release table
     if body.status in ["Completed", "Cancelled"]:
@@ -210,3 +242,51 @@ async def update_order_status(
     )
 
     return OrderResponse(**order)
+
+@router.put("/{order_id}/items/{item_index}/status", summary="Update Dish Item Kitchen Status")
+async def update_item_status(
+    order_id: str,
+    item_index: int,
+    body: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    clean_id = order_id.strip()
+    order = next((o for o in CANONICAL_ORDERS if o["id"] == clean_id or o.get("order_number") == clean_id.replace("#", "")), None)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    items = order.get("items", [])
+    if item_index < 0 or item_index >= len(items):
+        raise HTTPException(status_code=400, detail="Invalid item index")
+
+    new_status = body.get("status", "ready")
+    items[item_index]["kitchen_status"] = new_status
+    if new_status == "served":
+        items[item_index]["is_served"] = True
+    elif new_status == "ready":
+        items[item_index]["ready_at"] = int(time.time() * 1000)
+
+    all_served = len(items) > 0 and all(it.get("is_served") for it in items)
+    all_ready = len(items) > 0 and all((it.get("kitchen_status") == "ready" or it.get("is_served")) for it in items)
+    if all_served:
+        order["status"] = "Served"
+    elif all_ready:
+        order["status"] = "Ready"
+    elif any(it.get("kitchen_status") == "ready" or it.get("is_served") for it in items):
+        if order.get("status") in ["Placed"]:
+            order["status"] = "Preparing"
+
+    save_orders()
+    await sync_order_to_supabase(order)
+    return {"success": True, "order": order}
+
+
+@router.delete("", summary="Purge All Past Orders History (Production Clean Slate)")
+async def purge_all_orders():
+    """Wipes in-memory and disk canonical orders for a fresh production slate."""
+    CANONICAL_ORDERS.clear()
+    save_orders()
+    for tbl in CANONICAL_TABLES.values():
+        tbl["status"] = "available"
+        tbl["current_order_id"] = None
+        tbl["timing"] = None
+    return {"success": True, "message": "All orders cleared"}

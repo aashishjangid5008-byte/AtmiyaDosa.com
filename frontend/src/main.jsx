@@ -42,25 +42,67 @@ class RootErrorBoundary extends React.Component {
           }}>
             <div style={{ fontSize: '32px', marginBottom: '12px' }}>🍽️</div>
             <h1 style={{ fontSize: '18px', fontWeight: 800, marginBottom: '8px' }}>Atmiya Dosa Hub POS</h1>
-            <p style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '20px' }}>
+            <p style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '12px' }}>
               A temporary display refresh is required. Click below to reload the live POS terminal.
             </p>
-            <button
-              onClick={() => window.location.reload()}
-              style={{
-                width: '100%',
-                padding: '12px 20px',
-                backgroundColor: '#f97316',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '12px',
-                fontWeight: 700,
-                fontSize: '14px',
-                cursor: 'pointer'
-              }}
-            >
-              Reload Live POS
-            </button>
+            {this.state.error && (
+              <div style={{
+                textAlign: 'left',
+                backgroundColor: '#0f172a',
+                border: '1px solid #dc2626',
+                color: '#fca5a5',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                fontSize: '11px',
+                fontFamily: 'monospace',
+                marginBottom: '16px',
+                maxHeight: '120px',
+                overflowY: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all'
+              }}>
+                {this.state.error.toString()}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => window.location.reload()}
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  backgroundColor: '#f97316',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                Reload Live POS
+              </button>
+              <button
+                onClick={() => {
+                  try {
+                    localStorage.removeItem('seen_order_ids');
+                    localStorage.removeItem('preferred_language');
+                  } catch (e) {}
+                  window.location.reload();
+                }}
+                style={{
+                  padding: '12px 16px',
+                  backgroundColor: '#334155',
+                  color: '#cbd5e1',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontWeight: 600,
+                  fontSize: '12px',
+                  cursor: 'pointer'
+                }}
+              >
+                Reset State
+              </button>
+            </div>
           </div>
         </div>
       );

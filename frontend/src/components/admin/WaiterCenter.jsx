@@ -29,22 +29,22 @@ export default function WaiterCenter({ waiterCalls, onClearCall }) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {pendingCalls.map(call => (
-            <div key={call.id} className="p-4 rounded-2xl bg-slate-900 border border-amber-500/30 flex items-center justify-between shadow-lg">
+            <div key={call.id} className="p-4 rounded-2xl bg-white border-2 border-amber-400 flex items-center justify-between shadow-sm">
               <div>
-                <span className="text-xl font-black text-white">{call.table_number}</span>
-                <p className="text-xs text-amber-400 uppercase font-extrabold tracking-wider mt-0.5">
+                <span className="text-xl font-black text-slate-900">{call.table_number}</span>
+                <p className="text-xs text-amber-700 uppercase font-black tracking-wider mt-0.5">
                   Request: {call.request_type}
                 </p>
-                <span className="text-[10px] text-slate-400 font-mono">
+                <span className="text-[10px] text-slate-500 font-mono">
                   {new Date(call.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
 
               <button
                 onClick={() => onClearCall(call.id)}
-                className="px-3 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl flex items-center gap-1 shadow"
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1 shadow-xs cursor-pointer transition"
               >
-                <Check className="w-4 h-4" />
+                <Check className="w-4 h-4 stroke-[2.5]" />
                 Attend
               </button>
             </div>

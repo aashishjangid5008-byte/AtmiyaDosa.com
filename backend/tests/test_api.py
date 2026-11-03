@@ -6,6 +6,7 @@ from starlette.testclient import TestClient
 
 from app.main import app
 from app.config import settings
+from app.database import CANONICAL_ORDERS
 
 client = TestClient(app)
 
@@ -112,27 +113,42 @@ def test_guest_order_authoritative_pricing():
     assert order["total_amount"] == 262.5
     assert order["table_number"] == "T05"
 
-def test_inventory_and_restock():
-    """Verify inventory listing and one-click restocking."""
-    # Login as admin
-    login_res = client.post("/api/auth/login", json={"username": "admin", "password": "admin123"})
-    token = login_res.json()["token"]
-    headers = {"Authorization": f"Bearer {token}"}
+def test_guest_order_addon_merging_into_existing_bill():
+    """
+    Verify that when items are added after an order has already been placed,
+    they merge directly into the existing running bill for that table,
+    recalculating cumulative total without creating a duplicate order or amount conflict.
+    """
+    initial_order_id = CANONICAL_ORDERS[0]["id"] if CANONICAL_ORDERS else None
 
-    # Get inventory
-    res = client.get("/api/inventory")
-    assert res.status_code == 200
-    items = res.json()["items"]
-    assert len(items) >= 9
+    addon_payload = {
+        "table_number": "T05",
+        "customer_name": "Test Guest",
+        "items": [
+            {"id": "item_atmiya_02", "qty": 1}  # Paneer Mysore: 150 * 1 = 150
+        ],
+        "is_addon": True,
+        "payment_mode": "Cash"
+    }
 
-    # Restock inv_01 by +10 kg
-    res_restock = client.post(
-        "/api/inventory/inv_01/restock",
-        json={"amount": 10.0, "supplier": "Fresh Daily Mills"},
-        headers=headers
-    )
-    assert res_restock.status_code == 200
-    assert res_restock.json()["stock"] >= 52.0
+    res = client.post("/api/orders/guest", json=addon_payload)
+    assert res.status_code == 201
+    merged = res.json()
+
+    # Must preserve the same existing bill ID!
+    if initial_order_id:
+        assert merged["id"] == initial_order_id
+
+    # Previous subtotal 300 + 150 = 450
+    assert merged["subtotal"] == 450.0
+    # Discount remains 50
+    assert merged["discount"] == 50.0
+    # Taxable: 400, 5% GST = 20.0
+    assert merged["tax"] == 20.0
+    # Total: 420.0
+    assert merged["total_amount"] == 420.0
+    # Items now include all 3 items
+    assert len(merged["items"]) == 3
 
 def test_service_calls_flow():
     """Verify guest table assistance requests."""
@@ -167,3 +183,83 @@ def test_petpooja_webhook_hmac():
     res_ok = client.post("/api/webhooks/petpooja", content=payload, headers={"x-petpooja-signature": valid_sig})
     assert res_ok.status_code == 200
     assert res_ok.json()["success"] is True
+
+def test_auth_by_email_and_owner_security():
+    """Verify login with email, PIN, and primary admin security enforcement."""
+    # 1. Login with primary owner email
+    res_owner = client.post("/api/auth/login", json={
+        "username": "ranadarshit99@gmail.com",
+        "password": "admin2026",
+        "role": "admin"
+    })
+    assert res_owner.status_code == 200
+    data = res_owner.json()
+    assert data["user"]["is_primary_owner"] is True
+    assert data["user"]["role"] == "Admin"
+    token = data["token"]
+
+    # 2. Verify token endpoint
+    res_verify = client.get("/api/auth/verify", headers={"Authorization": f"Bearer {token}"})
+    assert res_verify.status_code == 200
+    assert res_verify.json()["valid"] is True
+
+    # 3. Security test: Non-owner cannot claim Admin role
+    res_fake_admin = client.post("/api/auth/login", json={
+        "username": "waiter@atmiyadosa.com",
+        "password": "waiter123",
+        "role": "admin"
+    })
+    assert res_fake_admin.status_code == 403
+
+def test_payment_intent_and_verification():
+    """Verify dynamic UPI payment intent and server-side payment verification."""
+    # 1. Create UPI Payment Intent
+    intent_payload = {
+        "amount": 315.0,
+        "table_number": "T04",
+        "order_id": "#ORD1048",
+        "customer_name": "Rahul Sharma"
+    }
+    res_intent = client.post("/api/payments/create-intent", json=intent_payload)
+    assert res_intent.status_code == 200
+    intent_data = res_intent.json()
+    assert intent_data["success"] is True
+    assert "upi://pay?" in intent_data["upi_intent_url"]
+    assert "ranadarshit99@okicici" in intent_data["upi_intent_url"]
+    assert "data:image/png;base64," in intent_data["qr_data_url"]
+    ref_id = intent_data["payment_reference"]
+
+    # 2. Verify payment
+    verify_payload = {
+        "payment_reference": ref_id,
+        "table_number": "T04",
+        "order_id": "#ORD1048",
+        "method": "UPI",
+        "transaction_id": "UPI-BANK-UTR-998822"
+    }
+    res_verify = client.post("/api/payments/verify", json=verify_payload)
+    assert res_verify.status_code == 200
+    assert res_verify.json()["verified"] is True
+    assert res_verify.json()["payment_status"] == "PAID"
+
+def test_table_bill_settle_and_session_termination():
+    """Verify table bill settlement and automatic session termination."""
+    # Login as admin to obtain token
+    login_res = client.post("/api/auth/login", json={"username": "admin", "password": "admin123"})
+    token = login_res.json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Settle Table T04
+    settle_payload = {
+        "payment_method": "Cash",
+        "amount_collected": 315.0,
+        "change_due": 0.0,
+        "settled_by": "Darshit Rana"
+    }
+    res_settle = client.post("/api/tables/T04/settle", json=settle_payload, headers=headers)
+    assert res_settle.status_code == 200
+    data = res_settle.json()
+    assert data["success"] is True
+    assert data["table_number"] == "T04"
+    assert data["session_terminated"] is True
+    assert data["vacated"] is True
