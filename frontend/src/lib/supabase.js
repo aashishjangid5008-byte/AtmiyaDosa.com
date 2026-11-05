@@ -224,12 +224,20 @@ export const dispatchOrderToSupabase = async ({
         const prevTotal = parseFloat(activeSession.total_amount || 0);
         const thisTotal = parseFloat(total || 0);
         const cumulativeTotal = (prevTotal + thisTotal).toFixed(2);
+        const summaryText = items && items.length > 0 
+          ? items.map(i => `${i.quantity || 1}x ${i.name || i.item_name || 'Dish'}`).join(', ') 
+          : 'Order Placed';
+
         await supabase
           .from('table_sessions')
           .update({
             total_amount: cumulativeTotal,
             customer_name: guestName,
-            customer_phone: cleanPhone || activeSession.customer_phone
+            customer_phone: cleanPhone || activeSession.customer_phone,
+            table_number: formattedTableNum,
+            payment_status: isOnlinePayment ? 'PAID' : 'UNPAID',
+            payment_method: isOnlinePayment ? 'UPI_COUNTER' : 'CASH',
+            items_summary: summaryText
           })
           .eq('id', activeSession.id);
       }
@@ -240,17 +248,24 @@ export const dispatchOrderToSupabase = async ({
       const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       const randSuffix = Math.floor(100 + Math.random() * 900);
       sessionCode = `SESS-${dateStr}-${formattedTableNum.replace('-', '')}-${randSuffix}`;
+      const summaryText = items && items.length > 0 
+        ? items.map(i => `${i.quantity || 1}x ${i.name || i.item_name || 'Dish'}`).join(', ') 
+        : 'Order Placed';
 
       const { data: newSession, error: sessCreateErr } = await supabase
         .from('table_sessions')
         .insert([{
           restaurant_id: RESTAURANT_ID,
           table_id: tableId,
+          table_number: formattedTableNum,
           session_code: sessionCode,
           status: 'ACTIVE',
           customer_name: guestName,
           customer_phone: cleanPhone,
           total_amount: parseFloat(total || 0),
+          payment_status: isOnlinePayment ? 'PAID' : 'UNPAID',
+          payment_method: isOnlinePayment ? 'UPI_COUNTER' : 'CASH',
+          items_summary: summaryText,
           opened_at: new Date().toISOString()
         }])
         .select()

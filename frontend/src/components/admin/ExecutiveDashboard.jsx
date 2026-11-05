@@ -1113,23 +1113,36 @@ export default function ExecutiveDashboard({
   // Fetch live Supabase data
   const fetchLiveSupabaseData = async () => {
     try {
-      const { data: sessData } = await supabase
+      const { data: sessData, error: sessErr } = await supabase
         .from('table_sessions')
-        .select('*, restaurant_tables(table_number, floor)')
+        .select('*, restaurant_tables(table_number, floor, zone)')
         .eq('restaurant_id', RESTAURANT_ID)
         .order('opened_at', { ascending: false });
 
-      if (sessData && sessData.length > 0) {
-        setLiveSessions(sessData);
+      if (sessErr) {
+        console.warn('Error fetching table_sessions:', sessErr);
       }
 
-      const { data: ordData } = await supabase
+      if (sessData) {
+        const mappedSessions = sessData.map(s => ({
+          ...s,
+          table_number: s.table_number || s.restaurant_tables?.table_number || 'T-01',
+          payment_status: s.payment_status || 'UNPAID'
+        }));
+        setLiveSessions(mappedSessions);
+      }
+
+      const { data: ordData, error: ordErr } = await supabase
         .from('orders')
         .select('*, order_items(*)')
         .eq('restaurant_id', RESTAURANT_ID)
         .order('placed_at', { ascending: false });
 
-      if (ordData && ordData.length > 0) {
+      if (ordErr) {
+        console.warn('Error fetching orders:', ordErr);
+      }
+
+      if (ordData) {
         setLiveOrders(ordData);
       }
     } catch (err) {
@@ -1186,7 +1199,7 @@ export default function ExecutiveDashboard({
       if (tblNum) {
         await supabase
           .from('orders')
-          .update({ status: 'Completed', payment_status: 'Paid', payment_mode: 'Cash' })
+          .update({ status: 'COMPLETED', payment_status: 'PAID', payment_method: 'CASH' })
           .eq('table_number', tblNum);
       }
       await recordEmployeeActivity(
@@ -2205,7 +2218,7 @@ export default function ExecutiveDashboard({
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <span className="w-8 h-8 rounded-xl bg-orange-600 text-white font-heading font-semibold text-xs flex items-center justify-center">
-                        {session.table_number || 'T01'}
+                        {session.table_number || session.restaurant_tables?.table_number || 'T-01'}
                       </span>
                       <div>
                         <h4 className="font-semibold text-xs text-slate-900">{session.customer_name || 'Guest'}</h4>
@@ -2226,7 +2239,9 @@ export default function ExecutiveDashboard({
                   <div className="p-3 rounded-xl bg-white border border-slate-200/70 space-y-1 text-xs">
                     <div className="flex justify-between">
                       <span className="text-slate-400">Order Items:</span>
-                      <strong className="text-slate-800 font-medium truncate max-w-[170px]">{session.items_summary || 'Mysore Masala + Chaas'}</strong>
+                      <strong className="text-slate-800 font-medium truncate max-w-[170px]" title={session.items_summary}>
+                        {session.items_summary || 'Running Table Order'}
+                      </strong>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-400">Elapsed Time:</span>
