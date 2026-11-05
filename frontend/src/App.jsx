@@ -2449,20 +2449,94 @@ export default function App() {
     newOrder.payment_status = isOnline ? 'Paid' : 'Pending Cash';
     newOrder.payment_verified_online = isOnline;
 
-    // 1. Immediately update UI & local state for zero-latency customer UX
-    const updated = [newOrder, ...orders];
+    let finalOrder = newOrder;
+    let updated = [];
+
+    if (isAddonOrder) {
+      // MERGE INTO CONTINUOUS TABLE BILL: Do not generate a separate bill for water or add-ons!
+      const activeParent = existingActiveOrders[0];
+      const mergedItems = [...(activeParent.items || [])];
+
+      (newOrder.items || []).forEach(newItem => {
+        const existingIdx = mergedItems.findIndex(i => 
+          (i.id && newItem.id && i.id === newItem.id) || 
+          (i.name && newItem.name && i.name.toLowerCase().trim() === newItem.name.toLowerCase().trim())
+        );
+
+        const addedQty = Number(newItem.quantity || newItem.qty || 1);
+        if (existingIdx !== -1) {
+          const cur = mergedItems[existingIdx];
+          const curQty = Number(cur.quantity || cur.qty || 1);
+          const newQty = curQty + addedQty;
+          const unitPrice = Number(cur.price || cur.unit_price || newItem.price || 0);
+          mergedItems[existingIdx] = {
+            ...cur,
+            quantity: newQty,
+            qty: newQty,
+            total_price: Number((newQty * unitPrice).toFixed(2)),
+            kitchen_status: 'placed',
+            is_served: false,
+            round: roundNumber
+          };
+        } else {
+          mergedItems.push({
+            ...newItem,
+            quantity: addedQty,
+            qty: addedQty,
+            round: roundNumber,
+            is_addon: true,
+            kitchen_status: 'placed',
+            is_served: false
+          });
+        }
+      });
+
+      const addedSubtotal = parseFloat(newOrder.subtotal || 0);
+      const addedTax = parseFloat(newOrder.tax || 0);
+      const addedDiscount = parseFloat(newOrder.discount || 0);
+      const addedTotal = parseFloat(newOrder.total || newOrder.total_amount || 0);
+
+      const cumulativeSubtotal = Number((parseFloat(activeParent.subtotal || 0) + addedSubtotal).toFixed(2));
+      const cumulativeTax = Number((parseFloat(activeParent.tax || 0) + addedTax).toFixed(2));
+      const cumulativeDiscount = Number((parseFloat(activeParent.discount || 0) + addedDiscount).toFixed(2));
+      const cumulativeTotal = Number((parseFloat(activeParent.total || activeParent.total_amount || 0) + addedTotal).toFixed(2));
+      const summaryStr = mergedItems.map(i => `${i.quantity || i.qty || 1}x ${i.name || i.item_name}`).join(', ');
+
+      finalOrder = {
+        ...activeParent,
+        items: mergedItems,
+        order_items: mergedItems,
+        subtotal: cumulativeSubtotal,
+        tax: cumulativeTax,
+        discount: cumulativeDiscount,
+        total: cumulativeTotal,
+        total_amount: cumulativeTotal,
+        items_summary: summaryStr,
+        round: roundNumber,
+        status: 'Placed', // Re-activate for kitchen queue so kitchen serves the new round
+        payment_status: 'Pending Cash', // Continuous bill remains pending until final table checkout
+        last_addon_at: new Date().toISOString(),
+        special_note: [activeParent.special_note, newOrder.special_note].filter(Boolean).join(' • ')
+      };
+
+      updated = orders.map(o => o.id === activeParent.id ? finalOrder : o);
+    } else {
+      updated = [newOrder, ...orders];
+    }
+
+    // 1. Immediately update UI & local state for zero-latency UX
     setOrders(updated);
     setLocalStore('orders', updated);
 
     // Update corresponding dining table status to occupied with guest info
     const updatedTables = tables.map(t => {
-      if (normalizeTbl(t.number) === normalizeTbl(newOrder.table_number) || t.id === newOrder.table_number) {
+      if (normalizeTbl(t.number) === normalizeTbl(finalOrder.table_number) || t.id === finalOrder.table_number) {
         return {
           ...t,
           status: 'occupied',
-          current_order_id: newOrder.id,
-          current_customer_name: newOrder.customer_name,
-          current_customer_phone: newOrder.customer_phone,
+          current_order_id: finalOrder.id,
+          current_customer_name: finalOrder.customer_name,
+          current_customer_phone: finalOrder.customer_phone,
           timing: t.timing || '1m'
         };
       }
@@ -2472,15 +2546,15 @@ export default function App() {
     setLocalStore('tables', updatedTables);
 
     // Permanently record customer profile in local CRM
-    if (newOrder.customer_phone) {
+    if (finalOrder.customer_phone) {
       saveCustomerProfile({
-        name: newOrder.customer_name,
-        phone: newOrder.customer_phone,
-        tableNumber: newOrder.table_number,
-        orderId: newOrder.id,
-        orderTotal: newOrder.total || newOrder.total_amount,
-        items: newOrder.items || [],
-        paymentMode: newOrder.payment_mode || 'UPI'
+        name: finalOrder.customer_name,
+        phone: finalOrder.customer_phone,
+        tableNumber: finalOrder.table_number,
+        orderId: finalOrder.id,
+        orderTotal: finalOrder.total || finalOrder.total_amount,
+        items: finalOrder.items || [],
+        paymentMode: finalOrder.payment_mode || 'UPI'
       });
       setCustomers(getLocalStore('customers', INITIAL_CUSTOMERS));
     }
@@ -2491,27 +2565,27 @@ export default function App() {
       : (isWaiterOrder ? `WAITER ORDER (${newOrder.placed_by_waiter_id || 'TERMINAL'})` : 'QR SELF-ORDER');
 
     recordEmployeeActivity({
-      employeeName: isWaiterOrder ? (newOrder.placed_by_waiter_name || authUser?.name || 'Waiter') : (newOrder.customer_name || 'Guest User'),
+      employeeName: isWaiterOrder ? (newOrder.placed_by_waiter_name || authUser?.name || 'Waiter') : (finalOrder.customer_name || 'Guest User'),
       employeeRole: isWaiterOrder ? 'Floor Waiter' : `Guest / ${actionLabel}`,
-      tableNumber: newOrder.table_number || 'Online',
+      tableNumber: finalOrder.table_number || 'Online',
       actionType: isAddonOrder ? 'ORDER_ADDON_PLACED' : (isWaiterOrder ? 'ORDER_PLACED_WAITER' : 'ORDER_PLACED_QR'),
-      amount: newOrder.total,
-      paymentMethod: newOrder.payment_mode || 'Cash',
-      details: `${actionLabel} #${newOrder.id} placed at Table ${newOrder.table_number} by ${isWaiterOrder ? `Waiter ${newOrder.placed_by_waiter_name || 'Staff'} (ID: ${newOrder.placed_by_waiter_id || 'WTR-101'})` : (newOrder.customer_name || 'Guest')} (${newOrder.items_summary}) — ₹${newOrder.total} [${newOrder.payment_mode === 'UPI' ? 'Paid Online' : 'Cash to Collect'}]`,
+      amount: newOrder.total || newOrder.total_amount || 0,
+      paymentMethod: finalOrder.payment_mode || 'Cash',
+      details: `${actionLabel} placed at Table ${finalOrder.table_number} by ${isWaiterOrder ? `Waiter ${newOrder.placed_by_waiter_name || 'Staff'}` : (finalOrder.customer_name || 'Guest')} (+${newOrder.items_summary}) — Continuous Bill: ₹${finalOrder.total}`,
       type: 'order',
       color: isWaiterOrder ? 'indigo' : (isAddonOrder ? 'blue' : 'orange')
     });
 
-    // Kitchen & Admin audible chime and clear voice alert for the exact table - ONLY FOR AUTHENTICATED STAFF TERMINALS!
+    // Kitchen & Admin audible chime and clear voice alert for the exact table
     if (isStaffSession) {
       if (userRole === 'chef' || userRole === 'admin') {
         triggerStaffOrderNotification({
-          tableNumber: newOrder.table_number || '01',
-          orderNumber: newOrder.id || '',
-          itemsSummary: newOrder.items_summary,
-          customerName: newOrder.customer_name || 'Guest',
+          tableNumber: finalOrder.table_number || '01',
+          orderNumber: finalOrder.id || '',
+          itemsSummary: isAddonOrder ? (newOrder.items_summary || 'Add-on round') : finalOrder.items_summary,
+          customerName: finalOrder.customer_name || 'Guest',
           isAddon: isAddonOrder,
-          paymentMode: newOrder.payment_mode
+          paymentMode: finalOrder.payment_mode
         });
       } else if (userRole === 'waiter') {
         playSound('waiter');
@@ -2519,8 +2593,8 @@ export default function App() {
 
       // Display floating staff banner toast on the POS
       setActiveToast({
-        title: isAddonOrder ? `💧 Table ${newOrder.table_number} Add-On (Round ${roundNumber})!` : `🔔 Table ${newOrder.table_number} New Order!`,
-        message: `${newOrder.customer_name || 'Guest'}: ${newOrder.items_summary} (₹${newOrder.total}) • ${isOnline ? 'Paid Online Direct ✅' : 'Collect Cash at Table 💵'}`,
+        title: isAddonOrder ? `💧 Table ${finalOrder.table_number} Add-On Added to Bill (Round ${roundNumber})!` : `🔔 Table ${finalOrder.table_number} New Order!`,
+        message: `${finalOrder.customer_name || 'Guest'}: Added ${newOrder.items_summary} • Continuous Bill: ₹${finalOrder.total}`,
         type: isAddonOrder ? 'info' : 'success'
       });
     }
@@ -2528,24 +2602,25 @@ export default function App() {
     // 2. DISPATCH LIVE TO SUPABASE CLOUD POSTGRESQL (table_sessions, orders, order_items, customers)
     try {
       const supaResult = await dispatchOrderToSupabase({
-        table_number: newOrder.table_number,
-        customer_name: newOrder.customer_name,
-        customer_phone: newOrder.customer_phone,
-        items: newOrder.items || [],
-        subtotal: newOrder.subtotal || 0,
-        tax: newOrder.tax || 0,
-        discount: newOrder.discount || 0,
-        total: newOrder.total || newOrder.total_amount || 0,
-        payment_mode: newOrder.payment_mode || 'Cash',
-        special_note: newOrder.special_note || '',
-        order_id: newOrder.id
+        table_number: finalOrder.table_number,
+        customer_name: finalOrder.customer_name,
+        customer_phone: finalOrder.customer_phone,
+        items: finalOrder.items || [],
+        subtotal: finalOrder.subtotal || 0,
+        tax: finalOrder.tax || 0,
+        discount: finalOrder.discount || 0,
+        total: finalOrder.total || finalOrder.total_amount || 0,
+        payment_mode: finalOrder.payment_mode || 'Cash',
+        special_note: finalOrder.special_note || '',
+        order_id: finalOrder.id,
+        id: finalOrder.supabase_order_id || finalOrder.id
       });
 
       if (supaResult && supaResult.sessionId) {
         // Enrich local order record with Supabase Session ID and DB Order UUID
-        const enrichedOrders = updated.map(o => o.id === newOrder.id ? {
+        const enrichedOrders = updated.map(o => o.id === finalOrder.id ? {
           ...o,
-          supabase_order_id: supaResult.order?.id || null,
+          supabase_order_id: supaResult.order?.id || o.supabase_order_id || null,
           session_id: supaResult.sessionId,
           session_code: supaResult.sessionCode
         } : o);

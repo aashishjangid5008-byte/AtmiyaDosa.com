@@ -311,7 +311,23 @@ export const dispatchOrderToSupabase = async ({
       if (data) existingDbOrder = data;
     }
 
-    // NOTE: NEVER hijack an older order by sessionId! Each order ticket is distinct!
+    // C. Check by sessionId: In restaurant dine-in, all add-ons (e.g. water, extra dishes) merge into the table's ONE active continuous bill!
+    if (!existingDbOrder && sessionId) {
+      const { data: activeOrderForSession } = await supabase
+        .from('orders')
+        .select('id, order_number')
+        .eq('session_id', sessionId)
+        .neq('status', 'CANCELLED')
+        .neq('status', 'COMPLETED')
+        .order('placed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (activeOrderForSession) {
+        existingDbOrder = activeOrderForSession;
+      }
+    }
+
+    // Merge/Update continuous bill order ticket
     if (existingDbOrder) {
       const { data: orderUpdateData, error: orderUpdateErr } = await supabase
         .from('orders')
