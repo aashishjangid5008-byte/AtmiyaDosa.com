@@ -13,7 +13,7 @@ WORKDIR /build
 
 # Install frontend dependencies
 COPY frontend/package*.json ./
-RUN npm ci --prefer-offline --no-audit
+RUN npm install --prefer-offline --no-audit
 
 # Copy frontend source and build static bundle
 COPY frontend/ ./

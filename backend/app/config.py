@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     PETPOOJA_WEBHOOK_SECRET: str = Field(default="petpooja_hmac_secret_atmiya_petlad_2026", description="HMAC secret for Petpooja webhooks")
 
     # Supabase Cloud Configuration
-    SUPABASE_URL: str = Field(default="https://cwdsurzzcvsrycklkhrz.supabase.co")
+    SUPABASE_URL: str = Field(default="https://sfrnxmzrjfxcqqwsjnka.supabase.co")
     SUPABASE_ANON_KEY: str = Field(default="")
     SUPABASE_SERVICE_ROLE_KEY: str = Field(default="")
     SUPABASE_DB_URL: str = Field(default="")
