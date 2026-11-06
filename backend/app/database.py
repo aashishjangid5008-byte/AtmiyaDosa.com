@@ -432,11 +432,12 @@ load_orders()
 CANONICAL_STAFF: Dict[str, Dict[str, Any]] = {
     "admin": {
         "username": "admin",
-        "email": "ranadarshit99@gmail.com",
-        "name": "Darshit Rana",
+        "email": "admin@atmiyadosa.com",
+        "alternate_emails": ["ranadarshit99@gmail.com"],
+        "name": "Admin Owner",
         "role": "Admin",
         "password_hash": "$2a$10$wEkgzJ9nQOwh6d203m0Q7u7Lw3mFqfN3/b3j62l4h6Z8s2M1v7zqu",  # admin123
-        "phone": "+91 63530 59221",
+        "phone": "+91 98000 00000",
         "shift": "Full Day",
         "is_active": True,
         "is_primary_owner": True
@@ -531,6 +532,7 @@ def find_staff_member(identifier: str) -> Optional[Dict[str, Any]]:
         if (
             staff.get("username", "").lower() == clean_id or 
             staff.get("email", "").lower() == clean_id or
+            clean_id in [e.lower() for e in staff.get("alternate_emails", [])] or
             staff.get("waiter_id", "").lower() == clean_id or
             staff.get("name", "").lower() == clean_id
         ):
@@ -570,7 +572,7 @@ def register_new_staff(name: str, email: str, role: str, password_hash: str, pho
 CANONICAL_AUDIT_LOGS: List[Dict[str, Any]] = [
     {
         "id": f"audit_{int(datetime.now().timestamp())}_01",
-        "employee_name": "Darshit Rana",
+        "employee_name": "Admin Owner",
         "employee_role": "Admin",
         "action_type": "SYSTEM_STARTUP",
         "details": "FastAPI Cloud POS Microservice Engine initialized with 19/19 Security Controls",

@@ -351,7 +351,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
   // Pre-configured staff credentials
   const demoUsers = {
-    'admin': { name: 'Darshit Rana', role: 'Admin', passHash: '$2a$10$wEkgzJ9nQOwh6d203m0Q7u7Lw3mFqfN3/b3j62l4h6Z8s2M1v7zqu' }, // admin123
+    'admin': { name: 'Admin Owner', role: 'Admin', passHash: '$2a$10$wEkgzJ9nQOwh6d203m0Q7u7Lw3mFqfN3/b3j62l4h6Z8s2M1v7zqu' }, // admin123
     'chef': { name: 'Amit Kumar', role: 'Kitchen', passHash: '$2a$10$wEkgzJ9nQOwh6d203m0Q7u7Lw3mFqfN3/b3j62l4h6Z8s2M1v7zqu' },
     'cashier': { name: 'Anjali Patel', role: 'Cashier', passHash: '$2a$10$wEkgzJ9nQOwh6d203m0Q7u7Lw3mFqfN3/b3j62l4h6Z8s2M1v7zqu' },
     'waiter': { name: 'Riya Patel', role: 'Waiter', passHash: '$2a$10$wEkgzJ9nQOwh6d203m0Q7u7Lw3mFqfN3/b3j62l4h6Z8s2M1v7zqu' }

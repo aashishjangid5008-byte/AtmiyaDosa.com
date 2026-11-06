@@ -128,7 +128,8 @@ export default function ExecutiveDashboard({
   onOpenAddItem,
   onOpenGenerateQR,
   onOpenApplyCoupon,
-  onVacateTable
+  onVacateTable,
+  authUser = null
 }) {
   const t = (key) => getTranslation(currentLang, key);
 
@@ -1235,12 +1236,12 @@ export default function ExecutiveDashboard({
       <div className={`p-4 sm:p-5 rounded-2xl ${palette.cardBg} border ${palette.cardBorder} shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-all`}>
         <div className="flex items-center space-x-3.5">
           <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center font-semibold text-base sm:text-lg tracking-tight shadow-sm shadow-orange-500/25 ring-2 ring-orange-400/20 shrink-0 font-heading">
-            DR
+            {authUser?.name ? authUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'AO'}
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className={`text-base sm:text-lg font-semibold font-heading tracking-tight ${palette.textPrimary} truncate`}>
-                Darshit Rana
+                {authUser?.name || 'Admin Owner'}
               </h1>
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200/80">
                 Owner & Director

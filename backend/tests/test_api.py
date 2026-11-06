@@ -283,7 +283,7 @@ def test_table_bill_settle_and_session_termination():
         "payment_method": "Cash",
         "amount_collected": 315.0,
         "change_due": 0.0,
-        "settled_by": "Darshit Rana"
+        "settled_by": "Admin Owner"
     }
     res_settle = client.post("/api/tables/T04/settle", json=settle_payload, headers=headers)
     assert res_settle.status_code == 200

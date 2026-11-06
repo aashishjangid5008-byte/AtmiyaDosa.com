@@ -15,22 +15,59 @@ import {
   UserCheck, 
   Activity, 
   Filter,
-  Search
+  Search,
+  Edit2,
+  Sparkles,
+  Shield,
+  Lock,
+  Copy,
+  CheckCircle
 } from 'lucide-react';
 import { getTranslation } from '../../lib/translations';
 
+// High-entropy memorable strong password generator
+export const generateStrongPassword = () => {
+  const words = ['Atmiya', 'Dosa', 'Kitchen', 'Spice', 'Royal', 'Chef', 'Super', 'Golden', 'Master', 'Hub'];
+  const symbols = ['@', '#', '$', '!', '&', '*'];
+  const word1 = words[Math.floor(Math.random() * words.length)];
+  const word2 = words[Math.floor(Math.random() * words.length)];
+  const symbol = symbols[Math.floor(Math.random() * symbols.length)];
+  const num = Math.floor(1000 + Math.random() * 9000);
+  return `${word1}${symbol}${word2}${num}`;
+};
+
+// Password strength evaluator (length, mixed-case, numbers, special characters)
+export const getPasswordStrength = (pass) => {
+  if (!pass) return { score: 0, label: 'Empty', color: 'slate', bg: 'bg-slate-300', percent: 0 };
+  let score = 0;
+  if (pass.length >= 6) score += 1;
+  if (pass.length >= 10) score += 1;
+  if (/[0-9]/.test(pass)) score += 1;
+  if (/[a-z]/.test(pass) && /[A-Z]/.test(pass)) score += 1;
+  if (/[^a-zA-Z0-9]/.test(pass)) score += 1;
+
+  if (score <= 2) return { score, label: 'Weak (too simple)', color: 'rose', bg: 'bg-rose-500', percent: 33 };
+  if (score <= 4) return { score, label: 'Good & Secure', color: 'amber', bg: 'bg-amber-500', percent: 66 };
+  return { score, label: 'Strong & High Entropy', color: 'emerald', bg: 'bg-emerald-500', percent: 100 };
+};
+
 export default function EmployeesView({ 
-  employees, 
+  employees = [], 
   activity = [], 
   onAddEmployee, 
+  onUpdateEmployee,
   onDeleteEmployee, 
   currentLang 
 }) {
   const [activeTab, setActiveTab] = useState('roster'); // 'roster' or 'activity'
   const [showModal, setShowModal] = useState(false);
+  const [editingEmp, setEditingEmp] = useState(null);
   const [selectedStaffFilter, setSelectedStaffFilter] = useState('All');
   const [searchActivity, setSearchActivity] = useState('');
   const [visiblePasswords, setVisiblePasswords] = useState({});
+  const [editShowPassword, setEditShowPassword] = useState(false);
+  const [newShowPassword, setNewShowPassword] = useState(false);
+  const [copiedId, setCopiedId] = useState(null);
 
   const [newEmp, setNewEmp] = useState({
     name: '',
@@ -47,6 +84,13 @@ export default function EmployeesView({
     setVisiblePasswords(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const handleCopyPassword = (empId, pass) => {
+    if (!pass) return;
+    navigator.clipboard?.writeText(pass);
+    setCopiedId(empId);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
   const handleNameChange = (name) => {
     const suggestedUsername = name.toLowerCase().replace(/[^a-z0-9]/g, '_');
     setNewEmp(prev => ({
@@ -56,21 +100,36 @@ export default function EmployeesView({
     }));
   };
 
+  const handleNewGeneratePassword = () => {
+    const gen = generateStrongPassword();
+    setNewEmp(prev => ({ ...prev, password: gen }));
+    setNewShowPassword(true);
+  };
+
+  const handleEditGeneratePassword = () => {
+    if (!editingEmp) return;
+    const gen = generateStrongPassword();
+    setEditingEmp(prev => ({ ...prev, password: gen }));
+    setEditShowPassword(true);
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!newEmp.name || !newEmp.password) return;
 
-    onAddEmployee({
-      id: `emp_${Date.now()}`,
-      name: newEmp.name,
-      username: newEmp.username || newEmp.name.toLowerCase().replace(/\s+/g, '_'),
-      password: newEmp.password,
-      role: newEmp.role,
-      phone: newEmp.phone || '+91 98000 00000',
-      shift: newEmp.shift,
-      active: true,
-      createdAt: new Date().toISOString().split('T')[0]
-    });
+    if (onAddEmployee) {
+      onAddEmployee({
+        id: `emp_${Date.now()}`,
+        name: newEmp.name.trim(),
+        username: (newEmp.username || newEmp.name.toLowerCase().replace(/\s+/g, '_')).trim(),
+        password: newEmp.password,
+        role: newEmp.role,
+        phone: newEmp.phone.trim() || '+91 98000 00000',
+        shift: newEmp.shift,
+        active: true,
+        createdAt: new Date().toISOString().split('T')[0]
+      });
+    }
 
     setShowModal(false);
     setNewEmp({
@@ -83,6 +142,25 @@ export default function EmployeesView({
     });
   };
 
+  const handleEditSubmit = (e) => {
+    e.preventDefault();
+    if (!editingEmp || !editingEmp.name) return;
+
+    if (onUpdateEmployee) {
+      onUpdateEmployee({
+        ...editingEmp,
+        name: editingEmp.name.trim(),
+        username: (editingEmp.username || '').trim(),
+        phone: (editingEmp.phone || '').trim(),
+        role: editingEmp.role || 'Staff',
+        shift: editingEmp.shift || 'Full Day',
+        password: editingEmp.password || 'password123'
+      });
+    }
+
+    setEditingEmp(null);
+  };
+
   // Filter activities for Section 1.2
   const filteredActivities = activity.filter(act => {
     const matchesStaff = selectedStaffFilter === 'All' || act.employeeName === selectedStaffFilter;
@@ -91,6 +169,9 @@ export default function EmployeesView({
       (act.tableNumber && String(act.tableNumber).toLowerCase().includes(searchActivity.toLowerCase()));
     return matchesStaff && matchesSearch;
   });
+
+  const editStrength = getPasswordStrength(editingEmp?.password);
+  const newStrength = getPasswordStrength(newEmp?.password);
 
   return (
     <div className="space-y-6">
@@ -104,10 +185,10 @@ export default function EmployeesView({
             </div>
             <div>
               <h2 className="text-xl font-black text-[#1F2937] font-heading">
-                Employee Credentials & Real-Time Activity Tracking
+                Staff Credentials & Permissions Management
               </h2>
               <p className="text-xs text-slate-500 font-medium">
-                Generate and delete staff login credentials, and track live cashier payments and table actions.
+                Edit and customize admin profile, phone numbers, passwords, generate secure credentials, and track live activity logs.
               </p>
             </div>
           </div>
@@ -117,7 +198,7 @@ export default function EmployeesView({
           <div className="flex bg-[#F3F4F6] p-1 rounded-2xl border border-slate-200">
             <button
               onClick={() => setActiveTab('roster')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'roster' 
                   ? 'bg-white text-[#1F2937] shadow-sm' 
                   : 'text-slate-500 hover:text-slate-800'
@@ -128,7 +209,7 @@ export default function EmployeesView({
             </button>
             <button
               onClick={() => setActiveTab('activity')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'activity' 
                   ? 'bg-white text-[#1F2937] shadow-sm' 
                   : 'text-slate-500 hover:text-slate-800'
@@ -142,7 +223,7 @@ export default function EmployeesView({
           {activeTab === 'roster' && (
             <button
               onClick={() => setShowModal(true)}
-              className="px-4 py-2.5 rounded-xl bg-[#F97316] hover:bg-orange-600 text-white font-black text-xs shadow-md shadow-orange-500/20 transition flex items-center space-x-2 shrink-0"
+              className="px-4 py-2.5 rounded-xl bg-[#F97316] hover:bg-orange-600 text-white font-black text-xs shadow-md shadow-orange-500/20 transition flex items-center space-x-2 shrink-0 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Generate Credentials</span>
@@ -154,77 +235,139 @@ export default function EmployeesView({
       {/* TAB 1: EMPLOYEE CREDENTIALS ROSTER */}
       {activeTab === 'roster' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {employees.map(emp => (
-            <div 
-              key={emp.id} 
-              className="bg-white p-5 rounded-3xl border border-[#F3F4F6] shadow-sm hover:border-slate-300 transition space-y-4 flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-12 h-12 rounded-2xl bg-[#FFF7ED] text-[#F97316] font-black flex items-center justify-center font-heading text-base border border-orange-100 shadow-sm">
-                      {emp.name.split(' ').map(n => n[0]).join('')}
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-black text-[#1F2937] font-heading">{emp.name}</h3>
-                      <div className="text-[11px] font-bold text-[#F97316]">{emp.role}</div>
-                      <div className="text-[10px] text-slate-400 font-medium">{emp.shift}</div>
-                    </div>
-                  </div>
+          {employees.map(emp => {
+            const isAdmin = emp.username === 'admin' || String(emp.role || '').toLowerCase().includes('admin');
+            const initials = (emp.name || 'Staff').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    Active
-                  </span>
-                </div>
+            return (
+              <div 
+                key={emp.id} 
+                className={`bg-white p-5 rounded-3xl border shadow-sm transition space-y-4 flex flex-col justify-between ${
+                  isAdmin 
+                    ? 'border-orange-200/90 ring-2 ring-orange-500/10 hover:border-orange-300' 
+                    : 'border-[#F3F4F6] hover:border-slate-300'
+                }`}
+              >
+                <div>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-12 h-12 rounded-2xl font-black flex items-center justify-center font-heading text-base shadow-sm shrink-0 ${
+                        isAdmin 
+                          ? 'bg-gradient-to-tr from-orange-500 to-amber-500 text-white ring-2 ring-orange-400/20' 
+                          : 'bg-[#FFF7ED] text-[#F97316] border border-orange-100'
+                      }`}>
+                        {initials}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="text-sm font-black text-[#1F2937] font-heading truncate">{emp.name}</h3>
+                          {isAdmin && (
+                            <span className="text-[10px] font-bold text-orange-600 bg-orange-100/70 px-1.5 py-0.2 rounded border border-orange-200">
+                              Admin
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] font-bold text-[#F97316] truncate">{emp.role}</div>
+                        <div className="text-[10px] text-slate-400 font-medium">{emp.shift}</div>
+                      </div>
+                    </div>
 
-                {/* Credentials Box */}
-                <div className="mt-4 p-3 rounded-2xl bg-[#F3F4F6] border border-slate-200/80 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-500 font-bold">Username:</span>
-                    <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">
-                      {emp.username || emp.name.toLowerCase().replace(/\s+/g, '_')}
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                      Active
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-500 font-bold">Password:</span>
-                    <div className="flex items-center gap-1.5">
+                  {/* Credentials Box */}
+                  <div className="mt-4 p-3 rounded-2xl bg-[#F3F4F6] border border-slate-200/80 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-500 font-bold">Username:</span>
                       <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">
-                        {visiblePasswords[emp.id] ? (emp.password || 'password123') : '••••••••'}
+                        {emp.username || emp.name.toLowerCase().replace(/\s+/g, '_')}
                       </span>
-                      <button
-                        onClick={() => togglePasswordVisibility(emp.id)}
-                        className="text-slate-400 hover:text-slate-600 p-0.5"
-                        title={visiblePasswords[emp.id] ? "Hide Password" : "Show Password"}
-                      >
-                        {visiblePasswords[emp.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                      </button>
                     </div>
-                  </div>
 
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-500 font-bold">Phone:</span>
-                    <span className="font-mono text-slate-700 text-[11px]">{emp.phone}</span>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-500 font-bold">Password:</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">
+                          {visiblePasswords[emp.id] ? (emp.password || 'password123') : '••••••••'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => togglePasswordVisibility(emp.id)}
+                          className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                          title={visiblePasswords[emp.id] ? "Hide Password" : "Show Password"}
+                        >
+                          {visiblePasswords[emp.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyPassword(emp.id, emp.password || 'password123')}
+                          className="text-slate-400 hover:text-orange-600 p-0.5 cursor-pointer"
+                          title="Copy password to clipboard"
+                        >
+                          {copiedId === emp.id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-500 font-bold">Phone:</span>
+                      <span className="font-mono text-slate-700 text-[11px] font-semibold">{emp.phone || '+91 98000 00000'}</span>
+                    </div>
+
+                    {/* Waiter specific ID/PIN */}
+                    {(emp.waiter_id || emp.pin) && (
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200/60">
+                        <span className="text-slate-500 font-bold">Waiter ID:</span>
+                        <span className="font-mono font-bold text-orange-600 bg-orange-50 px-1.5 py-0.2 rounded border border-orange-200">
+                          {emp.waiter_id || emp.id} {emp.pin ? `(PIN: ${emp.pin})` : ''}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Card Action Buttons (Edit Credential / Admin Profile & Delete) */}
+                <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                  <span className="text-[10px] text-slate-400 font-mono">ID: {emp.id}</span>
+                  
+                  <div className="flex items-center gap-1.5">
+                    {/* EDIT CREDENTIAL BUTTON - AVAILABLE FOR ALL EMPLOYEES INCLUDING ADMIN */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingEmp({ ...emp });
+                        setEditShowPassword(false);
+                      }}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                        isAdmin
+                          ? 'bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-300 shadow-2xs'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                      }`}
+                      title={isAdmin ? 'Change Admin Name, Phone, and Password' : `Edit credentials for ${emp.name}`}
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-orange-500" />
+                      <span>{isAdmin ? 'Edit Admin Profile' : 'Edit Credential'}</span>
+                    </button>
+
+                    {/* DELETE BUTTON (Non-admin staff only) */}
+                    {!isAdmin && emp.username !== 'admin' && (
+                      <button
+                        type="button"
+                        onClick={() => onDeleteEmployee(emp.id, emp.name)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold transition border border-rose-200 cursor-pointer"
+                        title="Delete employee credentials when staff member leaves"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
-
-              {/* Delete Credential Button (Section 1 of Admin.txt) */}
-              <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                <span className="text-[10px] text-slate-400 font-mono">ID: {emp.id}</span>
-                {emp.username !== 'admin' && (
-                  <button
-                    onClick={() => onDeleteEmployee(emp.id, emp.name)}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold transition border border-rose-200"
-                    title="Delete employee credentials when staff member leaves"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Delete Credential</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -336,13 +479,228 @@ export default function EmployeesView({
         </div>
       )}
 
-      {/* GENERATE CREDENTIALS MODAL (Section 1 of Admin.txt) */}
+      {/* EDIT CREDENTIALS MODAL */}
+      {editingEmp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-orange-100/70 text-orange-600 flex items-center justify-center border border-orange-200">
+                  <Edit2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 font-heading">
+                    {editingEmp.username === 'admin' ? 'Edit Admin Profile & Security' : 'Edit Staff Credentials'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Modify display name, username, phone number, and password
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setEditingEmp(null)} 
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} className="space-y-3.5">
+              {/* Full Name */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Full Name {editingEmp.username === 'admin' && <span className="text-orange-600">(Admin Display Name)</span>}
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Restaurant Owner / Admin Name"
+                  value={editingEmp.name || ''}
+                  onChange={(e) => setEditingEmp({ ...editingEmp, name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/10"
+                />
+              </div>
+
+              {/* Username */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Login Username</label>
+                <input
+                  type="text"
+                  required
+                  value={editingEmp.username || ''}
+                  onChange={(e) => setEditingEmp({ ...editingEmp, username: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-orange-500"
+                />
+              </div>
+
+              {/* Password Section with Live Strength & Generator */}
+              <div className="space-y-1.5 p-3 rounded-2xl bg-slate-50 border border-slate-200/80">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                    <Key className="w-3.5 h-3.5 text-orange-500" />
+                    <span>Password</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleEditGeneratePassword}
+                    className="text-[11px] font-black text-orange-600 hover:text-orange-700 bg-orange-100/70 hover:bg-orange-100 px-2 py-0.5 rounded-lg border border-orange-200/80 transition flex items-center gap-1 cursor-pointer"
+                    title="Generate a high-security random password"
+                  >
+                    <Sparkles className="w-3 h-3 text-orange-500" />
+                    <span>⚡ Generate Strong Password</span>
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type={editShowPassword ? 'text' : 'password'}
+                    required
+                    value={editingEmp.password || ''}
+                    onChange={(e) => setEditingEmp({ ...editingEmp, password: e.target.value })}
+                    className="w-full pl-3 pr-9 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-900 bg-white focus:outline-none focus:border-orange-500"
+                    placeholder="Enter or generate a good password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setEditShowPassword(!editShowPassword)}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {editShowPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                {/* Live Password Strength Meter */}
+                {editingEmp.password && (
+                  <div className="space-y-1 pt-1">
+                    <div className="flex items-center justify-between text-[10px] font-bold">
+                      <span className="text-slate-500">Strength:</span>
+                      <span className={
+                        editStrength.color === 'emerald' ? 'text-emerald-700' :
+                        editStrength.color === 'amber' ? 'text-amber-700' : 'text-rose-600'
+                      }>
+                        {editStrength.label}
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-300 ${editStrength.bg}`}
+                        style={{ width: `${editStrength.percent}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Phone Number */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                  <Phone className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Phone Number {editingEmp.username === 'admin' && <span className="text-orange-600">(Admin Mobile)</span>}</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="+91 98000 00000"
+                  value={editingEmp.phone || ''}
+                  onChange={(e) => setEditingEmp({ ...editingEmp, phone: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+                />
+              </div>
+
+              {/* Role & Shift */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Assigned Role</label>
+                  <select
+                    value={editingEmp.role || 'Cashier & POS Lead'}
+                    onChange={(e) => setEditingEmp({ ...editingEmp, role: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500 bg-white"
+                  >
+                    <option value="Admin / Owner">Admin / Owner</option>
+                    <option value="Head Chef">Head Chef</option>
+                    <option value="Senior Waiter">Senior Waiter</option>
+                    <option value="Waiter">Floor Waiter</option>
+                    <option value="Cashier & POS Lead">Cashier & POS Lead</option>
+                    <option value="Kitchen Helper">Kitchen Staff</option>
+                    <option value="Floor Manager">Floor Manager</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Shift</label>
+                  <select
+                    value={editingEmp.shift || 'Full Day'}
+                    onChange={(e) => setEditingEmp({ ...editingEmp, shift: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500 bg-white"
+                  >
+                    <option value="Full Day">Full Day</option>
+                    <option value="Morning Shift">Morning Shift</option>
+                    <option value="Evening Shift">Evening Shift</option>
+                    <option value="Night Shift">Night Shift</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Waiter specific PIN / ID */}
+              {(String(editingEmp.role || '').toLowerCase().includes('waiter') || editingEmp.waiter_id) && (
+                <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-100">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Waiter ID</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. WTR-101"
+                      value={editingEmp.waiter_id || ''}
+                      onChange={(e) => setEditingEmp({ ...editingEmp, waiter_id: e.target.value.toUpperCase() })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Quick Switch PIN</label>
+                    <input
+                      type="password"
+                      maxLength={6}
+                      placeholder="e.g. 1001"
+                      value={editingEmp.pin || ''}
+                      onChange={(e) => setEditingEmp({ ...editingEmp, pin: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingEmp(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-xs shadow-md shadow-orange-500/20 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Save Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* GENERATE CREDENTIALS MODAL */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full border border-slate-200 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full border border-slate-200 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-black text-[#1F2937] font-heading">Generate Staff Credentials</h3>
-              <button onClick={() => setShowModal(false)} className="p-1 rounded-lg text-slate-400 hover:text-slate-600">
+              <button 
+                type="button"
+                onClick={() => setShowModal(false)} 
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -353,7 +711,7 @@ export default function EmployeesView({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Anjali Patel"
+                  placeholder="e.g. Ramesh Patel"
                   value={newEmp.name}
                   onChange={(e) => handleNameChange(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-[#F97316]"
@@ -365,23 +723,64 @@ export default function EmployeesView({
                 <input
                   type="text"
                   required
-                  placeholder="anjali_pos"
+                  placeholder="ramesh_pos"
                   value={newEmp.username}
-                  onChange={(e) => setNewEmp({ ...newEmp, username: e.target.value })}
+                  onChange={(e) => setNewEmp({ ...newEmp, username: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold focus:outline-none focus:border-[#F97316]"
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Set Password</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. anjali@2026"
-                  value={newEmp.password}
-                  onChange={(e) => setNewEmp({ ...newEmp, password: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold focus:outline-none focus:border-[#F97316]"
-                />
+              {/* Password with Generator & Strength */}
+              <div className="space-y-1.5 p-2.5 rounded-2xl bg-slate-50 border border-slate-200/80">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700">Set Password</label>
+                  <button
+                    type="button"
+                    onClick={handleNewGeneratePassword}
+                    className="text-[10px] font-black text-orange-600 hover:text-orange-700 bg-orange-100/70 hover:bg-orange-100 px-2 py-0.5 rounded-lg border border-orange-200/80 transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3 text-orange-500" />
+                    <span>⚡ Generate Strong</span>
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type={newShowPassword ? 'text' : 'password'}
+                    required
+                    placeholder="Enter or generate password"
+                    value={newEmp.password}
+                    onChange={(e) => setNewEmp({ ...newEmp, password: e.target.value })}
+                    className="w-full pl-3 pr-9 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold focus:outline-none focus:border-[#F97316] bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setNewShowPassword(!newShowPassword)}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  >
+                    {newShowPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                {newEmp.password && (
+                  <div className="space-y-1 pt-1">
+                    <div className="flex items-center justify-between text-[10px] font-bold">
+                      <span className="text-slate-500">Strength:</span>
+                      <span className={
+                        newStrength.color === 'emerald' ? 'text-emerald-700' :
+                        newStrength.color === 'amber' ? 'text-amber-700' : 'text-rose-600'
+                      }>
+                        {newStrength.label}
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-300 ${newStrength.bg}`}
+                        style={{ width: `${newStrength.percent}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -390,11 +789,12 @@ export default function EmployeesView({
                   <select
                     value={newEmp.role}
                     onChange={(e) => setNewEmp({ ...newEmp, role: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-[#F97316]"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-[#F97316] bg-white"
                   >
                     <option value="Cashier & POS Lead">Cashier & POS</option>
                     <option value="Head Chef">Head Chef</option>
                     <option value="Senior Waiter">Senior Waiter</option>
+                    <option value="Waiter">Floor Waiter</option>
                     <option value="Kitchen Helper">Kitchen Staff</option>
                     <option value="Floor Manager">Floor Manager</option>
                   </select>
@@ -405,7 +805,7 @@ export default function EmployeesView({
                   <select
                     value={newEmp.shift}
                     onChange={(e) => setNewEmp({ ...newEmp, shift: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-[#F97316]"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-[#F97316] bg-white"
                   >
                     <option value="Morning Shift">Morning Shift</option>
                     <option value="Evening Shift">Evening Shift</option>
@@ -427,7 +827,7 @@ export default function EmployeesView({
 
               <button
                 type="submit"
-                className="w-full py-2.5 rounded-xl bg-[#F97316] hover:bg-orange-600 text-white font-black text-xs shadow-md transition flex items-center justify-center gap-1.5 mt-2"
+                className="w-full py-2.5 rounded-xl bg-[#F97316] hover:bg-orange-600 text-white font-black text-xs shadow-md transition flex items-center justify-center gap-1.5 mt-2 cursor-pointer"
               >
                 <Key className="w-4 h-4" />
                 <span>Save & Generate Credential</span>

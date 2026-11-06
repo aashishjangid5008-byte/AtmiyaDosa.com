@@ -29,7 +29,7 @@ export default function QuickPosModal({
   coupons = [], 
   onPlaceOrder, 
   onClose, 
-  currentStaff = { name: 'Darshit Rana', role: 'Admin' } 
+  currentStaff = { name: 'Admin Owner', role: 'Admin' } 
 }) {
   const [selectedChannel, setSelectedChannel] = useState('Dine-In'); // 'Dine-In' or 'Takeaway'
   const [selectedTable, setSelectedTable] = useState('T01');

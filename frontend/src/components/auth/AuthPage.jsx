@@ -32,8 +32,8 @@ import {
   staffSignupApi 
 } from '../../lib/supabase';
 
-export const PRIMARY_ADMIN_EMAIL = 'ranadarshit99@gmail.com';
-export const PRIMARY_ADMIN_NAME = 'Darshit Rana';
+export const PRIMARY_ADMIN_EMAIL = 'admin@atmiyadosa.com';
+export const PRIMARY_ADMIN_NAME = 'Admin Owner';
 
 export default function AuthPage({ 
   onLoginSuccess, 
@@ -146,7 +146,7 @@ export default function AuthPage({
           : (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('restaurant_employees') || '[]') : []);
 
         const staffPool = allEmployees.length > 0 ? allEmployees : [
-          { id: 'emp1', name: 'Darshit Rana', username: 'admin', role: 'Admin', email: 'ranadarshit99@gmail.com', password: 'admin2026' },
+          { id: 'emp1', name: 'Admin Owner', username: 'admin', role: 'Admin', email: 'admin@atmiyadosa.com', password: 'Admin@2026#Secure' },
           { id: 'emp2', name: 'Amit Kumar', username: 'chef_amit', role: 'Head Chef', email: 'kitchen@atmiyadosa.com', password: 'password123' },
           { id: 'emp3', waiter_id: 'WTR-101', name: 'Riya Patel', username: 'waiter_riya', role: 'Waiter', email: 'waiter@atmiyadosa.com', password: 'password123', pin: '1001' },
           { id: 'emp3_b', waiter_id: 'WTR-102', name: 'Rajesh Kumar', username: 'waiter_rajesh', role: 'Waiter', email: 'rajesh@atmiyadosa.com', password: 'password123', pin: '1002' },

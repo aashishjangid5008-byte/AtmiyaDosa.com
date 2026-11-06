@@ -36,7 +36,7 @@ export default function OrdersView({
   onMarkCashPaymentDone,
   onCancelOrderWithReason,
   onAddNewOrder, 
-  currentStaff = { name: 'Darshit Rana', role: 'Admin' },
+  currentStaff = { name: 'Admin Owner', role: 'Admin' },
   currentLang,
   theme = 'light',
   restaurantSettings = {}
@@ -62,7 +62,7 @@ export default function OrdersView({
 
   // Cash Collection Modal State
   const [cashCollectingOrder, setCashCollectingOrder] = useState(null);
-  const [collectorName, setCollectorName] = useState(currentStaff?.name || 'Darshit Rana');
+  const [collectorName, setCollectorName] = useState(currentStaff?.name || 'Admin Owner');
 
   const t = (key) => getTranslation(currentLang, key);
 
@@ -220,14 +220,14 @@ export default function OrdersView({
 
   const handleConfirmCashPayment = () => {
     if (!cashCollectingOrder) return;
-    onMarkCashPaymentDone(cashCollectingOrder.id, collectorName || currentStaff?.name || 'Darshit Rana');
+    onMarkCashPaymentDone(cashCollectingOrder.id, collectorName || currentStaff?.name || 'Admin Owner');
     setCashCollectingOrder(null);
   };
 
   const handleConfirmCancelOrder = () => {
     if (!cancellingOrder) return;
     const finalReason = customReasonNote ? `${cancelReason}: ${customReasonNote}` : cancelReason;
-    onCancelOrderWithReason(cancellingOrder.id, finalReason, currentStaff?.name || 'Darshit Rana');
+    onCancelOrderWithReason(cancellingOrder.id, finalReason, currentStaff?.name || 'Admin Owner');
     setCancellingOrder(null);
     setCustomReasonNote('');
   };
@@ -634,7 +634,7 @@ export default function OrdersView({
                             </span>
                             <button
                               onClick={() => {
-                                onMarkCashPaymentDone(order.id, currentStaff?.name || 'Darshit Rana');
+                                onMarkCashPaymentDone(order.id, currentStaff?.name || 'Admin Owner');
                               }}
                               className="block px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] shadow-xs transition cursor-pointer"
                               title="Check your phone/soundbox for UPI payment, then click to verify"
@@ -648,7 +648,7 @@ export default function OrdersView({
                               Cash Pending
                             </span>
                             <button
-                              onClick={() => { setCashCollectingOrder(order); setCollectorName(currentStaff?.name || 'Darshit Rana'); }}
+                              onClick={() => { setCashCollectingOrder(order); setCollectorName(currentStaff?.name || 'Admin Owner'); }}
                               className="block px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] shadow-xs transition cursor-pointer"
                             >
                               Receive Cash
@@ -672,7 +672,7 @@ export default function OrdersView({
                               Cash Pending
                             </span>
                             <button
-                              onClick={() => { setCashCollectingOrder(order); setCollectorName(currentStaff?.name || 'Darshit Rana'); }}
+                              onClick={() => { setCashCollectingOrder(order); setCollectorName(currentStaff?.name || 'Admin Owner'); }}
                               className="block px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] shadow-xs transition cursor-pointer"
                             >
                               Receive Cash
@@ -823,7 +823,7 @@ export default function OrdersView({
                   value={collectorName}
                   onChange={(e) => setCollectorName(e.target.value)}
                   className={`w-full px-3 py-2 rounded-xl border ${cardBorder} ${inputBg} text-xs font-bold focus:outline-none focus:border-orange-500 text-slate-900`}
-                  placeholder="e.g. Darshit Rana"
+                  placeholder="e.g. Admin Owner"
                 />
                 <p className="text-[10px] text-slate-500 mt-1">
                   Logged in staff audit trail for cash accountability.

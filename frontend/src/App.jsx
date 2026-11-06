@@ -428,7 +428,14 @@ export default function App() {
       return null;
     }
     const saved = getLocalStore('auth_user', null);
-    if (saved) return saved;
+    if (saved) {
+      if (saved.name === 'Darshit Rana') {
+        const cleaned = { ...saved, name: 'Admin Owner' };
+        setLocalStore('auth_user', cleaned);
+        return cleaned;
+      }
+      return saved;
+    }
     if (isDirectKds) {
       const chefProfile = {
         id: 'chef_suresh',
@@ -528,9 +535,8 @@ export default function App() {
   const [settings, setSettings] = useState(() => {
     const stored = getLocalStore('settings', INITIAL_SETTINGS);
     const merged = { ...INITIAL_SETTINGS, ...stored };
-    if (!merged.upiId || merged.upiId === 'atmiyadosa@icici') {
-      merged.upiId = 'ranadarshit99@okicici';
-      merged.payeeName = 'darshit rana';
+    if (merged.payeeName === 'darshit rana') {
+      merged.payeeName = 'Atmiya Dosa Hub';
     }
     return merged;
   });
@@ -545,9 +551,16 @@ export default function App() {
       return !DEMO_ORDER_IDS.has(id) && !id.includes('ORD9436') && !id.includes('TEST') && o?.customer_name !== 'Test Guest';
     });
   });
-  const [activity, setActivity] = useState(() => getLocalStore('activity', INITIAL_ACTIVITY));
-  const [employees, setEmployees] = useState(() => getLocalStore('employees', INITIAL_EMPLOYEES));
-  const [coupons, setCoupons] = useState(() => getLocalStore('coupons', INITIAL_COUPONS));
+  const [employees, setEmployees] = useState(() => {
+    const raw = getLocalStore('employees', INITIAL_EMPLOYEES);
+    if (!Array.isArray(raw)) return INITIAL_EMPLOYEES;
+    return raw.map(e => {
+      if (e.name === 'Darshit Rana') {
+        return { ...e, name: 'Admin Owner' };
+      }
+      return e;
+    });
+  });
   const [serviceCalls, setServiceCalls] = useState(() => {
     const raw = getLocalStore('service_calls', INITIAL_SERVICE_CALLS);
     if (!Array.isArray(raw)) return INITIAL_SERVICE_CALLS;
@@ -3341,7 +3354,7 @@ export default function App() {
     } catch (err) {}
 
     recordEmployeeActivity({
-      employeeName: authUser?.name || 'Darshit Rana',
+      employeeName: authUser?.name || 'Admin Owner',
       employeeRole: authUser?.role || 'Admin',
       tableNumber: 'Menu',
       actionType: 'DISCOUNT_APPLIED',
@@ -3418,7 +3431,7 @@ export default function App() {
     } catch (err) {}
 
     recordEmployeeActivity({
-      employeeName: authUser?.name || 'Darshit Rana',
+      employeeName: authUser?.name || 'Admin Owner',
       employeeRole: authUser?.role || 'Admin',
       tableNumber: 'Menu',
       actionType: 'DISCOUNT_REMOVED',
@@ -3504,7 +3517,7 @@ export default function App() {
     } catch (e) {}
 
     recordEmployeeActivity({
-      employeeName: authUser?.name || 'Darshit Rana',
+      employeeName: authUser?.name || 'Admin Owner',
       employeeRole: authUser?.role || 'Admin',
       tableNumber: 'Menu',
       actionType: 'MENU_ITEM_UPDATED',
@@ -3665,11 +3678,53 @@ export default function App() {
     setEmployees(updated);
     setLocalStore('employees', updated);
     recordEmployeeActivity({
-      employeeName: authUser?.name || 'Darshit Rana',
-      employeeRole: 'Admin / Owner',
+      employeeName: authUser?.name || 'Admin Owner',
+      employeeRole: authUser?.role || 'Admin / Owner',
       tableNumber: 'System',
       actionType: 'CREDENTIAL_GENERATED',
       details: `Generated login credentials for ${empData.name} (Role: ${empData.role}, Username: ${empData.username})`,
+      type: 'staff',
+      color: 'indigo'
+    });
+    playSound('success');
+  };
+
+  const handleUpdateEmployee = (updatedEmpData) => {
+    if (!updatedEmpData || !updatedEmpData.id) return;
+    const updated = employees.map(emp => {
+      if (emp.id === updatedEmpData.id) {
+        return { ...emp, ...updatedEmpData };
+      }
+      return emp;
+    });
+    setEmployees(updated);
+    setLocalStore('employees', updated);
+
+    // If currently logged-in user is this updated employee, synchronize active auth session immediately!
+    const isMatchingCurrentAuth = authUser && (
+      authUser.id === updatedEmpData.id || 
+      authUser.username === updatedEmpData.username ||
+      (String(authUser.role || '').toLowerCase().includes('admin') && String(updatedEmpData.role || '').toLowerCase().includes('admin'))
+    );
+
+    if (isMatchingCurrentAuth) {
+      const nextAuthUser = {
+        ...authUser,
+        name: updatedEmpData.name || authUser.name,
+        username: updatedEmpData.username || authUser.username,
+        phone: updatedEmpData.phone || authUser.phone,
+        role: updatedEmpData.role || authUser.role
+      };
+      setAuthUser(nextAuthUser);
+      setLocalStore('auth_user', nextAuthUser);
+    }
+
+    recordEmployeeActivity({
+      employeeName: updatedEmpData.name || authUser?.name || 'Admin Owner',
+      employeeRole: updatedEmpData.role || authUser?.role || 'Admin / Owner',
+      tableNumber: 'System',
+      actionType: 'CREDENTIAL_UPDATED',
+      details: `Updated credentials for ${updatedEmpData.name} (Role: ${updatedEmpData.role}, Username: ${updatedEmpData.username}, Phone: ${updatedEmpData.phone || 'N/A'})`,
       type: 'staff',
       color: 'indigo'
     });
@@ -3682,8 +3737,8 @@ export default function App() {
     setEmployees(updated);
     setLocalStore('employees', updated);
     recordEmployeeActivity({
-      employeeName: authUser?.name || 'Darshit Rana',
-      employeeRole: 'Admin / Owner',
+      employeeName: authUser?.name || 'Admin Owner',
+      employeeRole: authUser?.role || 'Admin / Owner',
       tableNumber: 'System',
       actionType: 'CREDENTIAL_DELETED',
       details: `Deleted login credentials for ${empName || empId}`,
@@ -5079,7 +5134,7 @@ export default function App() {
               onMarkCashPaymentDone={handleMarkCashPaymentDone}
               onCancelOrderWithReason={handleCancelOrderWithReason}
               onAddNewOrder={() => setViewMode('customer')}
-              currentStaff={{ name: authUser?.name || 'Darshit Rana', role: authUser?.role || 'Admin' }}
+              currentStaff={{ name: authUser?.name || 'Admin Owner', role: authUser?.role || 'Admin' }}
               currentLang={currentLang}
               theme={theme}
               restaurantSettings={settings}
@@ -5158,6 +5213,7 @@ export default function App() {
               employees={employees}
               activity={activity}
               onAddEmployee={handleAddEmployee}
+              onUpdateEmployee={handleUpdateEmployee}
               onDeleteEmployee={handleDeleteEmployee}
               currentLang={currentLang}
             />
@@ -5225,7 +5281,7 @@ export default function App() {
           coupons={coupons}
           onPlaceOrder={handlePlaceCustomerOrder}
           onClose={() => setShowQuickPos(false)}
-          currentStaff={{ name: authUser?.name || 'Darshit Rana', role: authUser?.role || 'Admin' }}
+          currentStaff={{ name: authUser?.name || 'Admin Owner', role: authUser?.role || 'Admin' }}
         />
       )}
 

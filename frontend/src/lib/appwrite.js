@@ -66,7 +66,7 @@ export const recordEmployeeActivity = (
   let payMethod = paymentMethod;
 
   if (typeof employeeNameOrObj === 'object' && employeeNameOrObj !== null) {
-    name = employeeNameOrObj.employeeName || 'Darshit Rana';
+    name = employeeNameOrObj.employeeName || 'Admin Owner';
     role = employeeNameOrObj.employeeRole || 'Admin';
     action = employeeNameOrObj.actionType || 'GENERAL_ACTION';
     det = employeeNameOrObj.details || employeeNameOrObj.text || '';
@@ -84,7 +84,7 @@ export const recordEmployeeActivity = (
     id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     time: timeStr,
     timestamp: now.toISOString(),
-    employeeName: name || 'Darshit Rana',
+    employeeName: name || 'Admin Owner',
     employeeRole: role || 'Admin',
     actionType: action,
     tableNumber: tbl,
@@ -109,7 +109,7 @@ export const recordEmployeeActivity = (
 export const getAuthUser = () => {
   return getLocalStore('auth_user', {
     id: 'usr_admin',
-    name: 'Darshit Rana',
+    name: 'Admin Owner',
     username: 'admin',
     email: 'admin@atmiyadosa.com',
     role: 'Admin',
@@ -150,13 +150,13 @@ export const INITIAL_SETTINGS = {
   restaurantName: "Atmiya Dosa Hub",
   tagline: "Pure Veg Authentic Taste • Petlad",
   address: "College Chokdi, Petlad-Khambhat Road, Opp. Harshal Hospital, Nr. Khodiyar Mata Mandir, At. Petlad, Dist. Anand",
-  phone: "+91 63530 59221",
+  phone: "+91 98000 00000",
   gstin: "24AAACA1234A1Z5",
   currency: "₹",
   language: "en",
   instagram: "@ATMIYA_DOSA_HUB",
   upiId: "ranadarshit99@okicici",
-  payeeName: "darshit rana",
+  payeeName: "Atmiya Dosa Hub",
   productionDomain: ""
 };
 
@@ -205,7 +205,7 @@ export const INITIAL_ACTIVITY = [];
 
 // Staff Credentials with creation & deletion support (Section 1 of Admin.txt)
 export const INITIAL_EMPLOYEES = [
-  { id: 'emp1', name: 'Darshit Rana', username: 'admin', role: 'Admin / Owner', password: 'password123', phone: '+91 63530 59221', shift: 'Full Day', active: true, createdAt: '2026-09-01' },
+  { id: 'emp1', name: 'Admin Owner', username: 'admin', role: 'Admin / Owner', password: 'Admin@2026#Secure', phone: '+91 98000 00000', shift: 'Full Day', active: true, createdAt: '2026-09-01' },
   { id: 'emp2', name: 'Amit Kumar', username: 'chef_amit', role: 'Head Chef', password: 'password123', phone: '+91 97123 45678', shift: 'Morning Shift', active: true, createdAt: '2026-09-10' },
   { id: 'emp3', waiter_id: 'WTR-101', name: 'Riya Patel', username: 'waiter_riya', role: 'Waiter', password: 'password123', pin: '1001', phone: '+91 99245 67890', shift: 'Morning Shift', active: true, createdAt: '2026-09-15' },
   { id: 'emp3_b', waiter_id: 'WTR-102', name: 'Rajesh Kumar', username: 'waiter_rajesh', role: 'Waiter', password: 'password123', pin: '1002', phone: '+91 98251 22334', shift: 'Evening Shift', active: true, createdAt: '2026-09-20' },

@@ -381,7 +381,7 @@ async def verify_email_otp(request: Request, body: VerifyOtpRequest):
     if not user:
         if raw_email == PRIMARY_OWNER_EMAIL.lower() or saved_role in ["admin", "owner"]:
             user = {
-                "name": "Darshit Rana",
+                "name": "Admin Owner",
                 "username": "admin",
                 "email": PRIMARY_OWNER_EMAIL,
                 "role": "admin",
