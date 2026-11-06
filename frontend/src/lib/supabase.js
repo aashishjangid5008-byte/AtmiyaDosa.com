@@ -196,14 +196,33 @@ export const dispatchOrderToSupabase = async ({
       const match = (allTbls || []).find(t => String(t.table_number).replace(/\D/g, '') === digits);
       if (match) {
         tableId = match.id;
-      } else if (allTbls && allTbls.length > 0) {
-        tableId = allTbls[0].id;
       }
     }
 
-    // Default fallback to first table if not resolved
+    // Auto-provision table row in restaurant_tables if not found (NEVER fall back to Table 01!)
     if (!tableId) {
-      tableId = '4f8bb699-0c21-40d5-8e89-6cdd06d7dd77'; // T-01 ID
+      try {
+        const cleanTableCode = formattedTableNum.replace('-', '');
+        const createRes = await fetch(`${API_BASE_URL}/tables`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            number: cleanTableCode,
+            capacity: 4,
+            zone: 'Main Hall'
+          })
+        });
+        if (createRes.ok) {
+          const { data: newlyCreated } = await supabase
+            .from('restaurant_tables')
+            .select('id, table_number')
+            .or(`table_number.eq.${formattedTableNum},table_number.eq.${cleanTableCode}`)
+            .maybeSingle();
+          if (newlyCreated) tableId = newlyCreated.id;
+        }
+      } catch (autoProvErr) {
+        console.warn('[SUPABASE] Auto-provision table notice:', autoProvErr);
+      }
     }
 
     // 2. Find or Create ACTIVE Table Session
@@ -745,12 +764,31 @@ export const settleTableSessionInSupabase = async (tableNumber, orderIdOrNumber,
   const mappedPaymentMethod = (paymentMethod === 'Cash' || paymentMethod === 'CASH') ? 'CASH' : 'UPI_COUNTER';
 
   try {
-    // 1. Get Table ID
-    const { data: tableData } = await supabase
+    // 1. Get Table ID robustly across all table formats
+    let tableData = null;
+    const { data: directTbl } = await supabase
       .from('restaurant_tables')
       .select('id')
       .eq('table_number', formattedTableNum)
       .maybeSingle();
+    tableData = directTbl;
+
+    if (!tableData) {
+      const altNum = formattedTableNum.replace('-', '');
+      const { data: altTbl } = await supabase
+        .from('restaurant_tables')
+        .select('id')
+        .or(`table_number.eq.${altNum},table_number.eq.${formattedTableNum}`)
+        .maybeSingle();
+      if (altTbl) tableData = altTbl;
+    }
+
+    if (!tableData) {
+      const digits = String(formattedTableNum).replace(/\D/g, '');
+      const { data: allTbls } = await supabase.from('restaurant_tables').select('id, table_number');
+      const match = (allTbls || []).find(t => String(t.table_number).replace(/\D/g, '') === digits);
+      if (match) tableData = match;
+    }
 
     if (tableData?.id) {
       // 2. Complete active session
@@ -1222,4 +1260,135 @@ export const settleTableSessionApi = async ({
 
   return serverResult || { success: true, table_number: tableNumber, session_terminated: true };
 };
+
+/**
+ * Fetches all live floor tables directly from Supabase Cloud PostgreSQL.
+ * Enables 100% synchrony across Waiter view, KDS, Admin, and customer ordering.
+ */
+export const fetchLiveTablesFromSupabase = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('restaurant_tables')
+      .select('*')
+      .order('table_number', { ascending: true });
+
+    if (error) {
+      console.warn('[SUPABASE] Fetch live tables notice:', error.message);
+      return null;
+    }
+
+    if (data && Array.isArray(data)) {
+      return data.map(dt => {
+        const tNum = dt.table_number || '';
+        const cleanCode = tNum.replace('-', '');
+        const st = (dt.status || 'VACANT').toUpperCase();
+        return {
+          id: cleanCode || tNum,
+          number: cleanCode || tNum,
+          capacity: parseInt(dt.capacity, 10) || 4,
+          zone: dt.zone || 'Main Hall',
+          status: st === 'OCCUPIED' ? 'occupied' : 'available',
+          current_order_id: null,
+          timing: null
+        };
+      });
+    }
+    return null;
+  } catch (err) {
+    console.warn('[SUPABASE] Fetch live tables exception:', err);
+    return null;
+  }
+};
+
+/**
+ * Persists a new dining table to Supabase Cloud and broadcasts event to all floor staff.
+ */
+export const saveTableToSupabaseApi = async (tableObj) => {
+  if (!tableObj || !tableObj.number) return null;
+  const cleanNumber = String(tableObj.number).trim().toUpperCase();
+
+  try {
+    // 1. Write via FastAPI backend (uses SUPABASE_SERVICE_ROLE_KEY to bypass RLS)
+    const resp = await fetch(`${API_BASE_URL}/tables`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        number: cleanNumber,
+        capacity: parseInt(tableObj.capacity, 10) || 4,
+        zone: tableObj.zone || 'Main Hall'
+      })
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      console.log(`[TABLES] Persisted table ${cleanNumber} via API:`, data);
+    }
+  } catch (apiErr) {
+    console.warn('[TABLES] Backend table creation notice:', apiErr);
+  }
+
+  // 2. Broadcast on Supabase realtime channel so all connected devices update immediately
+  try {
+    const channel = supabase.channel('restaurant_alerts');
+    await channel.send({
+      type: 'broadcast',
+      event: 'table_created',
+      payload: { table: tableObj }
+    });
+  } catch (bcastErr) {
+    console.warn('[TABLES] Broadcast notice:', bcastErr);
+  }
+
+  return tableObj;
+};
+
+/**
+ * Permanently deletes a dining table from Supabase Cloud and notifies staff screens.
+ */
+export const deleteTableFromSupabaseApi = async (tableIdOrNum) => {
+  if (!tableIdOrNum) return;
+  const cleanNumber = String(tableIdOrNum).trim().toUpperCase();
+
+  try {
+    await fetch(`${API_BASE_URL}/tables/${cleanNumber}`, {
+      method: 'DELETE'
+    });
+  } catch (e) {
+    console.warn('[TABLES] Backend delete notice:', e);
+  }
+
+  try {
+    const channel = supabase.channel('restaurant_alerts');
+    await channel.send({
+      type: 'broadcast',
+      event: 'table_deleted',
+      payload: { tableNumber: cleanNumber }
+    });
+  } catch (e) {}
+};
+
+/**
+ * Updates a dining table in Supabase Cloud and notifies staff screens.
+ */
+export const updateTableInSupabaseApi = async (tableIdOrNum, updates) => {
+  if (!tableIdOrNum) return;
+  const cleanNumber = String(tableIdOrNum).trim().toUpperCase();
+
+  try {
+    await fetch(`${API_BASE_URL}/tables/${cleanNumber}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+  } catch (e) {}
+
+  try {
+    const channel = supabase.channel('restaurant_alerts');
+    await channel.send({
+      type: 'broadcast',
+      event: 'table_updated',
+      payload: { tableNumber: cleanNumber, updates }
+    });
+  } catch (e) {}
+};
+
 

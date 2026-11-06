@@ -60,6 +60,10 @@ import {
   updateOrderItemStatusInSupabase,
   updateAllOrderItemsServedInSupabase,
   fetchLiveMenuFromSupabase,
+  fetchLiveTablesFromSupabase,
+  saveTableToSupabaseApi,
+  deleteTableFromSupabaseApi,
+  updateTableInSupabaseApi,
   API_BASE_URL
 } from './lib/supabase';
 import { getDishCuisine } from './lib/cuisines';
@@ -1098,6 +1102,32 @@ export default function App() {
           }
           return t;
         });
+
+        // Ensure newly ordered dining tables not yet in prevTables are dynamically included on all screens!
+        const existingCodes = new Set((reconciled || []).map(t => (t.number || '').replace(/\D/g, '').padStart(2, '0')));
+        activeTbls.forEach(code => {
+          if (!existingCodes.has(code)) {
+            const matchOrd = mappedDbOrders.find(o => (o.table_number || '').replace(/\D/g, '').padStart(2, '0') === code);
+            const rawTbl = matchOrd?.table_number || `T${code}`;
+            const cleanDigits = rawTbl.replace(/[^0-9]/g, '');
+            const tableNumStr = cleanDigits 
+              ? (parseInt(cleanDigits, 10) < 10 ? `T0${parseInt(cleanDigits, 10)}` : `T${parseInt(cleanDigits, 10)}`) 
+              : rawTbl;
+            reconciled.push({
+              id: tableNumStr,
+              number: tableNumStr,
+              capacity: 4,
+              zone: 'Main Hall',
+              status: 'occupied',
+              current_order_id: matchOrd?.id,
+              current_customer_name: matchOrd?.customer_name,
+              current_customer_phone: matchOrd?.customer_phone,
+              timing: null
+            });
+            existingCodes.add(code);
+          }
+        });
+
         setLocalStore('tables', reconciled);
         return reconciled;
       });
@@ -1106,15 +1136,63 @@ export default function App() {
     }
   }, []);
 
+  // Live Floor Tables Synchronizer: Guarantees newly created tables (Tables 17+) reflect across all devices
+  const refreshTablesFromSupabase = useCallback(async () => {
+    try {
+      const liveTables = await fetchLiveTablesFromSupabase();
+      if (liveTables && Array.isArray(liveTables) && liveTables.length > 0) {
+        setTables(prevTables => {
+          const map = new Map();
+          // Populate live tables from Supabase Cloud
+          liveTables.forEach(lt => {
+            const code = (lt.number || '').replace(/\D/g, '');
+            const key = code ? parseInt(code, 10) : lt.number;
+            map.set(key, lt);
+          });
+          // Preserve local dynamic runtime properties (active orders, seated timing, delivered timestamps)
+          (prevTables || []).forEach(pt => {
+            const code = (pt.number || '').replace(/\D/g, '');
+            const key = code ? parseInt(code, 10) : pt.number;
+            if (map.has(key)) {
+              const existing = map.get(key);
+              map.set(key, {
+                ...existing,
+                current_order_id: pt.current_order_id || existing.current_order_id,
+                current_customer_name: pt.current_customer_name || existing.current_customer_name,
+                current_customer_phone: pt.current_customer_phone || existing.current_customer_phone,
+                timing: pt.timing || existing.timing,
+                food_delivered_at: pt.food_delivered_at || existing.food_delivered_at,
+                turnover_notified: pt.turnover_notified || existing.turnover_notified,
+                status: pt.status || existing.status
+              });
+            } else {
+              map.set(key, pt);
+            }
+          });
+          const merged = Array.from(map.values()).sort((a, b) => {
+            const numA = parseInt(String(a.number).replace(/\D/g, ''), 10) || 0;
+            const numB = parseInt(String(b.number).replace(/\D/g, ''), 10) || 0;
+            return numA - numB;
+          });
+          setLocalStore('tables', merged);
+          return merged;
+        });
+      }
+    } catch (tblErr) {
+      console.warn('[SUPABASE] Refresh live tables notice:', tblErr);
+    }
+  }, []);
+
   // 4-Second Resilient Fallback Poller: Guarantees orders & tables stay 100% in sync across devices
   useEffect(() => {
     const timer = setInterval(() => {
       if (!document.hidden || authUserRef.current) {
         refreshOrdersFromSupabase();
+        refreshTablesFromSupabase();
       }
     }, 4000);
     return () => clearInterval(timer);
-  }, [refreshOrdersFromSupabase]);
+  }, [refreshOrdersFromSupabase, refreshTablesFromSupabase]);
 
   // Live Supabase Synchronization Hook (keeps QR Menu, Admin POS & Kitchen in 100% real-time sync)
   useEffect(() => {
@@ -1506,6 +1584,11 @@ export default function App() {
               });
             }
           })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, async (payload) => {
+            console.log('[SUPABASE REALTIME] restaurant_tables postgres_changes event:', payload?.eventType);
+            await refreshTablesFromSupabase();
+            await refreshOrdersFromSupabase();
+          })
           .subscribe();
 
         // 2. Subscribe to cross-device Table Service Calls, Food Ready Broadcast & New Orders ('restaurant_alerts')
@@ -1561,6 +1644,16 @@ export default function App() {
           })
           .on('broadcast', { event: 'table_session_settled' }, async () => {
             await refreshOrdersFromSupabase();
+            await refreshTablesFromSupabase();
+          })
+          .on('broadcast', { event: 'table_created' }, async () => {
+            await refreshTablesFromSupabase();
+          })
+          .on('broadcast', { event: 'table_updated' }, async () => {
+            await refreshTablesFromSupabase();
+          })
+          .on('broadcast', { event: 'table_deleted' }, async () => {
+            await refreshTablesFromSupabase();
           })
           .on('broadcast', { event: 'food_ready_for_pickup' }, ({ payload }) => {
             console.log('[SUPABASE REALTIME] Food ready for pickup:', payload);
@@ -2809,51 +2902,83 @@ export default function App() {
     return saved;
   };
 
-  const handleAddTable = (tableData) => {
+  const handleAddTable = async (tableData) => {
+    const cleanNumber = String(tableData.number || '').trim().toUpperCase();
     const tableObj = {
-      id: tableData.number,
-      number: tableData.number,
-      capacity: parseInt(tableData.capacity, 10),
-      zone: tableData.zone,
+      id: cleanNumber,
+      number: cleanNumber,
+      capacity: parseInt(tableData.capacity, 10) || 4,
+      zone: tableData.zone || 'Main Hall',
       status: 'available',
       current_order_id: null,
       timing: null
     };
-    const updated = [...tables, tableObj];
+
+    const updated = [...tables.filter(t => t.number !== cleanNumber), tableObj].sort((a, b) => {
+      const numA = parseInt(String(a.number).replace(/\D/g, ''), 10) || 0;
+      const numB = parseInt(String(b.number).replace(/\D/g, ''), 10) || 0;
+      return numA - numB;
+    });
+
     setTables(updated);
     setLocalStore('tables', updated);
+
+    // PERMANENT CLOUD PERSISTENCE: Save to Supabase Cloud PostgreSQL
+    try {
+      await saveTableToSupabaseApi(tableObj);
+    } catch (e) {
+      console.warn('Failed to sync new table to Supabase:', e);
+    }
+
     recordEmployeeActivity({
       employeeName: authUser?.name || 'Admin',
       employeeRole: authUser?.role || 'Admin',
-      tableNumber: tableData.number,
+      tableNumber: cleanNumber,
       actionType: 'TABLE_ADDED',
-      details: `Added new dining table ${tableData.number} (${tableData.zone}, Capacity: ${tableData.capacity})`,
+      details: `Added new dining table ${cleanNumber} (${tableObj.zone}, Capacity: ${tableObj.capacity})`,
       type: 'table',
       color: 'blue'
     });
     playSound('success');
   };
 
-  const handleDeleteTable = (id) => {
+  const handleDeleteTable = async (id) => {
     if (!window.confirm('Delete this dining table?')) return;
-    const updated = tables.filter(t => t.id !== id);
+    const targetTable = tables.find(t => t.id === id || t.number === id);
+    const tableNum = targetTable?.number || id;
+    const updated = tables.filter(t => t.id !== id && t.number !== id);
     setTables(updated);
     setLocalStore('tables', updated);
+
+    // PERMANENT CLOUD PERSISTENCE: Delete from Supabase Cloud PostgreSQL
+    try {
+      await deleteTableFromSupabaseApi(tableNum);
+    } catch (e) {
+      console.warn('Failed to delete table from Supabase:', e);
+    }
+
     recordEmployeeActivity({
       employeeName: authUser?.name || 'Admin',
       employeeRole: authUser?.role || 'Admin',
-      tableNumber: id,
+      tableNumber: tableNum,
       actionType: 'TABLE_DELETED',
-      details: `Deleted dining table ${id}`,
+      details: `Deleted dining table ${tableNum}`,
       type: 'table',
       color: 'rose'
     });
   };
 
-  const handleUpdateTable = (tableId, updates) => {
+  const handleUpdateTable = async (tableId, updates) => {
     const updated = tables.map(t => (t.id === tableId || t.number === tableId) ? { ...t, ...updates } : t);
     setTables(updated);
     setLocalStore('tables', updated);
+
+    // PERMANENT CLOUD PERSISTENCE: Update in Supabase Cloud PostgreSQL
+    try {
+      await updateTableInSupabaseApi(tableId, updates);
+    } catch (e) {
+      console.warn('Failed to update table in Supabase:', e);
+    }
   };
 
   const handleReconcileFloorTables = (sourceOrders = orders) => {
@@ -2895,6 +3020,31 @@ export default function App() {
         };
       }
       return t;
+    });
+
+    // Ensure newly ordered dining tables not yet in tables are dynamically added
+    const existingTableCodes = new Set(updatedTables.map(t => (t.number || '').replace(/\D/g, '').padStart(2, '0')));
+    activeOrderTableNumbers.forEach(code => {
+      if (!existingTableCodes.has(code)) {
+        const matchOrd = sourceOrders.find(o => (o.table_number || '').replace(/\D/g, '').padStart(2, '0') === code);
+        const rawTbl = matchOrd?.table_number || `T${code}`;
+        const cleanDigits = rawTbl.replace(/[^0-9]/g, '');
+        const tableNumStr = cleanDigits 
+          ? (parseInt(cleanDigits, 10) < 10 ? `T0${parseInt(cleanDigits, 10)}` : `T${parseInt(cleanDigits, 10)}`) 
+          : rawTbl;
+        updatedTables.push({
+          id: tableNumStr,
+          number: tableNumStr,
+          capacity: 4,
+          zone: 'Main Hall',
+          status: 'occupied',
+          current_order_id: matchOrd?.id,
+          current_customer_name: matchOrd?.customer_name,
+          current_customer_phone: matchOrd?.customer_phone,
+          timing: null
+        });
+        existingTableCodes.add(code);
+      }
     });
 
     setTables(updatedTables);

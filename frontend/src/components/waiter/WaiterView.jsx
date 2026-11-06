@@ -1182,12 +1182,18 @@ export default function WaiterView({
           <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-xs space-y-2.5">
             {/* Tier 1: Floor Zones (Full Width Horizontal Scrollable Pills with Counts) */}
             <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar scroll-smooth w-full py-0.5">
-              {[
-                { id: 'All', label: 'All Floor Zones' },
-                { id: 'AC Family Hall', label: 'AC Family Hall' },
-                { id: 'Garden Outdoor', label: 'Garden Outdoor' },
-                { id: 'Main Counter', label: 'Main Counter' }
-              ].map(z => {
+              {(() => {
+                const zoneList = [{ id: 'All', label: 'All Floor Zones' }];
+                const seenZones = new Set(['All']);
+                (tables || []).forEach(t => {
+                  const z = getTableZone(t);
+                  if (z && !seenZones.has(z)) {
+                    seenZones.add(z);
+                    zoneList.push({ id: z, label: z });
+                  }
+                });
+                return zoneList;
+              })().map(z => {
                 const zoneCount = z.id === 'All' 
                   ? tables.length 
                   : tables.filter(t => getTableZone(t) === z.id).length;

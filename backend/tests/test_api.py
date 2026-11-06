@@ -10,6 +10,10 @@ from app.database import CANONICAL_ORDERS
 
 client = TestClient(app)
 
+@pytest.fixture(autouse=True, scope="module")
+def clean_orders_state():
+    CANONICAL_ORDERS.clear()
+
 def test_health_check():
     """Verify health and 19/19 security checklist posture."""
     response = client.get("/api/health")
