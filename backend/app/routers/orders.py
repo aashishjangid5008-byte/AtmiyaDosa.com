@@ -21,7 +21,7 @@ from app.database import (
     log_admin_action,
     save_orders
 )
-from app.security import get_current_user
+from app.security import get_current_user, get_current_user_optional
 
 router = APIRouter(prefix="/orders", tags=["Orders & KDS Kitchen Dispatch"])
 
@@ -201,7 +201,7 @@ async def list_orders(current_user: dict = Depends(get_current_user)):
 async def update_order_status(
     order_id: str,
     body: OrderStatusUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: Optional[dict] = Depends(get_current_user_optional)
 ):
     """
     Update ticket status along kitchen lifecycle:
@@ -214,7 +214,12 @@ async def update_order_status(
             detail=f"Invalid status '{body.status}'. Must be one of: {', '.join(valid_statuses)}"
         )
 
-    order = next((o for o in CANONICAL_ORDERS if o["id"] == order_id), None)
+    clean_id = str(order_id).replace("#", "").strip()
+    order = next(
+        (o for o in CANONICAL_ORDERS if str(o.get("id", "")).replace("#", "").strip() == clean_id 
+         or str(o.get("order_number", "")).replace("#", "").strip() == clean_id), 
+        None
+    )
     if not order:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -223,6 +228,13 @@ async def update_order_status(
 
     prev_status = order["status"]
     order["status"] = body.status
+    
+    # If served or completed, mark all items as served
+    if body.status in ["Served", "Completed"]:
+        for itm in order.get("items", []):
+            itm["is_served"] = True
+            itm["kitchen_status"] = "served"
+
     save_orders()
 
     # If completed or cancelled, release table
@@ -234,14 +246,15 @@ async def update_order_status(
             tbl["timing"] = None
 
     await log_admin_action(
-        employee_name=current_user.get("name", "Staff"),
-        employee_role=current_user.get("role", "Staff"),
+        employee_name=(current_user or {}).get("name", "Kitchen Chef"),
+        employee_role=(current_user or {}).get("role", "Staff"),
         action_type="ORDER_STATUS_UPDATE",
         details=f"Order {order_id} transitioned from {prev_status} to {body.status}",
         table_number=order["table_number"],
         order_id=order_id
     )
 
+    await sync_order_to_supabase(order)
     return OrderResponse(**order)
 
 @router.put("/{order_id}/items/{item_index}/status", summary="Update Dish Item Kitchen Status")
@@ -249,10 +262,14 @@ async def update_item_status(
     order_id: str,
     item_index: int,
     body: dict,
-    current_user: dict = Depends(get_current_user)
+    current_user: Optional[dict] = Depends(get_current_user_optional)
 ):
-    clean_id = order_id.strip()
-    order = next((o for o in CANONICAL_ORDERS if o["id"] == clean_id or o.get("order_number") == clean_id.replace("#", "")), None)
+    clean_id = str(order_id).replace("#", "").strip()
+    order = next(
+        (o for o in CANONICAL_ORDERS if str(o.get("id", "")).replace("#", "").strip() == clean_id 
+         or str(o.get("order_number", "")).replace("#", "").strip() == clean_id), 
+        None
+    )
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     items = order.get("items", [])

@@ -154,46 +154,48 @@ export default function KitchenPanelView({
 
   const t = (key) => getTranslation(currentLang, key);
 
+  // Helper to determine if an order is completed, served, settled, or cleared
+  const isOrderCompletedOrCleared = (o) => {
+    if (!o) return true;
+    const s = String(o?.status || '').toLowerCase().trim();
+    if (s === 'cancelled' || s === 'served' || s === 'completed' || s === 'settled') return true;
+    const idKey = String(o?.id || o?.order_number || o?.supabase_order_id || '');
+    const orderNumKey = String(o?.order_number || '');
+    const dbIdKey = String(o?.supabase_order_id || '');
+    const clearedSet = new Set(clearedOrderIds.map(String));
+    if (o?.kds_cleared || clearedSet.has(idKey) || (orderNumKey && clearedSet.has(orderNumKey)) || (dbIdKey && clearedSet.has(dbIdKey))) {
+      return true;
+    }
+    const items = resolveTicketItems(o);
+    const allItemsServed = items.length > 0 && items.every(it => it.is_served);
+    if (allItemsServed) return true;
+    return false;
+  };
+
   // 1. All Active Live KOTs (Default View): All uncompleted tickets (Placed, Cooking, Food Ready)
   const activeKitchenOrders = useMemo(() => {
-    return orders.filter(o => {
-      const s = String(o?.status || '').toLowerCase().trim();
-      if (s === 'cancelled') return false;
-      const items = resolveTicketItems(o);
-      const allItemsServed = items.length > 0 && items.every(it => it.is_served);
-      if (allItemsServed) return false;
-      return true;
-    });
-  }, [orders]);
+    return orders.filter(o => !isOrderCompletedOrCleared(o));
+  }, [orders, clearedOrderIds]);
 
   // Placed orders (Used for new-order chimes)
   const placedOrders = useMemo(() => {
     return orders.filter(o => {
+      if (isOrderCompletedOrCleared(o)) return false;
       const s = String(o?.status || '').toLowerCase().trim();
       return s === 'placed' || s === 'pending';
     });
-  }, [orders]);
+  }, [orders, clearedOrderIds]);
 
-  // 2. Cooking Tab: Orders with items being prepared or ready on pass (Never disappears on marking ready!)
+  // 2. Cooking Tab: Orders with items being prepared or ready on pass
   const preparingOrders = useMemo(() => {
-    return orders.filter(o => {
-      const s = String(o?.status || '').toLowerCase().trim();
-      if (s === 'cancelled') return false;
-      const items = resolveTicketItems(o);
-      const allItemsServed = items.length > 0 && items.every(it => it.is_served);
-      if (allItemsServed) return false;
-      return true; // Retains order card until every dish is delivered
-    });
-  }, [orders]);
+    return orders.filter(o => !isOrderCompletedOrCleared(o));
+  }, [orders, clearedOrderIds]);
 
   // 3. Food Ready: Any ticket that has dishes prepared & ready for waiter runner pickup
   const readyOrders = useMemo(() => {
     return orders.filter(o => {
-      const s = String(o?.status || '').toLowerCase().trim();
-      if (s === 'cancelled') return false;
+      if (isOrderCompletedOrCleared(o)) return false;
       const items = resolveTicketItems(o);
-      const allItemsServed = items.length > 0 && items.every(it => it.is_served);
-      if (allItemsServed) return false;
       return items.some((it, idx) => 
         !it.is_served && (
           (it.kitchen_status || '').toLowerCase() === 'ready' || 
@@ -203,7 +205,7 @@ export default function KitchenPanelView({
         )
       );
     });
-  }, [orders, checkedItems]);
+  }, [orders, checkedItems, clearedOrderIds]);
 
   const activeOrders = useMemo(() => {
     return activeKitchenOrders;
@@ -225,13 +227,9 @@ export default function KitchenPanelView({
       const s = String(o?.status || '').toLowerCase().trim();
       if (s === 'cancelled') return false;
       const items = resolveTicketItems(o);
-      // Under NO circumstances may a ticket enter Done if ANY dish is still unserved!
-      const hasUnservedDishes = items.some(it => !it.is_served);
-      if (hasUnservedDishes && items.length > 0) return false;
-
       const allItemsServed = items.length > 0 && items.every(it => it.is_served);
-      const isFinished = s === 'served' || s === 'completed' || allItemsServed;
-      if (!isFinished && !allItemsServed) return false;
+      const isFinished = s === 'served' || s === 'completed' || s === 'settled' || allItemsServed;
+      if (!isFinished) return false;
 
       // Only display recent orders from today / last 24 hours
       const orderTime = o.placed_at || o.created_at;
@@ -430,9 +428,59 @@ export default function KitchenPanelView({
     onUpdateStatus(order.id, 'Ready');
   };
 
-  const handleMarkServed = (orderId) => {
+  const handleMarkServed = (orderId, orderObj = null) => {
     playSound('success');
-    onUpdateStatus(orderId, 'Served');
+    const target = orderObj || orders.find(o => 
+      o.id === orderId || 
+      o.order_number === orderId || 
+      String(o.id || '').replace(/^#+/, '') === String(orderId || '').replace(/^#+/, '') ||
+      (o.supabase_order_id && o.supabase_order_id === orderId)
+    );
+
+    const items = resolveTicketItems(target || { id: orderId });
+    setCheckedItems(prev => {
+      const next = { ...prev };
+      items.forEach((item, idx) => {
+        next[`${orderId}_${idx}`] = true;
+        if (target?.id) next[`${target.id}_${idx}`] = true;
+        if (target?.order_number) next[`${target.order_number}_${idx}`] = true;
+        if (target?.supabase_order_id) next[`${target.supabase_order_id}_${idx}`] = true;
+      });
+      try {
+        localStorage.setItem('kds_checked_items', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+
+    const effectiveId = target?.id || target?.order_number || target?.supabase_order_id || orderId;
+    if (onUpdateStatus) {
+      onUpdateStatus(effectiveId, 'Served');
+    }
+    if (onMarkAllTableItemsServed && target?.table_number) {
+      onMarkAllTableItemsServed(target.table_number);
+    }
+  };
+
+  const handleCloseTicket = (order) => {
+    playSound('success');
+    const idKey = String(order.id || order.order_number || order.supabase_order_id || '');
+    const numKey = String(order.order_number || '');
+    const dbKey = String(order.supabase_order_id || '');
+
+    const toAdd = [idKey, numKey, dbKey].filter(Boolean);
+    const updated = Array.from(new Set([...clearedOrderIds, ...toAdd]));
+    setClearedOrderIds(updated);
+    try {
+      localStorage.setItem('kds_cleared_order_ids', JSON.stringify(updated));
+    } catch (e) {}
+
+    const effectiveId = order.id || order.order_number || order.supabase_order_id;
+    if (onUpdateStatus) {
+      onUpdateStatus(effectiveId, 'Served');
+    }
+    if (onMarkAllTableItemsServed && order.table_number) {
+      onMarkAllTableItemsServed(order.table_number);
+    }
   };
 
   // Identify stale tickets older than 2 hours in active queue
@@ -983,14 +1031,15 @@ export default function KitchenPanelView({
         const waterQty = parseInt(waterMatch[1], 10) || 1;
         const alreadyHasWater = displayItems.some(it => (it.name || '').toLowerCase().includes('water'));
         if (!alreadyHasWater) {
+          const waterServed = s === 'served' || s === 'completed' || s === 'settled';
           displayItems.push({
             id: `addon_water_${order.id}`,
             name: 'Packaged Mineral Water (1 Litre Bottle)',
             qty: waterQty,
             price: 20,
-            kitchen_status: 'placed',
+            kitchen_status: waterServed ? 'served' : 'placed',
             is_addon: true,
-            is_served: false,
+            is_served: waterServed,
             cooking_note: 'Chilled bottle'
           });
         }
@@ -998,7 +1047,7 @@ export default function KitchenPanelView({
     }
 
     const allItemsServed = displayItems.length > 0 && displayItems.every(it => it.is_served);
-    const isServed = allItemsServed || (displayItems.length === 0 && (s === 'served' || s === 'completed'));
+    const isServed = s === 'served' || s === 'completed' || s === 'settled' || allItemsServed;
 
     const totalItemsCount = displayItems.length;
     const checkedCount = displayItems.filter((item, idx) => {
@@ -1070,8 +1119,8 @@ export default function KitchenPanelView({
             </div>
           </div>
 
-          {/* Prep Timer Badge */}
-          <div className="shrink-0">
+          {/* Top Right: Prep Timer Badge & Quick 1-Tap Close Button */}
+          <div className="shrink-0 flex items-center space-x-1.5">
             <div className={`px-2.5 py-1 rounded-md font-mono font-semibold text-xs inline-flex items-center space-x-1.5 border ${
               isVeryOld
                 ? 'bg-rose-100 text-rose-800 border-rose-300 font-bold animate-pulse'
@@ -1086,6 +1135,18 @@ export default function KitchenPanelView({
               <Clock className="w-3.5 h-3.5" />
               <span>{formatTimer(totalSecs)}</span>
             </div>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCloseTicket(order);
+              }}
+              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-600 hover:text-slate-900 transition flex items-center space-x-1 cursor-pointer border border-slate-200 shadow-2xs"
+              title="Close and complete this ticket"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
 
@@ -1098,7 +1159,7 @@ export default function KitchenPanelView({
             </div>
             <button
               type="button"
-              onClick={() => handleMarkServed(order.id)}
+              onClick={() => handleMarkServed(order.id, order)}
               className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-lg text-[10px] font-bold transition shrink-0 cursor-pointer shadow-xs"
             >
               Dismiss Ticket
@@ -1362,7 +1423,7 @@ export default function KitchenPanelView({
 
               <button
                 type="button"
-                onClick={() => handleMarkServed(order.id)}
+                onClick={() => handleMarkServed(order.id, order)}
                 className="py-3 px-2 rounded-xl bg-slate-900 hover:bg-black text-white font-bold text-xs shadow-xs flex items-center justify-center space-x-1.5 transition cursor-pointer"
                 title="Handover dishes to waiter runner and complete kitchen ticket"
               >
@@ -1386,7 +1447,7 @@ export default function KitchenPanelView({
             {!isServed && (
               <button
                 type="button"
-                onClick={() => handleMarkServed(order.id)}
+                onClick={() => handleMarkServed(order.id, order)}
                 className="text-slate-400 hover:text-emerald-700 font-semibold text-[11px] flex items-center space-x-1 cursor-pointer transition"
                 title="Directly mark order served and clear from active board"
               >

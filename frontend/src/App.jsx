@@ -1963,19 +1963,26 @@ export default function App() {
 
   // State Mutation Handlers
   const handleUpdateOrderStatus = (orderId, newStatus, staffName = null, staffRole = null) => {
-    const targetOrder = orders.find(o => o.id === orderId || String(o.id) === String(orderId));
+    const isOrderMatch = (o) => (
+      o.id === orderId || 
+      o.order_number === orderId || 
+      String(o.id || '').replace(/^#+/, '') === String(orderId || '').replace(/^#+/, '') ||
+      (o.order_number && String(o.order_number).replace(/^#+/, '') === String(orderId || '').replace(/^#+/, '')) ||
+      (o.supabase_order_id && o.supabase_order_id === orderId)
+    );
+    const targetOrder = orders.find(isOrderMatch);
     const isNowServed = newStatus === 'Served' || newStatus === 'Completed';
     const isNowReady = newStatus === 'Ready';
     const deliveredAt = isNowServed ? Date.now() : targetOrder?.food_delivered_at;
     const actorName = staffName || authUser?.name || 'Staff';
     const actorRole = staffRole ? (staffRole === 'chef' ? 'Head Chef' : staffRole === 'waiter' ? 'Floor Waiter' : staffRole === 'cashier' ? 'Cashier' : 'Admin') : (authUser?.role || 'Admin');
 
-    const updated = orders.map(o => (o.id === orderId || String(o.id) === String(orderId)) ? { 
+    const updated = orders.map(o => isOrderMatch(o) ? { 
       ...o, 
       status: newStatus,
       food_delivered_at: deliveredAt || o.food_delivered_at,
       items: isNowServed 
-        ? (o.items || []).map(it => ({ ...it, is_served: true, served_at: it.served_at || Date.now(), kitchen_status: 'ready' }))
+        ? (o.items || []).map(it => ({ ...it, is_served: true, served_at: it.served_at || Date.now(), kitchen_status: 'served' }))
         : (isNowReady
             ? (o.items || []).map(it => ({ ...it, kitchen_status: 'ready', ready_at: it.ready_at || Date.now() }))
             : o.items)
@@ -2077,7 +2084,22 @@ export default function App() {
     });
 
     // Update in Supabase Cloud
-    updateOrderStatusInSupabase(targetOrder?.supabase_order_id || targetOrder?.id || orderId, newStatus);
+    updateOrderStatusInSupabase(targetOrder?.supabase_order_id || targetOrder?.order_number || targetOrder?.id || orderId, newStatus);
+    if (isNowServed && targetOrder?.table_number) {
+      try {
+        updateAllOrderItemsServedInSupabase(targetOrder.table_number);
+      } catch (e) {}
+    }
+
+    // Dual persistence with FastAPI local backend
+    try {
+      const cleanOrdId = String(targetOrder?.order_number || targetOrder?.id || orderId).replace('#', '');
+      fetch(`/api/orders/${cleanOrdId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      }).catch(() => {});
+    } catch (e) {}
 
     // If order was completed or cancelled, check if this table has any other active dining orders
     if ((newStatus === 'Completed' || newStatus === 'Cancelled') && targetOrder?.table_number) {
