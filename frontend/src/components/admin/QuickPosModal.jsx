@@ -397,33 +397,32 @@ export default function QuickPosModal({
           </div>
 
           {/* RIGHT COLUMN: RUNNING TICKET & PAYMENT (40% width) */}
-          <div className="lg:w-2/5 p-4 sm:p-6 flex flex-col justify-between bg-white overflow-y-auto space-y-4">
+          <div className="lg:w-2/5 p-4 sm:p-6 flex flex-col h-full bg-white overflow-hidden border-l border-slate-200">
             
             {/* Ticket Header */}
-            <div>
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                <div>
-                  <h3 className="font-heading font-black text-sm text-slate-900">
-                    Running Ticket ({cart.reduce((sum, i) => sum + i.qty, 0)} Items)
-                  </h3>
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    Target: {selectedChannel === 'Dine-In' ? `Table ${selectedTable}` : selectedChannel}
-                  </span>
-                </div>
-
-                {cart.length > 0 && (
-                  <button
-                    onClick={() => setCart([])}
-                    className="text-[11px] font-bold text-rose-500 hover:text-rose-700 flex items-center space-x-1"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    <span>Clear</span>
-                  </button>
-                )}
+            <div className="shrink-0 flex items-center justify-between border-b border-slate-100 pb-2.5">
+              <div>
+                <h3 className="font-heading font-black text-sm text-slate-900">
+                  Running Ticket ({cart.reduce((sum, i) => sum + i.qty, 0)} Items)
+                </h3>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  Target: {selectedChannel === 'Dine-In' ? `Table ${selectedTable}` : selectedChannel}
+                </span>
               </div>
 
-              {/* Items List */}
-              <div className="max-h-64 overflow-y-auto space-y-3 py-3 pr-1 divide-y divide-slate-100">
+              {cart.length > 0 && (
+                <button
+                  onClick={() => setCart([])}
+                  className="text-[11px] font-bold text-rose-500 hover:text-rose-700 flex items-center space-x-1 cursor-pointer"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Clear</span>
+                </button>
+              )}
+            </div>
+
+            {/* Items List (fills all available vertical space without artificial cutoff) */}
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-3 py-3 pr-1 divide-y divide-slate-100">
                 {cart.map((item, idx) => (
                   <div key={idx} className="pt-2 space-y-2">
                     <div className="flex items-center justify-between">
@@ -500,11 +499,10 @@ export default function QuickPosModal({
                     <p className="text-[10px]">Click any dish from the left menu to add.</p>
                   </div>
                 )}
-              </div>
             </div>
 
-            {/* Calculations & Payment Controls */}
-            <div className="space-y-3 pt-3 border-t border-slate-200">
+            {/* Calculations & Payment Controls (pinned at bottom) */}
+            <div className="shrink-0 space-y-3 pt-3 border-t border-slate-200">
               
 
               {/* Bill Breakdown */}
