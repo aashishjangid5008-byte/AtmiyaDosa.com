@@ -1,3 +1,4 @@
+import os
 import hmac
 import hashlib
 import json
@@ -6,13 +7,21 @@ from starlette.testclient import TestClient
 
 from app.main import app
 from app.config import settings
-from app.database import CANONICAL_ORDERS
+from app.database import CANONICAL_ORDERS, ORDERS_FILE
 
 client = TestClient(app)
 
 @pytest.fixture(autouse=True, scope="module")
 def clean_orders_state():
     CANONICAL_ORDERS.clear()
+    if os.path.exists(ORDERS_FILE):
+        with open(ORDERS_FILE, "w", encoding="utf-8") as f:
+            f.write("[]")
+    yield
+    CANONICAL_ORDERS.clear()
+    if os.path.exists(ORDERS_FILE):
+        with open(ORDERS_FILE, "w", encoding="utf-8") as f:
+            f.write("[]")
 
 def test_health_check():
     """Verify health and 19/19 security checklist posture."""

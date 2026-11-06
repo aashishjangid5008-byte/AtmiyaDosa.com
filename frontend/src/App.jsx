@@ -548,7 +548,15 @@ export default function App() {
   const [activity, setActivity] = useState(() => getLocalStore('activity', INITIAL_ACTIVITY));
   const [employees, setEmployees] = useState(() => getLocalStore('employees', INITIAL_EMPLOYEES));
   const [coupons, setCoupons] = useState(() => getLocalStore('coupons', INITIAL_COUPONS));
-  const [serviceCalls, setServiceCalls] = useState(() => getLocalStore('service_calls', INITIAL_SERVICE_CALLS));
+  const [serviceCalls, setServiceCalls] = useState(() => {
+    const raw = getLocalStore('service_calls', INITIAL_SERVICE_CALLS);
+    if (!Array.isArray(raw)) return INITIAL_SERVICE_CALLS;
+    return raw.filter(c => {
+      const oid = String(c?.orderId || c?.orderNumber || '');
+      const cust = String(c?.customerName || '');
+      return !oid.includes('ORD9436') && !oid.includes('TEST') && !oid.includes('ORD7611') && cust !== 'Test Guest';
+    });
+  });
   const [customers, setCustomers] = useState(() => getLocalStore('customers', INITIAL_CUSTOMERS));
   const [seenOrderIds, setSeenOrderIds] = useState(() => {
     try {
@@ -605,6 +613,80 @@ export default function App() {
       return () => clearTimeout(timer);
     }
   }, [activeToast]);
+
+  // Continuously sanitize service calls: purge stale food_ready calls for tables that are available or orders that are settled/completed
+  useEffect(() => {
+    setServiceCalls(prev => {
+      if (!Array.isArray(prev) || prev.length === 0) return prev;
+      let hasChanges = false;
+      const sanitized = prev.filter(c => {
+        // 1. Purge test/demo calls
+        const oid = String(c?.orderId || c?.orderNumber || '');
+        const cust = String(c?.customerName || '');
+        if (oid.includes('ORD9436') || oid.includes('TEST') || oid.includes('ORD7611') || cust === 'Test Guest') {
+          hasChanges = true;
+          return false;
+        }
+
+        // 2. If it's a food_ready call:
+        if (c.type === 'food_ready') {
+          const tDigits = String(c.tableNumber || '').replace(/[^0-9]/g, '');
+          const tCode = tDigits ? String(parseInt(tDigits, 10)) : String(c.tableNumber || '').trim().toLowerCase();
+          
+          // Check table status
+          const tbl = tables.find(t => {
+            const numDigits = String(t.number || '').replace(/[^0-9]/g, '');
+            return (numDigits ? String(parseInt(numDigits, 10)) : String(t.number || '').trim().toLowerCase()) === tCode;
+          });
+
+          // If table is available (free / clean / ready to seat), purge ready food call!
+          if (tbl && tbl.status === 'available') {
+            hasChanges = true;
+            return false;
+          }
+
+          // Check if there is any active, non-completed order for this table
+          const activeOrdForTbl = orders.find(o => {
+            const oDigits = String(o.table_number || '').replace(/[^0-9]/g, '');
+            const oCode = oDigits ? String(parseInt(oDigits, 10)) : String(o.table_number || '').trim().toLowerCase();
+            if (oCode !== tCode) return false;
+            const st = String(o.status || '').toLowerCase().trim();
+            const paySt = String(o.payment_status || '').toLowerCase().trim();
+            if (st === 'completed' || st === 'cancelled' || st === 'settled') return false;
+            if (st === 'served' && (paySt === 'paid' || paySt === 'void')) return false;
+            return true;
+          });
+
+          if (!activeOrdForTbl) {
+            hasChanges = true;
+            return false;
+          }
+
+          // If orderId matches a completed or paid order
+          const ord = orders.find(o => o.id === c.orderId || o.order_number === c.orderId);
+          if (ord) {
+            const st = String(ord.status || '').toLowerCase().trim();
+            const paySt = String(ord.payment_status || '').toLowerCase().trim();
+            if (st === 'completed' || st === 'cancelled' || st === 'settled' || (st === 'served' && (paySt === 'paid' || paySt === 'void'))) {
+              hasChanges = true;
+              return false;
+            }
+            if (c.itemIndex !== undefined && ord.items?.[c.itemIndex]?.is_served) {
+              hasChanges = true;
+              return false;
+            }
+          }
+        }
+        return true;
+      });
+
+      if (hasChanges) {
+        setLocalStore('service_calls', sanitized);
+        return sanitized;
+      }
+      return prev;
+    });
+  }, [tables, orders]);
 
   // On mount check if URL tampering occurred before initial render
   useEffect(() => {
@@ -3798,7 +3880,9 @@ export default function App() {
     };
 
     setServiceCalls(prev => {
-      const filtered = (prev || []).filter(c => !(normalizeTbl(c.tableNumber) === normalizeTbl(resolvedTableNum) && (c.type === 'table_clean' || c.type === 'cleaning')));
+      const targetTblCode = normalizeTbl(resolvedTableNum);
+      // Purge ALL prior service calls (food_ready, waiter calls, bill requests, etc.) for this settled table
+      const filtered = (prev || []).filter(c => normalizeTbl(c.tableNumber) !== targetTblCode);
       const updated = [cleanCallOnSettle, ...filtered].slice(0, 30);
       setLocalStore('service_calls', updated);
       return updated;
@@ -3919,7 +4003,8 @@ export default function App() {
     };
 
     setServiceCalls(prev => {
-      const filtered = (prev || []).filter(c => !(normalizeTbl(c.tableNumber) === targetTblCode && (c.type === 'table_clean' || c.type === 'cleaning')));
+      // Purge ALL prior service calls (food_ready, waiter calls, bill requests, etc.) for this vacated table
+      const filtered = (prev || []).filter(c => normalizeTbl(c.tableNumber) !== targetTblCode);
       const updated = [cleanCall, ...filtered].slice(0, 30);
       setLocalStore('service_calls', updated);
       return updated;
@@ -4086,10 +4171,13 @@ export default function App() {
   };
 
   const handleDismissServiceCall = async (callId, staffName = null, staffId = null) => {
-    const targetCall = serviceCalls.find(s => s.id === callId);
-    const updated = serviceCalls.filter(s => s.id !== callId);
-    setServiceCalls(updated);
-    setLocalStore('service_calls', updated);
+    let targetCall = null;
+    setServiceCalls(prev => {
+      targetCall = (prev || []).find(s => s.id === callId);
+      const updated = (prev || []).filter(s => s.id !== callId);
+      setLocalStore('service_calls', updated);
+      return updated;
+    });
 
     // Dismiss active toast if it matches this call
     if (activeToast && (activeToast.callId === callId || activeToast.id === callId)) {
@@ -4137,6 +4225,38 @@ export default function App() {
       });
     }
     playSound('success');
+  };
+
+  const handleDismissTableServiceCalls = async (tableNum, callType = 'food_ready', staffName = null, staffId = null) => {
+    const normalizeTbl = (val) => {
+      const digits = String(val || '').replace(/[^0-9]/g, '');
+      return digits ? String(parseInt(digits, 10)) : String(val || '').trim().toLowerCase();
+    };
+    const tCode = normalizeTbl(tableNum);
+    let dismissedCalls = [];
+    setServiceCalls(prev => {
+      dismissedCalls = (prev || []).filter(c => normalizeTbl(c.tableNumber) === tCode && (!callType || c.type === callType));
+      const updated = (prev || []).filter(c => !(normalizeTbl(c.tableNumber) === tCode && (!callType || c.type === callType)));
+      setLocalStore('service_calls', updated);
+      return updated;
+    });
+
+    if (activeToast && normalizeTbl(activeToast.tableNumber) === tCode) {
+      setActiveToast(null);
+    }
+
+    try {
+      const channel = supabase.channel('restaurant_alerts');
+      for (const dc of dismissedCalls) {
+        channel.send({
+          type: 'broadcast',
+          event: 'dismiss_service_call',
+          payload: { callId: dc.id }
+        }).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('Batch dismiss service broadcast error:', e);
+    }
   };
 
   const handleSaveSettings = (newSettings) => {
@@ -4898,6 +5018,7 @@ export default function App() {
                 categories={categories}
                 serviceCalls={serviceCalls}
                 onDismissServiceCall={handleDismissServiceCall}
+                onDismissTableServiceCalls={handleDismissTableServiceCalls}
                 onVacateTable={handleVacateTable}
                 onShiftTable={handleShiftTable}
                 onSettleTableBill={handleSettleTableBill}
@@ -4924,6 +5045,7 @@ export default function App() {
               categories={categories}
               serviceCalls={serviceCalls}
               onDismissServiceCall={handleDismissServiceCall}
+              onDismissTableServiceCalls={handleDismissTableServiceCalls}
               onVacateTable={handleVacateTable}
               onShiftTable={handleShiftTable}
               onSettleTableBill={handleSettleTableBill}

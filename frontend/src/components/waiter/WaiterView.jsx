@@ -65,6 +65,7 @@ export default function WaiterView({
   onToggleItemReady,
   onToggleItemServed,
   onMarkAllTableItemsServed,
+  onDismissTableServiceCalls = null,
   onUpdateOrderStatus,
   authUser = null,
   onLogout,
@@ -237,22 +238,56 @@ export default function WaiterView({
   // Combine ready items from orders with any food_ready serviceCalls (de-duplicated)
   const allReadyDishes = [...readyDishesQueue];
   (serviceCalls || []).filter(c => c.type === 'food_ready').forEach(call => {
-    // If this dish item has already been delivered/served, skip adding to waiter ready queue
-    const matchingOrder = orders.find(o => o.id === call.orderId || o.order_number === call.orderId);
-    if (matchingOrder && call.itemIndex !== undefined && matchingOrder.items?.[call.itemIndex]?.is_served) {
+    // 1. Skip demo/test calls
+    const callOid = String(call?.orderId || call?.orderNumber || '');
+    const callCust = String(call?.customerName || '');
+    if (callCust === 'Test Guest' || callOid.includes('TEST') || callOid.includes('ORD7611') || callOid.includes('ORD9436')) {
       return;
     }
+
+    // 2. If table is available/vacant or has no active dining session, skip orphaned calls!
+    const callTbl = normalizeTbl(call.tableNumber);
+    const tableObj = (tables || []).find(t => normalizeTbl(t.number) === callTbl);
+    const activeOrdersForTable = getTableActiveOrders(call.tableNumber);
+    if ((tableObj && tableObj.status === 'available') || activeOrdersForTable.length === 0) {
+      return; // Skip stale ready calls for unoccupied/available tables
+    }
+
+    // 3. If matching order exists and is finished or item is already served, skip
+    const matchingOrder = orders.find(o => o.id === call.orderId || o.order_number === call.orderId);
+    if (matchingOrder) {
+      const ordSt = String(matchingOrder.status || '').toLowerCase().trim();
+      const ordPaySt = String(matchingOrder.payment_status || '').toLowerCase().trim();
+      if (ordSt === 'completed' || ordSt === 'cancelled' || ordSt === 'settled' || (ordSt === 'served' && (ordPaySt === 'paid' || ordPaySt === 'void'))) {
+        return;
+      }
+      if (call.itemIndex !== undefined && matchingOrder.items?.[call.itemIndex]?.is_served) {
+        return;
+      }
+    }
+
     const exists = allReadyDishes.some(d => d.orderId === call.orderId && (call.itemIndex === undefined || d.itemIndex === call.itemIndex));
     if (!exists) {
+      // Clean dishName and quantity (avoid "1x 2x ...")
+      let cleanName = String(call.dishName || call.itemsSummary || call.label || 'Ready Dish').replace(/^Deliver:\s*/i, '').trim();
+      let parsedQty = Number(call.qty) || 1;
+      const matchLeadingQty = cleanName.match(/^(\d+)x\s*(.+)$/i);
+      if (matchLeadingQty) {
+        parsedQty = parseInt(matchLeadingQty[1], 10);
+        cleanName = matchLeadingQty[2].trim();
+      }
+
       allReadyDishes.push({
+        id: call.id,
+        callId: call.id,
         orderId: call.orderId || `call_${call.id}`,
         orderNumber: call.orderNumber || call.orderId || call.id,
         tableNumber: call.tableNumber,
         customerName: call.customerName || 'Guest',
         itemIndex: call.itemIndex !== undefined ? call.itemIndex : 0,
-        dishName: call.itemsSummary || call.label || 'Ready Dish',
-        gujaratiName: call.gujaratiName || call.itemsSummary || call.label || 'Ready Dish',
-        qty: 1,
+        dishName: cleanName,
+        gujaratiName: call.gujaratiName || cleanName,
+        qty: parsedQty,
         station: 'Kitchen Pass',
         customizations: null,
         readyAt: call.timestamp || Date.now()
@@ -287,13 +322,18 @@ export default function WaiterView({
       onMarkAllTableItemsServed(dish.tableNumber, activeWaiterName, activeWaiterId);
     }
 
-    // Dismiss ONLY the service call corresponding to this specific delivered dish
+    // Dismiss matching service call(s)
+    if (dish.callId && onDismissServiceCall) {
+      onDismissServiceCall(dish.callId, activeWaiterName, activeWaiterId);
+    }
     (serviceCalls || [])
       .filter(c => c.type === 'food_ready' && (
-        c.orderId === dish.orderId || normalizeTbl(c.tableNumber) === normalizeTbl(dish.tableNumber)
+        c.id === dish.callId ||
+        c.orderId === dish.orderId || 
+        normalizeTbl(c.tableNumber) === normalizeTbl(dish.tableNumber)
       ) && (
         c.itemIndex === dish.itemIndex || 
-        c.itemsSummary?.includes(dish.dishName) ||
+        c.itemsSummary?.toLowerCase().includes(String(dish.dishName || '').toLowerCase()) ||
         dish.itemIndex === undefined
       ))
       .forEach(c => {
@@ -306,11 +346,15 @@ export default function WaiterView({
     if (onMarkAllTableItemsServed) {
       onMarkAllTableItemsServed(tableNum, activeWaiterName, activeWaiterId);
     }
-    (serviceCalls || [])
-      .filter(c => c.type === 'food_ready' && normalizeTbl(c.tableNumber) === normalizeTbl(tableNum))
-      .forEach(c => {
-        if (onDismissServiceCall) onDismissServiceCall(c.id, activeWaiterName, activeWaiterId);
-      });
+    if (onDismissTableServiceCalls) {
+      onDismissTableServiceCalls(tableNum, 'food_ready', activeWaiterName, activeWaiterId);
+    } else {
+      (serviceCalls || [])
+        .filter(c => c.type === 'food_ready' && normalizeTbl(c.tableNumber) === normalizeTbl(tableNum))
+        .forEach(c => {
+          if (onDismissServiceCall) onDismissServiceCall(c.id, activeWaiterName, activeWaiterId);
+        });
+    }
     if (audioEnabled) playSound('success');
   };
 
@@ -1283,8 +1327,8 @@ export default function WaiterView({
                 (c.type || '').toLowerCase().includes('clean') || 
                 (c.label || '').toLowerCase().includes('clean')
               );
-              const tableReadyDishes = allReadyDishes.filter(d => normalizeTbl(d.tableNumber) === normalizeTbl(table.number));
-              const hasReadyFood = activeTableOrders.some(o => (o.status || '').toLowerCase() === 'ready') || tableReadyDishes.length > 0;
+              const tableReadyDishes = isOccupied ? allReadyDishes.filter(d => normalizeTbl(d.tableNumber) === normalizeTbl(table.number)) : [];
+              const hasReadyFood = isOccupied && (activeTableOrders.some(o => (o.status || '').toLowerCase() === 'ready') || tableReadyDishes.length > 0);
               
               // Aggregate items across orders for this table
               const allDishes = [];
@@ -1500,7 +1544,7 @@ export default function WaiterView({
                     </div>
 
                     {/* Direct Ready Dishes List with Specific Dish Names on Table Card */}
-                    {(tableReadyDishes.length > 0 || readyDishes.length > 0) && (
+                    {isOccupied && (tableReadyDishes.length > 0 || readyDishes.length > 0) && (
                       <div className="p-2.5 rounded-2xl bg-blue-50/95 border-2 border-blue-400 text-blue-950 space-y-2 shadow-xs">
                         <div className="flex items-center justify-between border-b border-blue-200/80 pb-1.5">
                           <div className="flex items-center space-x-1.5 text-xs font-black text-blue-900">
@@ -1523,7 +1567,7 @@ export default function WaiterView({
                             >
                               <div className="min-w-0 flex-1">
                                 <span className="font-heading font-black text-xs text-slate-900 block truncate">
-                                  🟢 {rd.qty || rd.quantity || 1}x {rd.name || rd.dishName || rd.itemsSummary || 'Dish'}
+                                  🟢 {rd.qty || rd.quantity || 1}x {String(rd.name || rd.dishName || rd.itemsSummary || 'Dish').replace(/^(\d+x\s*)+/i, '').replace(/^Deliver:\s*/i, '')}
                                 </span>
                                 {rd.gujaratiName && rd.gujaratiName !== (rd.name || rd.dishName) && (
                                   <span className="text-[10px] text-slate-500 font-medium block truncate">
