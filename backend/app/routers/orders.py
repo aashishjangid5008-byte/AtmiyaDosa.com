@@ -22,6 +22,7 @@ from app.database import (
     save_orders
 )
 from app.security import get_current_user, get_current_user_optional
+from app.routers.qr import generate_table_security_key
 
 router = APIRouter(prefix="/orders", tags=["Orders & KDS Kitchen Dispatch"])
 
@@ -54,6 +55,15 @@ async def place_guest_order(request: Request, body: GuestOrderCreate):
     # 3. Sanitize inputs
     clean_table = html.escape(body.table_number.strip().upper())
     clean_customer = html.escape((body.customer_name or "Walk-in Guest").strip())
+
+    # 3a. Cryptographic Anti-Tamper Security Key Verification (if provided)
+    if body.table_security_key:
+        expected_sec = generate_table_security_key(clean_table)
+        if body.table_security_key.strip().lower() != expected_sec.lower():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Cryptographic QR token mismatch for Table '{clean_table}'. Tampered request rejected."
+            )
 
     # 3b. Anti-Duplicate / Table QR Lock Check: Prevent 2nd order while an order is active in the kitchen queue
     def _digits_of(val: str) -> str:

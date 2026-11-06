@@ -16,6 +16,7 @@ class GuestOrderCreate(BaseModel):
     payment_mode: Optional[str] = Field(default="Cash", description="Cash | UPI | Card")
     is_addon: Optional[bool] = Field(default=False, description="Flag indicating if this is an add-on to an existing bill")
     parent_order_id: Optional[str] = Field(default=None, description="Existing Order ID to merge items into")
+    table_security_key: Optional[str] = Field(default=None, description="Cryptographic QR token (tsec)")
 
     # Anti-Bot Honeypot fields
     gotcha: Optional[str] = Field(default=None, alias="_gotcha", description="Honeypot field (must remain empty)")

@@ -294,7 +294,9 @@ export default function App() {
 
   const [viewMode, setViewMode] = useState(() => (initialIsCustomer ? 'customer' : 'admin')); // 'admin' or 'customer'
   const [qrSecurityError, setQrSecurityError] = useState(() => {
-    const isPrivileged = isAdminPreview || isDirectKds || isDirectWaiter || Boolean(getLocalStore('auth_user', null));
+    // SECURITY GUARD: Staff bypass is strictly for explicit Admin Preview mode (?admin_preview=1) or direct staff routes.
+    // Having auth_user in localStorage must NEVER bypass table signature checks for customer QR scans!
+    const isPrivileged = isAdminPreview || isDirectKds || isDirectWaiter;
     if (isPrivileged) return null;
 
     if (scannedTable) {
@@ -304,7 +306,7 @@ export default function App() {
         const existingBound = getBoundSessionTable();
         // If customer was already bound to another table, they'll be reverted to that table.
         // But if there is no prior bound table (fresh URL tampering or untrusted link), block access!
-        if (!existingBound) {
+        if (!existingBound || existingBound === scannedNorm) {
           return {
             attemptedTable: scannedTable,
             reason: 'invalid_security_key'
@@ -317,7 +319,7 @@ export default function App() {
 
   const [currentTable, setCurrentTable] = useState(() => {
     const existingBound = getBoundSessionTable();
-    const isPrivileged = isAdminPreview || isDirectKds || isDirectWaiter || Boolean(getLocalStore('auth_user', null));
+    const isPrivileged = isAdminPreview || isDirectKds || isDirectWaiter;
 
     if (scannedTable) {
       const scannedNorm = normalizeTableNumber(scannedTable);
@@ -347,8 +349,8 @@ export default function App() {
             return safeBound;
           }
 
-          // No existing bound session: DO NOT bind tampered table! Return scanned table for error display
-          return scannedTable;
+          // No existing bound session and invalid key: fallback safely to T01 while qrSecurityError blocks access
+          return 'T01';
         }
 
         // Condition B: Signature is valid, BUT customer is attempting to switch tables while having active dining orders on their current table:
@@ -634,7 +636,7 @@ export default function App() {
       const params = new URLSearchParams(window.location.search);
       const urlTable = params.get('table');
       const key = params.get('tsec') || params.get('key') || '';
-      const isPrivileged = params.get('admin_preview') === '1' || Boolean(authUserRef.current);
+      const isPrivileged = params.get('admin_preview') === '1' || isDirectKds || isDirectWaiter;
 
       if (!urlTable) {
         // If in customer session but URL query param was dropped by back button or navigation,
@@ -4006,6 +4008,17 @@ export default function App() {
       type: 'table',
       color: 'blue'
     });
+
+    // Dual persistence with backend
+    try {
+      const cleanFrom = String(fromTable).replace(/[^0-9]/g, '') || fromTable;
+      fetch(`/api/tables/${cleanFrom}/shift`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_table_number: toTable })
+      }).catch(() => {});
+    } catch (e) {}
+
     playSound('success');
   };
 
@@ -4132,7 +4145,10 @@ export default function App() {
   };
 
   // SECURITY GUARD: IF QR SECURITY VERIFICATION FAILED (Tampered or Missing Key)
-  if (qrSecurityError && !authUser && !isAdminPreview) {
+  if (qrSecurityError && !isAdminPreview) {
+    const boundTbl = getBoundSessionTable();
+    const safeBoundTbl = boundTbl ? (Number(boundTbl) < 10 ? `T0${boundTbl}` : `T${boundTbl}`) : null;
+
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 selection:bg-rose-500/30">
         {renderActiveToast()}
@@ -4176,6 +4192,22 @@ export default function App() {
 
           {/* Action Buttons */}
           <div className="w-full space-y-2.5 pt-2">
+            {safeBoundTbl && (
+              <button
+                type="button"
+                onClick={() => {
+                  const correctSec = generateTableSecurityKey(safeBoundTbl);
+                  setQrSecurityError(null);
+                  setCurrentTable(safeBoundTbl);
+                  window.location.href = `/?table=${safeBoundTbl}&tsec=${correctSec}`;
+                }}
+                className="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-black text-sm shadow-xl shadow-emerald-600/25 flex items-center justify-center space-x-2 transition cursor-pointer"
+              >
+                <Check className="w-4 h-4 stroke-[3]" />
+                <span>Return to My Seated Table ({safeBoundTbl})</span>
+              </button>
+            )}
+
             <button
               onClick={() => {
                 if (typeof window !== 'undefined') {

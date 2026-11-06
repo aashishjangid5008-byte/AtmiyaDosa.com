@@ -154,6 +154,22 @@ def test_guest_order_addon_merging_into_existing_bill():
     # Items now include all 3 items
     assert len(merged["items"]) == 3
 
+def test_table_security_token_anti_tamper():
+    """
+    Verify that an order with a tampered or invalid cryptographic QR token is rejected with 403 Forbidden.
+    """
+    tampered_payload = {
+        "table_number": "T05",
+        "customer_name": "Tamper Attempt",
+        "items": [
+            {"id": "item_atmiya_01", "qty": 1}
+        ],
+        "table_security_key": "bad_token_1234"
+    }
+    res = client.post("/api/orders/guest", json=tampered_payload)
+    assert res.status_code == 403
+    assert "mismatch" in res.json()["detail"].lower()
+
 def test_service_calls_flow():
     """Verify guest table assistance requests."""
     # Place service call for waiter
