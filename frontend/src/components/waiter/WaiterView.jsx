@@ -1283,7 +1283,15 @@ export default function WaiterView({
               // Aggregate items across orders for this table
               const allDishes = [];
               activeTableOrders.forEach(o => {
-                (o.items || []).forEach(it => allDishes.push(it));
+                (o.items || []).forEach((it, itIdx) => {
+                  allDishes.push({
+                    ...it,
+                    orderId: o.id || o.order_number,
+                    itemIndex: itIdx,
+                    tableNumber: table.number,
+                    dishName: it.name || it.item_name
+                  });
+                });
               });
               const totalItems = allDishes.length;
               const deliveredItems = allDishes.filter(it => it.is_served).length;
