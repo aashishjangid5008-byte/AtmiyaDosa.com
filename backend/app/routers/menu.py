@@ -4,7 +4,9 @@ import os
 import time
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File, Request
+import httpx
 
+from app.config import settings
 from app.schemas.menu import (
     MenuItemCreate,
     MenuItemUpdate,
@@ -15,6 +17,7 @@ from app.schemas.menu import (
 from app.database import (
     CANONICAL_MENU,
     CANONICAL_CATEGORIES,
+    RESTAURANT_ID,
     log_admin_action,
     save_custom_menu
 )
@@ -29,8 +32,8 @@ BACKEND_UPLOADS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".
 async def upload_dish_photo(request: Request):
     """
     Accepts either a standard multipart file upload or a JSON body with base64 Data URL.
-    Saves the image into frontend/public/uploads (served directly by Vite)
-    and backend/uploads (served by FastAPI) so the photo is visible everywhere.
+    Permanently uploads the image into Supabase Cloud Storage (public bucket 'menu-photos')
+    and saves to disk as a fallback, returning the permanent CDN URL.
     """
     os.makedirs(FRONTEND_UPLOADS_DIR, exist_ok=True)
     os.makedirs(BACKEND_UPLOADS_DIR, exist_ok=True)
@@ -38,6 +41,7 @@ async def upload_dish_photo(request: Request):
     timestamp = int(time.time() * 1000)
     content = None
     ext = ".jpg"
+    mime_type = "image/jpeg"
 
     content_type = request.headers.get("content-type", "")
     if "multipart/form-data" in content_type:
@@ -45,7 +49,15 @@ async def upload_dish_photo(request: Request):
         uploaded_file = form.get("file")
         if uploaded_file and hasattr(uploaded_file, "filename") and uploaded_file.filename:
             file_ext = os.path.splitext(uploaded_file.filename)[1].lower() or ".jpg"
-            ext = file_ext if file_ext in [".jpg", ".jpeg", ".png", ".webp"] else ".jpg"
+            if file_ext in [".png"]:
+                ext = ".png"
+                mime_type = "image/png"
+            elif file_ext in [".webp"]:
+                ext = ".webp"
+                mime_type = "image/webp"
+            else:
+                ext = ".jpg"
+                mime_type = "image/jpeg"
             content = await uploaded_file.read()
     else:
         try:
@@ -56,8 +68,13 @@ async def upload_dish_photo(request: Request):
                     header, base64_str = image_data.split(",", 1)
                     if "png" in header:
                         ext = ".png"
+                        mime_type = "image/png"
                     elif "webp" in header:
                         ext = ".webp"
+                        mime_type = "image/webp"
+                    else:
+                        ext = ".jpg"
+                        mime_type = "image/jpeg"
                 else:
                     base64_str = image_data
                 content = base64.b64decode(base64_str)
@@ -68,22 +85,46 @@ async def upload_dish_photo(request: Request):
         raise HTTPException(status_code=400, detail="No file or image data provided")
 
     filename = f"dish_{timestamp}{ext}"
-    frontend_path = os.path.join(FRONTEND_UPLOADS_DIR, filename)
-    with open(frontend_path, "wb") as f:
-        f.write(content)
 
-    backend_path = os.path.join(BACKEND_UPLOADS_DIR, filename)
-    with open(backend_path, "wb") as f:
-        f.write(content)
+    # 1. Permanent Upload to Supabase Cloud Storage ('menu-photos' bucket)
+    public_url = None
+    if settings.SUPABASE_SERVICE_ROLE_KEY and settings.SUPABASE_URL:
+        try:
+            storage_url = f"{settings.SUPABASE_URL}/storage/v1/object/menu-photos/dishes/{filename}"
+            storage_headers = {
+                "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
+                "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
+                "Content-Type": mime_type,
+                "x-upsert": "true"
+            }
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                up_res = await client.post(storage_url, headers=storage_headers, content=content)
+                if up_res.status_code in [200, 201]:
+                    public_url = f"{settings.SUPABASE_URL}/storage/v1/object/public/menu-photos/dishes/{filename}"
+                    print(f"[SUPABASE STORAGE] Successfully uploaded dish photo: {public_url}")
+                else:
+                    print(f"[SUPABASE STORAGE] Upload notice ({up_res.status_code}): {up_res.text}")
+        except Exception as sup_err:
+            print(f"[SUPABASE STORAGE] Upload exception: {sup_err}")
 
-    photo_url = f"/uploads/{filename}"
+    # 2. Local disk fallback
+    try:
+        frontend_path = os.path.join(FRONTEND_UPLOADS_DIR, filename)
+        with open(frontend_path, "wb") as f:
+            f.write(content)
+
+        backend_path = os.path.join(BACKEND_UPLOADS_DIR, filename)
+        with open(backend_path, "wb") as f:
+            f.write(content)
+    except Exception:
+        pass
+
+    final_url = public_url if public_url else f"/uploads/{filename}"
     return {
         "success": True,
-        "url": photo_url,
+        "url": final_url,
         "filename": filename
     }
-
-
 
 @router.get("", summary="Get Canonical Menu Catalog (Public / Guest / POS)")
 async def get_menu(category: Optional[str] = None):
@@ -137,6 +178,57 @@ async def create_menu_item(
         "tags": ["New Item"]
     }
 
+    # PERMANENT CLOUD PERSISTENCE: Insert into Supabase Cloud PostgreSQL DB
+    if settings.SUPABASE_SERVICE_ROLE_KEY and settings.SUPABASE_URL:
+        try:
+            api_key = settings.SUPABASE_SERVICE_ROLE_KEY
+            headers = {
+                "apikey": api_key,
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=representation"
+            }
+            base_url = f"{settings.SUPABASE_URL}/rest/v1"
+
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                # 1. Resolve matching category_id
+                category_id = None
+                cat_resp = await client.get(
+                    f"{base_url}/menu_categories?name=eq.{body.category}&select=id",
+                    headers=headers
+                )
+                if cat_resp.status_code == 200 and cat_resp.json():
+                    category_id = cat_resp.json()[0]["id"]
+                else:
+                    all_cats = await client.get(f"{base_url}/menu_categories?select=id&limit=1", headers=headers)
+                    if all_cats.status_code == 200 and all_cats.json():
+                        category_id = all_cats.json()[0]["id"]
+
+                # 2. Insert into menu_items table
+                db_payload = {
+                    "restaurant_id": RESTAURANT_ID,
+                    "category_id": category_id,
+                    "name": new_item["name"],
+                    "gujarati_name": new_item.get("gujarati_name"),
+                    "description": new_item.get("description", ""),
+                    "price": float(new_item["price"]),
+                    "image_url": new_item.get("image_url"),
+                    "is_available": new_item.get("is_available", True),
+                    "is_jain_available": new_item.get("is_jain_available", True),
+                    "prep_time_mins": new_item.get("prep_time_mins", 10),
+                    "tags": new_item.get("tags", ["New Item"])
+                }
+                insert_resp = await client.post(f"{base_url}/menu_items", headers=headers, json=db_payload)
+                if insert_resp.status_code in [200, 201]:
+                    saved_rows = insert_resp.json()
+                    if saved_rows and isinstance(saved_rows, list) and len(saved_rows) > 0:
+                        new_item["id"] = saved_rows[0].get("id", item_id)
+                        print(f"[SUPABASE] Permanently inserted dish '{new_item['name']}' with UUID {new_item['id']}")
+                else:
+                    print(f"[SUPABASE] Menu item insertion notice ({insert_resp.status_code}): {insert_resp.text}")
+        except Exception as sup_err:
+            print(f"[SUPABASE] Menu item insertion error: {sup_err}")
+
     CANONICAL_MENU[item_id] = new_item
     save_custom_menu()
 
@@ -167,7 +259,6 @@ async def update_menu_item(
                 break
 
     if not item:
-        # If item doesn't exist yet, insert it into server repository
         item = {
             "id": item_id,
             "name": body.name.strip() if body.name else "Dish",
@@ -216,6 +307,51 @@ async def update_menu_item(
         if body.discount_percent is not None:
             item["discount_percent"] = float(body.discount_percent)
 
+    # PERMANENT CLOUD PERSISTENCE: Update in Supabase Cloud PostgreSQL DB
+    if settings.SUPABASE_SERVICE_ROLE_KEY and settings.SUPABASE_URL:
+        try:
+            api_key = settings.SUPABASE_SERVICE_ROLE_KEY
+            headers = {
+                "apikey": api_key,
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal"
+            }
+            base_url = f"{settings.SUPABASE_URL}/rest/v1"
+
+            patch_data = {}
+            if body.name is not None:
+                patch_data["name"] = body.name.strip()
+            if body.gujarati_name is not None:
+                patch_data["gujarati_name"] = body.gujarati_name.strip()
+            if body.price is not None:
+                patch_data["price"] = float(body.price)
+            if body.description is not None:
+                patch_data["description"] = body.description.strip()
+            if body.image_url is not None:
+                patch_data["image_url"] = body.image_url
+            if body.is_available is not None:
+                patch_data["is_available"] = body.is_available
+            if body.is_jain_available is not None:
+                patch_data["is_jain_available"] = body.is_jain_available
+
+            if patch_data:
+                async with httpx.AsyncClient(timeout=8.0) as client:
+                    target_name = item.get("name")
+                    upd_resp = await client.patch(
+                        f"{base_url}/menu_items?name=eq.{target_name}",
+                        headers=headers,
+                        json=patch_data
+                    )
+                    if upd_resp.status_code not in [200, 204]:
+                        await client.patch(
+                            f"{base_url}/menu_items?id=eq.{item_id}",
+                            headers=headers,
+                            json=patch_data
+                        )
+        except Exception as sup_err:
+            print(f"[SUPABASE] Menu item update error: {sup_err}")
+
     save_custom_menu()
 
     emp_name = current_user.get("name", "Staff") if current_user else "Staff"
@@ -228,36 +364,44 @@ async def update_menu_item(
     )
 
     return MenuItemResponse(**item)
-    
 
 @router.delete("/{item_id}", summary="Delete Menu Item")
 async def delete_menu_item(
     item_id: str,
     current_user: Optional[dict] = Depends(get_current_user_optional)
 ):
+    removed = None
     if item_id in CANONICAL_MENU:
         removed = CANONICAL_MENU.pop(item_id)
-        save_custom_menu()
-        emp_name = current_user.get("name", "Staff") if current_user else "Staff"
-        emp_role = current_user.get("role", "Staff") if current_user else "Staff"
-        await log_admin_action(
-            employee_name=emp_name,
-            employee_role=emp_role,
-            action_type="MENU_ITEM_DELETED",
-            details=f"Deleted menu item {item_id} ({removed.get('name', 'Dish')})"
-        )
-        return {"success": True, "message": f"Menu item {item_id} deleted successfully"}
-    
-    # Try finding by name if item_id was not the key
-    found_key = None
-    for k, v in CANONICAL_MENU.items():
-        if v.get("name", "").strip().lower() == item_id.strip().lower():
-            found_key = k
-            break
-    
-    if found_key:
-        removed = CANONICAL_MENU.pop(found_key)
-        save_custom_menu()
-        return {"success": True, "message": f"Menu item {found_key} deleted successfully"}
-        
-    return {"success": True, "message": f"Menu item {item_id} removed"}
+    else:
+        for k, v in CANONICAL_MENU.items():
+            if v.get("name", "").strip().lower() == item_id.strip().lower():
+                removed = CANONICAL_MENU.pop(k)
+                break
+
+    # PERMANENT CLOUD PERSISTENCE: Delete from Supabase Cloud PostgreSQL DB
+    if settings.SUPABASE_SERVICE_ROLE_KEY and settings.SUPABASE_URL:
+        try:
+            api_key = settings.SUPABASE_SERVICE_ROLE_KEY
+            headers = {
+                "apikey": api_key,
+                "Authorization": f"Bearer {api_key}"
+            }
+            base_url = f"{settings.SUPABASE_URL}/rest/v1"
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                target_dish_name = removed.get("name") if removed else item_id
+                await client.delete(f"{base_url}/menu_items?name=eq.{target_dish_name}", headers=headers)
+                await client.delete(f"{base_url}/menu_items?id=eq.{item_id}", headers=headers)
+        except Exception as sup_err:
+            print(f"[SUPABASE] Menu item delete error: {sup_err}")
+
+    save_custom_menu()
+    emp_name = current_user.get("name", "Staff") if current_user else "Staff"
+    emp_role = current_user.get("role", "Staff") if current_user else "Staff"
+    await log_admin_action(
+        employee_name=emp_name,
+        employee_role=emp_role,
+        action_type="MENU_ITEM_DELETED",
+        details=f"Deleted menu item {item_id} ({removed.get('name', 'Dish') if removed else item_id})"
+    )
+    return {"success": True, "message": f"Menu item {item_id} deleted successfully"}

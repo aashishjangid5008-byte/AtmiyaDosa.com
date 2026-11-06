@@ -90,6 +90,7 @@ async def place_guest_order(request: Request, body: GuestOrderCreate):
                 detail=f"Dish identifier '{item.id}' is invalid or discontinued."
             )
         
+        qty = max(1, int(item.qty)) if hasattr(item, 'qty') and item.qty else 1
         unit_price = float(canonical.get("final_price") if canonical.get("has_discount") and canonical.get("final_price") is not None else canonical["price"])
         line_total = unit_price * qty
         verified_subtotal += line_total

@@ -3307,22 +3307,7 @@ export default function App() {
       });
     } catch (e) {}
 
-    // Asynchronous background sync to Supabase Cloud & Backend API
-    try {
-      supabase.from('menu_items').insert([{
-        name: itemObj.name,
-        gujarati_name: itemObj.gujarati_name || null,
-        price: itemObj.price,
-        description: itemObj.description || '',
-        image_url: photoUrl,
-        is_available: true
-      }]).then(({ error }) => {
-        if (error) console.warn('[SUPABASE] Menu item insert notice:', error.message);
-      });
-    } catch (err) {
-      console.warn('[SUPABASE] Sync notice:', err);
-    }
-
+    // Asynchronous cloud persistence to Supabase PostgreSQL & Permanent Storage
     try {
       fetch(`${API_BASE_URL}/menu`, {
         method: 'POST',
@@ -3337,7 +3322,30 @@ export default function App() {
           image_url: photoUrl,
           is_available: true
         })
-      }).catch(() => {});
+      })
+      .then(res => res.ok ? res.json() : null)
+      .then(saved => {
+        if (saved?.id) {
+          setMenuItems(prev => {
+            const remapped = prev.map(m => m.id === itemObj.id ? { 
+              ...m, 
+              id: saved.id, 
+              image_url: saved.image_url || m.image_url, 
+              imageUrl: saved.image_url || m.imageUrl, 
+              image: saved.image_url || m.image, 
+              photo: saved.image_url || m.photo 
+            } : m);
+            setLocalStore('menu_items', remapped);
+            try {
+              localStorage.setItem('atmiya_menu_items', JSON.stringify(remapped));
+            } catch (e) {}
+            return remapped;
+          });
+        }
+      })
+      .catch(err => {
+        console.warn('[MENU SYNC] Server menu sync notice:', err);
+      });
     } catch (e) {}
 
     recordEmployeeActivity({
