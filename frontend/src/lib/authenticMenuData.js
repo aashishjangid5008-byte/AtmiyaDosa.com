@@ -147,25 +147,6 @@ export const AUTHENTIC_CATEGORIES = [
 
 export const AUTHENTIC_MENU_CARD_ITEMS = [
   {
-    "id": "ATM_WATER_01",
-    "name": "Packaged Mineral Water (1 Litre)",
-    "english_name": "Packaged Mineral Water (1 Litre Bottle)",
-    "gujarati_name": "પેકેજ્ડ મિનરલ વોટર (૧ લીટર બોટલ)",
-    "category": "Beverages & Water",
-    "price": 20.0,
-    "originalPrice": 20.0,
-    "finalPrice": 20.0,
-    "hasDiscount": false,
-    "discountPercent": 0,
-    "description": "Chilled sealed packaged mineral drinking water 1L bottle.",
-    "image_url": null,
-    "is_veg": true,
-    "is_available": true,
-    "prep_time_minutes": 1,
-    "is_beverage": true,
-    "is_water": true
-  },
-  {
     "id": "ATM_CHAAS_01",
     "name": "Amul Masala Buttermilk (Chaas)",
     "english_name": "Amul Masala Buttermilk (Chaas)",

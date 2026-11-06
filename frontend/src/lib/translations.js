@@ -125,7 +125,7 @@ export const TRANSLATIONS = {
     cart: "Your Order Cart",
     placeOrder: "Confirm & Place Order",
     callWaiter: "Call Waiter",
-    callWaiterDesc: "Assistance, extra cutlery, or recommendation.",
+    callWaiterDesc: "Water bottle, extra cutlery, or dining assistance.",
     requestWater: "Request Water",
     requestBill: "Request Bill",
     requestBillDesc: "Get final printed bill & settle at table or counter.",
@@ -178,7 +178,7 @@ export const TRANSLATIONS = {
 
     // Banners & Concierge
     tableSessionActive: "Table {table} Session Active • Order #{id}",
-    cookingMealNote: "Your meal is cooking. Need chilled Packaged Mineral Water, Chaas or extra dosas? You can order extras below anytime!",
+    cookingMealNote: "Your meal is being prepared with care. Need extra dosas, chaas or dishes? You can order extras below anytime!",
     orderWaterBtn: "💧 Order Water (₹20)",
     trackFood: "Track Food",
     tableConciergeTitle: "Table {table} Service & Concierge",
@@ -388,7 +388,7 @@ export const TRANSLATIONS = {
     cart: "आपकी ऑर्डर कार्ट",
     placeOrder: "ऑर्डर कन्फ़र्म करें",
     callWaiter: "वेटर को बुलाएं",
-    callWaiterDesc: "सहायता, अतिरिक्त चम्मच या सुझाव के लिए।",
+    callWaiterDesc: "पानी की बोतल, अतिरिक्त चम्मच या सहायता के लिए।",
     requestWater: "पानी का अनुरोध",
     requestBill: "बिल का अनुरोध",
     requestBillDesc: "अंतिम प्रिंटेड बिल प्राप्त करें और भुगतान करें।",
@@ -441,7 +441,7 @@ export const TRANSLATIONS = {
 
     // Banners & Concierge
     tableSessionActive: "टेबल {table} सत्र चालू है • ऑर्डर #{id}",
-    cookingMealNote: "आपका खाना पक रहा है। ठंडा मिनरल वाटर, छाछ या अतिरिक्त डोसा चाहिए? आप कभी भी ऑर्डर कर सकते हैं!",
+    cookingMealNote: "आपका भोजन तैयार किया जा रहा है। अतिरिक्त डोसा, छाछ या व्यंजन चाहिए? आप नीचे कभी भी ऑर्डर कर सकते हैं!",
     orderWaterBtn: "💧 पानी मंगाएं (₹20)",
     trackFood: "ऑर्डर ट्रैक करें",
     tableConciergeTitle: "टेबल {table} सेवा और सहायता",
@@ -651,7 +651,7 @@ export const TRANSLATIONS = {
     cart: "તમારું ઓર્ડર કાર્ટ",
     placeOrder: "ઓર્ડર કન્ફર્મ કરો",
     callWaiter: "વેઈટરને બોલાવો",
-    callWaiterDesc: "મદદ, વધારાની ચમચી-વાટકી અથવા ભલામણ માટે.",
+    callWaiterDesc: "પાણીની બોટલ, વધારાની ચમચી-વાટકી અથવા મદદ માટે.",
     requestWater: "પાણી મંગાવો",
     requestBill: "બિલ મંગાવો",
     requestBillDesc: "છેલ્લું પ્રિન્ટેડ બિલ મેળવો અને ટેબલ કે કાઉન્ટર પર ચૂકવો.",
@@ -704,7 +704,7 @@ export const TRANSLATIONS = {
 
     // Banners & Concierge
     tableSessionActive: "ટેબલ {table} બેઠક ચાલુ છે • ઓર્ડર #{id}",
-    cookingMealNote: "તમારો ઓર્ડર બની રહ્યો છે. ઠંડુ મિનરલ વોટર, છાસ કે વધારાના ઢોસા જોઈએ છે? તમે ગમે ત્યારે ઓર્ડર કરી શકો છો!",
+    cookingMealNote: "તમારો ઓર્ડર તૈયાર થઈ રહ્યો છે. વધારાના ઢોસા, છાસ કે વાનગીઓ જોઈએ છે? તમે નીચેથી ગમે ત્યારે ઓર્ડર કરી શકો છો!",
     orderWaterBtn: "💧 પાણી મંગાવો (₹૨૦)",
     trackFood: "ઓર્ડર જુઓ",
     tableConciergeTitle: "ટેબલ {table} સેવા અને સહાય",
@@ -914,7 +914,7 @@ export const TRANSLATIONS = {
     cart: "Aapka Order Cart",
     placeOrder: "Order Confirm Karo",
     callWaiter: "Waiter ko Bulao",
-    callWaiterDesc: "Madad, extra spoon ya recommendation ke liye.",
+    callWaiterDesc: "Water bottle, extra spoon ya assistance ke liye.",
     requestWater: "Pani Mangwao",
     requestBill: "Bill Mangwao",
     requestBillDesc: "Final printed bill mangwao aur settle karo.",
@@ -967,7 +967,7 @@ export const TRANSLATIONS = {
 
     // Banners & Concierge
     tableSessionActive: "Table {table} Session Active • Order #{id}",
-    cookingMealNote: "Aapka khana ban raha hai. Chilled Mineral Water, Chaas ya extra dishes chahiye? Kabhi bhi order kar sakte ho!",
+    cookingMealNote: "Aapka meal prepare ho raha hai. Extra dosas, chaas ya dishes chahiye? Aap niche kabhi bhi order kar sakte ho!",
     orderWaterBtn: "💧 Pani Mangwao (₹20)",
     trackFood: "Food Track Karo",
     tableConciergeTitle: "Table {table} Service & Concierge",

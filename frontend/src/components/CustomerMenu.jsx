@@ -251,10 +251,6 @@ export default function CustomerMenu({
   const [paidSuccessOrder, setPaidSuccessOrder] = useState(null);
   const [serviceNotice, setServiceNotice] = useState('');
 
-  // 1-Tap Mineral Water Quick-Order State
-  const [showWaterModal, setShowWaterModal] = useState(false);
-  const [waterQty, setWaterQty] = useState(1);
-  const [waterPaymentMode, setWaterPaymentMode] = useState('Cash_Counter'); // Directly added to table bill settled at exit
 
   // Table Concierge Modal State (Water, Waiter, Bill, Clean)
   const [showConciergeModal, setShowConciergeModal] = useState(false);
@@ -460,10 +456,6 @@ export default function CustomerMenu({
         setShowUpiPaymentModal(false);
         return;
       }
-      if (showWaterModal) {
-        setShowWaterModal(false);
-        return;
-      }
       if (showConciergeModal) {
         setShowConciergeModal(false);
         return;
@@ -496,7 +488,6 @@ export default function CustomerMenu({
     return () => window.removeEventListener('popstate', handlePopState);
   }, [
     showUpiPaymentModal, 
-    showWaterModal, 
     showConciergeModal, 
     customizingItem, 
     showCartDrawer, 
@@ -504,17 +495,31 @@ export default function CustomerMenu({
     menuStage
   ]);
 
-  // Dynamically compute available sub-categories scoped to currently selected cuisine
+  // Helper: Packaged mineral water is strictly managed via waiter add-ons (disappears from customer menu)
+  const isWaterItem = (item) => {
+    if (!item) return false;
+    if (item.is_water || item.waiter_only || item.customer_hidden) return true;
+    if (item.id === 'ATM_WATER_01' || item.id === 'item_atmiya_23' || String(item.id || '').startsWith('ATM_WATER')) return true;
+    const n = String(item.name || '').toLowerCase();
+    const en = String(item.english_name || '').toLowerCase();
+    if (n.includes('mineral water') || en.includes('mineral water') || n.includes('packaged water') || en.includes('packaged water')) return true;
+    return false;
+  };
+
+  // Dynamically compute available sub-categories scoped to currently selected cuisine (excluding water)
   const availableCategories = React.useMemo(() => {
-    const pool = selectedCuisine === 'all' 
+    const pool = (selectedCuisine === 'all' 
       ? menuItems 
-      : menuItems.filter(m => getDishCuisine(m) === selectedCuisine);
+      : menuItems.filter(m => getDishCuisine(m) === selectedCuisine)
+    ).filter(m => !isWaterItem(m));
     const uniqueCats = Array.from(new Set(pool.map(m => m.category).filter(Boolean)));
     return ['All', ...uniqueCats];
   }, [menuItems, selectedCuisine]);
 
   // Filter items
   const filteredItems = menuItems.filter(item => {
+    // Water cannot be ordered directly by customer from the menu - waiter add-on exclusive
+    if (isWaterItem(item)) return false;
     // Check availability (must not be explicitly marked out of stock)
     if (item.is_available === false || item.isAvailable === false) return false;
     // Master Cuisine Filter (South Indian, Chinese, Gujarati, Beverages)
@@ -598,143 +603,6 @@ export default function CustomerMenu({
       setCart([...cart, { ...item, cartItemId: item.id, price: unitPrice, qty: 1 }]);
     }
     playSound('click');
-  };
-
-  // 1-Tap Quick Mineral Water Order Handler (Solves Round 2 Water Payment Dilemma)
-  const handleQuickWaterOrder = () => {
-    const trimmedName = (customerName || '').trim() || 'Guest Diner';
-    let cleanPhone = (customerPhone || '').replace(/[^0-9]/g, '').slice(-10);
-    if (!cleanPhone || cleanPhone.length !== 10) {
-      cleanPhone = '9825014820';
-    }
-
-    const isOnline = false;
-    const totalWaterAmt = waterQty * 20;
-    const waterItem = {
-      id: 'ATM_WATER_01',
-      name: 'Packaged Mineral Water (1 Litre Bottle)',
-      category: 'Beverages & Water',
-      price: 20,
-      finalPrice: 20,
-      qty: waterQty,
-      quantity: waterQty,
-      unit_price: 20,
-      total_price: totalWaterAmt,
-      kitchen_status: 'ready',
-      is_served: false,
-      is_addon: Boolean(activeTableOrder),
-      station: 'Beverages & Extras'
-    };
-
-    let waterOrderObj;
-    if (activeTableOrder) {
-      // Merge directly into active table order
-      const mergedItems = (activeTableOrder.items || []).map(i => ({ ...i }));
-      const existingIdx = mergedItems.findIndex(i => i.id === 'ATM_WATER_01' || (i.name || '').toLowerCase().includes('water'));
-      if (existingIdx >= 0) {
-        mergedItems[existingIdx] = {
-          ...mergedItems[existingIdx],
-          qty: (mergedItems[existingIdx].qty || 0) + waterQty,
-          kitchen_status: 'ready',
-          is_served: false,
-          is_addon: true
-        };
-      } else {
-        mergedItems.push({
-          ...waterItem,
-          is_addon: true,
-          round: (activeTableOrder.round || 1) + 1
-        });
-      }
-
-      const existingSubtotal = Number(activeTableOrder.subtotal || 0);
-      const combinedSubtotal = existingSubtotal + totalWaterAmt;
-      const existingDiscount = Number(activeTableOrder.discount || 0);
-      const combinedTaxable = Math.max(0, combinedSubtotal - existingDiscount);
-      const combinedTax = Math.round(combinedTaxable * 0.05);
-      const combinedTotal = combinedTaxable + combinedTax;
-      const combinedSummary = mergedItems.map(i => `${i.qty}x ${i.name}`).join(', ');
-
-      const newWaterId = `#ORD${Math.floor(1000 + Math.random() * 9000)}`;
-      waterOrderObj = {
-        id: newWaterId,
-        order_number: newWaterId.replace('#', ''),
-        table_number: currentTable,
-        customer_name: trimmedName || activeTableOrder.customer_name,
-        customer_phone: cleanPhone || activeTableOrder.customer_phone,
-        items: [waterItem],
-        order_items: [waterItem],
-        items_summary: `${waterQty}x Packaged Mineral Water (1L)`,
-        newly_added_items: [waterItem],
-        newly_added_summary: `${waterQty}x Packaged Mineral Water (1L)`,
-        subtotal: totalWaterAmt,
-        tax: 0,
-        discount: 0,
-        total: totalWaterAmt,
-        total_amount: totalWaterAmt,
-        status: 'Placed',
-        channel: 'Dine-In QR',
-        placed_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        last_addon_time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        payment_mode: 'Cash',
-        payment_status: 'Pending Cash',
-        payment_verified_online: false,
-        paid_collected_by: 'Cashier Desk',
-        special_note: `[Add-On 💧]: Deliver ${waterQty}x Chilled Mineral Water to Table ${currentTable} (Added to Table Bill)`,
-        is_addon: true,
-        round: (activeTableOrder.round || 1) + 1,
-        parent_order_id: activeTableOrder.id,
-        is_water_only: true
-      };
-    } else {
-      const newId = `#ORD${Math.floor(1000 + Math.random() * 9000)}`;
-      waterOrderObj = {
-        id: newId,
-        order_number: newId.replace('#', ''),
-        table_number: currentTable,
-        customer_name: trimmedName,
-        customer_phone: cleanPhone,
-        items: [waterItem],
-        order_items: [waterItem],
-        items_summary: `${waterQty}x Packaged Mineral Water (1L)`,
-        newly_added_items: [waterItem],
-        newly_added_summary: `${waterQty}x Packaged Mineral Water (1L)`,
-        subtotal: totalWaterAmt,
-        tax: 0,
-        discount: 0,
-        total: totalWaterAmt,
-        total_amount: totalWaterAmt,
-        status: 'Placed',
-        channel: 'Dine-In QR',
-        placed_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        payment_mode: 'Cash',
-        payment_status: 'Pending Cash',
-        payment_verified_online: false,
-        paid_collected_by: 'Cashier Desk',
-        special_note: `💧 DELIVER ${waterQty}x CHILLED BOTTLE TO TABLE ${currentTable} (ADDED TO TABLE BILL)`,
-        is_addon: false,
-        parent_order_id: null,
-        is_water_only: true
-      };
-    }
-
-    const targetOrderId = waterOrderObj.id;
-
-    onPlaceOrder(waterOrderObj);
-    playSound('success');
-    setShowWaterModal(false);
-    setPlacedOrderId(targetOrderId);
-    setPaidSuccessOrder(waterOrderObj);
-    setOrderSuccess(true);
-    setServiceNotice(activeTableOrder 
-      ? `💧 ${waterQty}x Mineral Water added to Order ${activeOrderDisplayId} for Table ${currentTable} bill! Staff notified.`
-      : `💧 ${waterQty}x Mineral Water ordered for Table ${currentTable} (Added to Table Bill)! Staff notified.`
-    );
-    setTimeout(() => setServiceNotice(''), 4500);
   };
 
   const handleRemoveFromCart = (cartItemId) => {
@@ -1300,13 +1168,13 @@ export default function CustomerMenu({
               <span className={`text-[9.5px] font-mono px-1.5 py-0.2 rounded-full font-bold ${
                 selectedCuisine === 'all' ? 'bg-white/20 text-white' : 'bg-white text-slate-500'
               }`}>
-                {menuItems.length}
+                {menuItems.filter(m => !isWaterItem(m)).length}
               </span>
             </button>
 
             {MASTER_CUISINES.map(cuisine => {
               const isSelected = selectedCuisine === cuisine.id;
-              const count = menuItems.filter(m => getDishCuisine(m) === cuisine.id).length;
+              const count = menuItems.filter(m => !isWaterItem(m) && getDishCuisine(m) === cuisine.id).length;
               return (
                 <button
                   key={cuisine.id}
@@ -1393,17 +1261,6 @@ export default function CustomerMenu({
             </div>
 
             <div className="flex items-center space-x-2 self-end sm:self-center shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setWaterQty(1);
-                  setShowWaterModal(true);
-                }}
-                className="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-black text-xs shadow-xs flex items-center space-x-1 transition active:scale-95 cursor-pointer"
-              >
-                <span>{t('orderWaterBtn')}</span>
-              </button>
-
               <button
                 type="button"
                 onClick={() => setShowOrderTracker(true)}
@@ -2498,30 +2355,19 @@ export default function CustomerMenu({
                 </div>
               </div>
 
-              {/* Quick Extra Water & More Food Add-on Bar */}
-              <div className="p-3 rounded-2xl bg-cyan-50 border border-cyan-200 text-cyan-950 text-[11px] flex items-center justify-between gap-2">
+              {/* Quick More Food Add-on Bar */}
+              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 text-[11px] flex items-center justify-between gap-2">
                 <div className="flex items-center space-x-1.5 min-w-0">
-                  <GlassWater className="w-4 h-4 text-cyan-600 shrink-0" />
-                  <span className="truncate">{t('needWaterWhileWaiting')}</span>
+                  <UtensilsCrossed className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span className="truncate">Need extra dosas, chaas or dishes while waiting?</span>
                 </div>
                 <div className="flex items-center space-x-1.5 shrink-0">
                   <button
                     type="button"
                     onClick={() => {
                       setShowOrderTracker(false);
-                      setWaterQty(1);
-                      setShowWaterModal(true);
                     }}
-                    className="px-2.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-[10px] transition cursor-pointer shadow-xs"
-                  >
-                    {t('orderWaterBtn')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowOrderTracker(false);
-                    }}
-                    className="px-2.5 py-1.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 font-bold text-[10px] transition cursor-pointer shadow-xs"
+                    className="px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-[11px] transition cursor-pointer shadow-xs"
                   >
                     + Add Food
                   </button>
@@ -2639,87 +2485,63 @@ export default function CustomerMenu({
             </div>
 
             {/* Service Action Tiles */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               
-              {/* 1. Packaged Mineral Water */}
-              <button
-                type="button"
-                onClick={() => {
-                  setShowConciergeModal(false);
-                  setWaterQty(1);
-                  setShowWaterModal(true);
-                }}
-                className="p-3.5 rounded-2xl bg-cyan-50/70 hover:bg-cyan-100/80 border border-cyan-200 text-left transition active:scale-98 flex items-start space-x-3 cursor-pointer group"
-              >
-                <div className="w-9 h-9 rounded-xl bg-cyan-500 text-white flex items-center justify-center shrink-0 shadow-xs text-lg group-hover:scale-105 transition">
-                  💧
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-cyan-950">{t('mineralWater')}</span>
-                    <span className="text-[10px] font-black text-cyan-700 font-mono">₹20</span>
-                  </div>
-                  <p className="text-[10px] text-cyan-800/80 mt-0.5 leading-snug">
-                    {t('waterModalSub')}
-                  </p>
-                </div>
-              </button>
-
-              {/* 2. Call Floor Waiter */}
+              {/* 1. Call Floor Waiter */}
               <button
                 type="button"
                 onClick={() => {
                   setShowConciergeModal(false);
                   handleServiceButton('WAITER', 'Floor Waiter');
                 }}
-                className="p-3.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/90 text-left transition active:scale-98 flex items-start space-x-3 cursor-pointer group"
+                className="p-3.5 rounded-2xl bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/90 text-left transition active:scale-98 flex items-start space-x-3 cursor-pointer group"
               >
                 <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs text-base group-hover:scale-105 transition">
                   <BellRing className="w-4 h-4 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className="text-xs font-black text-slate-900 block">{t('callWaiter')}</span>
-                  <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                  <span className="text-xs font-black text-amber-950 block">{t('callWaiter')}</span>
+                  <p className="text-[10px] text-amber-800/90 mt-0.5 leading-snug">
                     {t('callWaiterDesc')}
                   </p>
                 </div>
               </button>
 
-              {/* 3. Request Final Bill */}
+              {/* 2. Request Final Bill */}
               <button
                 type="button"
                 onClick={() => {
                   setShowConciergeModal(false);
                   handleServiceButton('BILL', 'Final Bill');
                 }}
-                className="p-3.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/90 text-left transition active:scale-98 flex items-start space-x-3 cursor-pointer group"
+                className="p-3.5 rounded-2xl bg-emerald-50/70 hover:bg-emerald-100/80 border border-emerald-200/90 text-left transition active:scale-98 flex items-start space-x-3 cursor-pointer group"
               >
                 <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs text-base group-hover:scale-105 transition">
                   <Receipt className="w-4 h-4 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className="text-xs font-black text-slate-900 block">{t('requestBill')}</span>
-                  <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                  <span className="text-xs font-black text-emerald-950 block">{t('requestBill')}</span>
+                  <p className="text-[10px] text-emerald-800/90 mt-0.5 leading-snug">
                     {t('requestBillDesc')}
                   </p>
                 </div>
               </button>
 
-              {/* 4. Table Clean & Napkins */}
+              {/* 3. Table Clean & Napkins */}
               <button
                 type="button"
                 onClick={() => {
                   setShowConciergeModal(false);
                   handleServiceButton('CLEAN', 'Table Clean & Napkins');
                 }}
-                className="p-3.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/90 text-left transition active:scale-98 flex items-start space-x-3 cursor-pointer group"
+                className="p-3.5 rounded-2xl bg-blue-50/70 hover:bg-blue-100/80 border border-blue-200/90 text-left transition active:scale-98 flex items-start space-x-3 cursor-pointer group"
               >
                 <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs text-base group-hover:scale-105 transition">
                   <Sparkles className="w-4 h-4 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className="text-xs font-black text-slate-900 block">{t('cleanTable')}</span>
-                  <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">
+                  <span className="text-xs font-black text-blue-950 block">{t('cleanTable')}</span>
+                  <p className="text-[10px] text-blue-800/90 mt-0.5 leading-snug">
                     {t('cleanTableDesc')}
                   </p>
                 </div>
@@ -2734,102 +2556,6 @@ export default function CustomerMenu({
                 className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
               >
                 {t('closeService')}
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* 8. 1-TAP QUICK PACKAGED MINERAL WATER MODAL (Solves Add-On Payment Dilemma) */}
-      {showWaterModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-sm w-full border border-slate-200 shadow-2xl space-y-4 text-slate-900">
-            
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center space-x-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-cyan-100 text-cyan-700 flex items-center justify-center text-xl shrink-0 shadow-xs">
-                  💧
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 font-heading">
-                    {t('mineralWater1L')}
-                  </h3>
-                  <span className="text-xs font-mono font-bold text-cyan-700">
-                    {t('perChilledBottle')}
-                  </span>
-                </div>
-              </div>
-              <button 
-                onClick={() => setShowWaterModal(false)}
-                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 cursor-pointer transition"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Quantity Stepper */}
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/90 flex items-center justify-between">
-              <div>
-                <span className="text-xs font-black text-slate-900 block font-heading">{t('bottlesNeeded')}</span>
-                <span className="text-[10px] text-slate-500 font-medium">
-                  {t('deliveredChilled').replace('{table}', currentTable)}
-                </span>
-              </div>
-              <div className="flex items-center space-x-2 bg-white rounded-xl p-1 border border-slate-200 shadow-2xs">
-                <button
-                  type="button"
-                  onClick={() => setWaterQty(Math.max(1, waterQty - 1))}
-                  className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-700 font-bold active:scale-90 transition cursor-pointer"
-                >
-                  <Minus className="w-3.5 h-3.5 stroke-[3]" />
-                </button>
-                <span className="font-mono font-black text-sm px-2 text-slate-900">{waterQty}</span>
-                <button
-                  type="button"
-                  onClick={() => setWaterQty(waterQty + 1)}
-                  className="w-7 h-7 rounded-lg bg-cyan-600 hover:bg-cyan-700 flex items-center justify-center text-white font-bold active:scale-90 transition cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                </button>
-              </div>
-            </div>
-
-            {/* Added Directly to Table Bill (No payment options needed - directly included in bill) */}
-            <div className="p-3.5 rounded-2xl bg-cyan-50/90 border border-cyan-200/90 flex items-start space-x-3 text-cyan-950">
-              <div className="w-8 h-8 rounded-xl bg-cyan-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
-                <Receipt className="w-4 h-4" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-cyan-950 block">
-                    {t('waterAddedToBill').replace('{table}', cleanTableNum || currentTable)}
-                  </span>
-                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-cyan-200/80 text-cyan-900 uppercase tracking-wider">
-                    {t('atExit')}
-                  </span>
-                </div>
-                <p className="text-[11px] text-cyan-800/90 mt-1 leading-relaxed">
-                  {t('waterAddedToBillDesc').replace('{amount}', waterQty * 20)}
-                </p>
-              </div>
-            </div>
-
-            {/* Total and Confirmation Button */}
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-              <div>
-                <span className="text-[10px] text-slate-400 block font-semibold">{t('totalWaterBill')}</span>
-                <span className="text-base font-black font-mono text-cyan-700">₹{waterQty * 20}</span>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleQuickWaterOrder}
-                className="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-black text-xs shadow-md shadow-cyan-600/20 flex items-center space-x-1.5 transition active:scale-95 cursor-pointer"
-              >
-                <span>{t('addToTableBillBtn').replace('{amount}', waterQty * 20)}</span>
-                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
 

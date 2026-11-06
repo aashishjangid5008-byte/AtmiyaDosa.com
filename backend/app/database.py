@@ -293,10 +293,11 @@ CANONICAL_MENU: Dict[str, Dict[str, Any]] = {
         "price": 20.0,
         "category": "Beverages",
         "description": "Sealed mineral water bottle.",
-        "is_available": True,
+        "is_available": False,
+        "waiter_only": True,
         "is_jain_available": True,
         "prep_time_mins": 1,
-        "tags": ["Essential"]
+        "tags": ["Waiter Add-On Only"]
     }
 }
 

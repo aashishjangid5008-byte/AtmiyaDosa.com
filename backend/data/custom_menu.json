@@ -317,11 +317,12 @@
     "price": 20.0,
     "category": "Beverages",
     "description": "Sealed mineral water bottle.",
-    "is_available": true,
+    "is_available": false,
+    "waiter_only": true,
     "is_jain_available": true,
     "prep_time_mins": 1,
     "tags": [
-      "Essential"
+      "Waiter Add-On Only"
     ]
   },
   "ATM0001": {

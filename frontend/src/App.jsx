@@ -1037,18 +1037,17 @@ export default function App() {
     setLocalStore('tables', sanitizedTables);
     setTables(sanitizedTables);
 
-    // Ensure Packaged Mineral Water & Beverages are active in menuItems & categories
+    // Ensure water is excluded from customer menu items (waiter add-on exclusive)
     const cachedItems = getLocalStore('menu_items', INITIAL_MENU_ITEMS);
-    if (!cachedItems.some(i => i.id === 'ATM_WATER_01')) {
-      const waterItems = INITIAL_MENU_ITEMS.filter(i => 
-        i.id.startsWith('ATM_WATER') || 
-        i.id.startsWith('ATM_CHAAS') || 
-        i.id.startsWith('ATM_COLDDRINK') || 
-        i.id.startsWith('ATM_EXTRA_PAV')
-      );
-      const mergedItems = [...waterItems, ...cachedItems];
-      setLocalStore('menu_items', mergedItems);
-      setMenuItems(mergedItems);
+    const sanitizedItems = cachedItems.filter(i => 
+      i.id !== 'ATM_WATER_01' && 
+      !i.id?.startsWith('ATM_WATER') && 
+      !i.is_water &&
+      !(i.name && i.name.toLowerCase().includes('mineral water'))
+    );
+    if (sanitizedItems.length !== cachedItems.length) {
+      setLocalStore('menu_items', sanitizedItems);
+      setMenuItems(sanitizedItems);
     }
     const cachedCats = getLocalStore('categories', INITIAL_CATEGORIES);
     if (!cachedCats.some(c => c.id === 'cat_20')) {
