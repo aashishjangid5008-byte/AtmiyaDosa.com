@@ -315,7 +315,7 @@ export default function KitchenPanelView({
       // 3. Spoken Voice Announcement
       if (voiceAlertsEnabled) {
         const items = latest.items_summary || (latest.items || []).map(i => `${i.qty || 1} ${i.name}`).join(', ');
-        speakOrderAlert(tbl, latest.is_addon, items, latest.payment_mode);
+        speakOrderAlert(tbl, latest.is_addon, items);
       }
 
       // 4. Alert Banner & Auto-switch to 'new'
@@ -338,7 +338,7 @@ export default function KitchenPanelView({
     unlockAudio();
     playSound('kitchen_bell');
     if (selectedTableFilter && selectedTableFilter !== 'all') {
-      speakOrderAlert(selectedTableFilter, false, 'Audio Test Order', 'Cash');
+      speakOrderAlert(selectedTableFilter, false, 'Audio Test Order');
     } else {
       speakSystemTestAlert();
     }

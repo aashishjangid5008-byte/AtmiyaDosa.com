@@ -47,14 +47,14 @@ export const requestNotificationPermission = async () => {
 /**
  * Speaks an urgent voice announcement for the kitchen & floor staff.
  */
-export const speakOrderAlert = (tableNumber, isAddon = false, itemsSummary = '', paymentMode = 'Cash') => {
+export const speakOrderAlert = (tableNumber, isAddon = false, itemsSummary = '') => {
   try {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel(); // Stop any pending speech
       const digits = String(tableNumber || '').replace(/\D/g, '');
       const spokenTable = digits ? `Table ${parseInt(digits, 10)}` : (String(tableNumber || '').trim() || 'Table');
       const text = isAddon
-        ? `Attention floor staff: ${spokenTable} has placed an add-on order for ${itemsSummary || 'items'}. Payment is ${paymentMode === 'UPI' ? 'paid online' : 'cash to collect'}.`
+        ? `Attention floor staff: ${spokenTable} has placed an add-on order for ${itemsSummary || 'items'}. Please deliver promptly.`
         : `Attention kitchen: ${spokenTable} order has arrived! Please start making it.`;
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.05;
@@ -124,7 +124,7 @@ export const triggerStaffOrderNotification = async ({
   // 4. Send background notification via Service Worker (works on locked phone / background tab)
   const title = isAddon ? `💧 Table ${displayTable} Add-On: ${itemsSummary || 'Water'}!` : `🚨 Table ${displayTable} Order Arrived!`;
   const body = isAddon
-    ? `Table ${displayTable} added ${itemsSummary || 'items'} (${paymentMode === 'UPI' ? 'Paid Online ✅' : 'Collect Cash 💵'}). Serve promptly!`
+    ? `Table ${displayTable} added ${itemsSummary || 'items'}. Serve promptly!`
     : `Table ${displayTable} order #${orderNumber} from ${customerName}. ${itemsSummary ? `Items: ${itemsSummary}` : 'Please start making it now!'}`;
 
   if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
