@@ -390,19 +390,21 @@ export function validateTableAccess(requestedTable, securityKey, hasActiveOrders
   const reqNorm = normalizeTableNumber(requestedTable);
   const bound = getBoundSessionTable();
 
-  // If no table is bound yet, this is the first scan/visit
-  if (!bound) {
-    return { allowed: true, boundTable: reqNorm, reason: 'initial_bind' };
+  // 1. Mandatory Cryptographic Signature Check:
+  // Every table QR scan MUST carry the exact cryptographic anti-tamper key (&tsec=...) for that specific table!
+  const isKeyValid = verifyTableSecurityKey(reqNorm, securityKey);
+
+  if (!isKeyValid) {
+    return {
+      allowed: false,
+      boundTable: bound,
+      reason: 'invalid_security_key'
+    };
   }
 
-  // If requested table matches the bound table, perfectly valid
-  if (reqNorm === bound) {
-    return { allowed: true, boundTable: bound, reason: 'same_table' };
-  }
-
-  // User is attempting to switch tables:
-  // If there are active dining orders on the bound table, STRICTLY PROHIBIT SWITCHING!
-  if (hasActiveOrdersOnBoundTable) {
+  // 2. Active Order Protection:
+  // If user already has an active dining session with orders in progress, forbid switching tables!
+  if (bound && reqNorm !== bound && hasActiveOrdersOnBoundTable) {
     return {
       allowed: false,
       boundTable: bound,
@@ -410,16 +412,10 @@ export function validateTableAccess(requestedTable, securityKey, hasActiveOrders
     };
   }
 
-  // If attempting to switch, require the genuine physical QR standee security key
-  if (verifyTableSecurityKey(reqNorm, securityKey)) {
-    // Valid physical scan at a new table
-    return { allowed: true, boundTable: reqNorm, reason: 'valid_scan_reseat' };
-  }
-
-  // URL manual tampering detected (?table=T01 typed in address bar)
+  // 3. Genuine physical QR scan verified!
   return {
-    allowed: false,
-    boundTable: bound,
-    reason: 'unauthorized_tampering'
+    allowed: true,
+    boundTable: reqNorm,
+    reason: bound ? 'valid_scan_reseat' : 'valid_initial_scan'
   };
 }

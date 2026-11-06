@@ -289,67 +289,112 @@ export default function App() {
   );
 
   const [viewMode, setViewMode] = useState(() => (initialIsCustomer ? 'customer' : 'admin')); // 'admin' or 'customer'
+  const [qrSecurityError, setQrSecurityError] = useState(() => {
+    const isPrivileged = isAdminPreview || isDirectKds || isDirectWaiter || Boolean(getLocalStore('auth_user', null));
+    if (isPrivileged) return null;
+
+    if (scannedTable) {
+      const scannedNorm = normalizeTableNumber(scannedTable);
+      const isKeyValid = verifyTableSecurityKey(scannedNorm, tableSecurityKey);
+      if (!isKeyValid) {
+        const existingBound = getBoundSessionTable();
+        // If customer was already bound to another table, they'll be reverted to that table.
+        // But if there is no prior bound table (fresh URL tampering or untrusted link), block access!
+        if (!existingBound) {
+          return {
+            attemptedTable: scannedTable,
+            reason: 'invalid_security_key'
+          };
+        }
+      }
+    }
+    return null;
+  });
+
   const [currentTable, setCurrentTable] = useState(() => {
     const existingBound = getBoundSessionTable();
     const isPrivileged = isAdminPreview || isDirectKds || isDirectWaiter || Boolean(getLocalStore('auth_user', null));
 
     if (scannedTable) {
       const scannedNorm = normalizeTableNumber(scannedTable);
+      const isKeyValid = verifyTableSecurityKey(scannedNorm, tableSecurityKey);
 
-      // Anti-Tampering Check:
-      // If customer has an active bound table and attempts to open a different table via URL:
-      if (existingBound && scannedNorm !== existingBound && !isPrivileged) {
-        // Check stored orders to see if bound table has active dining orders
-        let hasActiveOrderOnBound = false;
-        try {
-          const rawOrders = getLocalStore('orders', []);
-          if (Array.isArray(rawOrders)) {
-            hasActiveOrderOnBound = rawOrders.some(o => {
-              const oTbl = normalizeTableNumber(o?.table_number);
-              const st = String(o?.status || '').toLowerCase().trim();
-              const paySt = String(o?.payment_status || '').toLowerCase().trim();
-              if (oTbl !== existingBound) return false;
-              if (st === 'cancelled' || st === 'completed' || st === 'settled') return false;
-              if (st === 'served' && (paySt === 'paid' || paySt === 'settled' || paySt === 'void')) return false;
-              return true;
-            });
-          }
-        } catch (e) {}
-
-        const accessCheck = validateTableAccess(scannedTable, tableSecurityKey, hasActiveOrderOnBound);
-        if (!accessCheck.allowed) {
-          // TAMPERING DETECTED!
-          // Strictly reject switching to the tampered URL table.
-          const safeBound = Number(existingBound) < 10 ? `T0${existingBound}` : `T${existingBound}`;
-          const correctSec = generateTableSecurityKey(safeBound);
-          try {
-            window.history.replaceState(null, '', `/?table=${safeBound}&tsec=${correctSec}`);
-          } catch (e) {}
-          if (typeof window !== 'undefined') {
+      // Non-privileged (customer/guest) security verification:
+      if (!isPrivileged) {
+        // Condition A: Cryptographic signature is INVALID or missing:
+        if (!isKeyValid) {
+          // If customer already has a bound table in session (e.g. was on T01 and manually edited URL to T02):
+          if (existingBound) {
+            const safeBound = Number(existingBound) < 10 ? `T0${existingBound}` : `T${existingBound}`;
+            const correctSec = generateTableSecurityKey(safeBound);
             try {
-              sessionStorage.setItem('atmiya_tamper_flag', JSON.stringify({
-                attempted: scannedTable,
-                bound: safeBound,
-                reason: accessCheck.reason,
-                timestamp: Date.now()
-              }));
+              window.history.replaceState(null, '', `/?table=${safeBound}&tsec=${correctSec}`);
             } catch (e) {}
+            if (typeof window !== 'undefined') {
+              try {
+                sessionStorage.setItem('atmiya_tamper_flag', JSON.stringify({
+                  attempted: scannedTable,
+                  bound: safeBound,
+                  reason: 'invalid_security_key',
+                  timestamp: Date.now()
+                }));
+              } catch (e) {}
+            }
+            return safeBound;
           }
-          return safeBound;
+
+          // No existing bound session: DO NOT bind tampered table! Return scanned table for error display
+          return scannedTable;
+        }
+
+        // Condition B: Signature is valid, BUT customer is attempting to switch tables while having active dining orders on their current table:
+        if (existingBound && scannedNorm !== existingBound) {
+          let hasActiveOrderOnBound = false;
+          try {
+            const rawOrders = getLocalStore('orders', []);
+            if (Array.isArray(rawOrders)) {
+              hasActiveOrderOnBound = rawOrders.some(o => {
+                const oTbl = normalizeTableNumber(o?.table_number);
+                const st = String(o?.status || '').toLowerCase().trim();
+                const paySt = String(o?.payment_status || '').toLowerCase().trim();
+                if (oTbl !== existingBound) return false;
+                if (st === 'cancelled' || st === 'completed' || st === 'settled') return false;
+                if (st === 'served' && (paySt === 'paid' || paySt === 'settled' || paySt === 'void')) return false;
+                return true;
+              });
+            }
+          } catch (e) {}
+
+          if (hasActiveOrderOnBound) {
+            const safeBound = Number(existingBound) < 10 ? `T0${existingBound}` : `T${existingBound}`;
+            const correctSec = generateTableSecurityKey(safeBound);
+            try {
+              window.history.replaceState(null, '', `/?table=${safeBound}&tsec=${correctSec}`);
+            } catch (e) {}
+            if (typeof window !== 'undefined') {
+              try {
+                sessionStorage.setItem('atmiya_tamper_flag', JSON.stringify({
+                  attempted: scannedTable,
+                  bound: safeBound,
+                  reason: 'active_order_conflict',
+                  timestamp: Date.now()
+                }));
+              } catch (e) {}
+            }
+            return safeBound;
+          }
         }
       }
 
-      // Valid initial scan or valid authorized switch
-      markCustomerSession(scannedTable);
-      bindSessionTable(scannedTable);
-      const formatted = Number(scannedNorm) < 10 ? `T0${scannedNorm}` : `T${scannedNorm}`;
-      const validSec = generateTableSecurityKey(scannedNorm);
-      if (!tableSecurityKey || tableSecurityKey.toLowerCase() !== validSec.toLowerCase()) {
-        try {
-          window.history.replaceState(null, '', `/?table=${formatted}&tsec=${validSec}`);
-        } catch (e) {}
+      // Valid physical QR scan OR Privileged Staff:
+      if (isPrivileged || isKeyValid) {
+        markCustomerSession(scannedTable);
+        bindSessionTable(scannedTable);
+        const formatted = Number(scannedNorm) < 10 ? `T0${scannedNorm}` : `T${scannedNorm}`;
+        return formatted || scannedTable;
       }
-      return formatted || scannedTable;
+
+      return scannedTable;
     }
 
     // If no table in URL, restore bound table from session!
@@ -564,7 +609,9 @@ export default function App() {
         const flag = JSON.parse(flagStr);
         setActiveToast({
           title: `🔒 Table Access Locked (${flag.bound})`,
-          message: flag.reason === 'active_order_conflict'
+          message: flag.reason === 'invalid_security_key'
+            ? `Security signature for Table ${flag.attempted} is invalid. Reverted to your assigned Table ${flag.bound}.`
+            : flag.reason === 'active_order_conflict'
             ? `Active dining order is in progress on ${flag.bound}. Switching to ${flag.attempted} is blocked.`
             : `Your active dining session is locked to ${flag.bound}. Manual table editing in URL (${flag.attempted}) is blocked for bill security.`,
           type: 'error'
@@ -575,14 +622,14 @@ export default function App() {
   }, []);
 
   // Live Anti-Tampering URL Monitor
-  // Protects against guests manually typing a new table into browser address bar (e.g. ?table=T01)
+  // Protects against guests manually typing a new table into browser address bar (e.g. ?table=T02)
   useEffect(() => {
     if (viewMode !== 'customer') return;
 
     const checkUrlTampering = () => {
       const params = new URLSearchParams(window.location.search);
       const urlTable = params.get('table');
-      const key = params.get('tsec') || params.get('key');
+      const key = params.get('tsec') || params.get('key') || '';
       const isPrivileged = params.get('admin_preview') === '1' || Boolean(authUserRef.current);
 
       if (!urlTable) {
@@ -602,12 +649,46 @@ export default function App() {
       }
 
       const bound = getBoundSessionTable();
+      const urlNorm = normalizeTableNumber(urlTable);
+
+      // Verify cryptographic signature if not privileged
+      if (!isPrivileged) {
+        const isKeyValid = verifyTableSecurityKey(urlNorm, key);
+        if (!isKeyValid) {
+          // If customer has a bound table, revert URL to bound table immediately!
+          if (bound) {
+            const safeBoundTable = Number(bound) < 10 ? `T0${bound}` : `T${bound}`;
+            const correctSec = generateTableSecurityKey(safeBoundTable);
+            try {
+              window.history.replaceState(null, '', `/?table=${safeBoundTable}&tsec=${correctSec}`);
+            } catch (e) {}
+            setCurrentTable(safeBoundTable);
+            setActiveToast({
+              title: `🔒 Table Switch Blocked`,
+              message: `URL tampering detected! Security signature for Table ${urlTable} is invalid. Reverted to your assigned Table ${safeBoundTable}.`,
+              type: 'error'
+            });
+            playSound('alert');
+            return;
+          } else {
+            // No bound table and invalid key: trigger security error screen
+            setQrSecurityError({
+              attemptedTable: urlTable,
+              reason: 'invalid_security_key'
+            });
+            return;
+          }
+        }
+      }
+
+      // If no bound table yet and key is valid (or privileged):
       if (!bound) {
         bindSessionTable(urlTable);
+        setQrSecurityError(null);
         return;
       }
 
-      const urlNorm = normalizeTableNumber(urlTable);
+      // If bound table exists and url table is different:
       if (urlNorm !== bound) {
         const hasActiveOrder = orders.some(o => 
           normalizeTableNumber(o.table_number) === bound && 
@@ -626,16 +707,21 @@ export default function App() {
           setCurrentTable(safeBoundTable);
           setActiveToast({
             title: `🔒 Table Access Locked (${safeBoundTable})`,
-            message: validation.reason === 'active_order_conflict'
-              ? `Your active dining bill is on ${safeBoundTable}. You cannot switch to ${urlTable} while an active order is in progress.`
-              : `Your active dining session is locked to ${safeBoundTable}. Changing tables in the URL (${urlTable}) is prevented for your bill's security.`,
+            message: validation.reason === 'invalid_security_key'
+              ? `Invalid QR security key for Table ${urlTable}. Reverted to your assigned Table ${safeBoundTable}.`
+              : validation.reason === 'active_order_conflict'
+              ? `Your active dining bill is on Table ${safeBoundTable}. You cannot switch to Table ${urlTable} while an active order is in progress.`
+              : `Your active dining session is locked to Table ${safeBoundTable}. Changing tables in the URL (${urlTable}) is prevented for your bill's security.`,
             type: 'error'
           });
           playSound('alert');
         } else if (validation.allowed) {
           bindSessionTable(urlTable);
           setCurrentTable(urlTable);
+          setQrSecurityError(null);
         }
+      } else {
+        setQrSecurityError(null);
       }
     };
 
@@ -2410,6 +2496,14 @@ export default function App() {
       if (boundTable) {
         const safeTable = Number(boundTable) < 10 ? `T0${boundTable}` : `T${boundTable}`;
         newOrder.table_number = safeTable;
+      } else {
+        setActiveToast({
+          title: '🔒 Table Verification Required',
+          message: 'Please scan your dining table QR standee before placing an order.',
+          type: 'error'
+        });
+        playSound('alert');
+        return;
       }
     }
     if (newOrder.table_number) {
@@ -3856,6 +3950,85 @@ export default function App() {
     setSettings(newSettings);
     setLocalStore('settings', newSettings);
   };
+
+  // SECURITY GUARD: IF QR SECURITY VERIFICATION FAILED (Tampered or Missing Key)
+  if (qrSecurityError && !authUser && !isAdminPreview) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 selection:bg-rose-500/30">
+        {renderActiveToast()}
+        <div className="w-full max-w-md bg-slate-900/90 border border-rose-500/30 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl flex flex-col items-center text-center space-y-6 animate-in fade-in zoom-in-95 duration-200">
+          
+          {/* Header Icon */}
+          <div className="relative">
+            <div className="w-20 h-20 rounded-3xl bg-rose-500/10 border-2 border-rose-500/30 flex items-center justify-center shadow-lg shadow-rose-500/10 animate-pulse">
+              <ShieldAlert className="w-10 h-10 text-rose-500" />
+            </div>
+          </div>
+
+          {/* Heading */}
+          <div className="space-y-2">
+            <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-rose-500/15 border border-rose-500/25 text-rose-400 text-xs font-black tracking-wider uppercase">
+              <span>Security Protocol Enforced</span>
+            </div>
+            <h2 className="text-2xl font-black font-heading text-white tracking-tight">
+              Invalid Table QR Code
+            </h2>
+            <p className="text-xs text-rose-400 font-bold uppercase tracking-widest font-mono">
+              अमान्य क्यूआर कोड • एक्सेस अस्वीकृत
+            </p>
+          </div>
+
+          {/* Details Card */}
+          <div className="w-full bg-slate-950/60 border border-slate-800 rounded-2xl p-4 text-left space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+              <span className="text-xs text-slate-400 font-medium">Requested Table:</span>
+              <span className="text-xs font-black font-mono px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                {qrSecurityError.attemptedTable || 'Unknown'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              This dining link has an <strong>invalid, missing, or tampered security signature</strong>. To ensure table bill security and prevent cross-table ordering errors, manual table changes in the link are blocked.
+            </p>
+            <p className="text-xs text-amber-300/90 leading-relaxed font-medium">
+              कृपया अपने डाइनिंग टेबल पर रखे असली ऐक्रेलिक क्यूआर कोड स्टैंडी (QR Standee) को अपने फोन से स्कैन करें।
+            </p>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="w-full space-y-2.5 pt-2">
+            <button
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.location.reload();
+                }
+              }}
+              className="w-full py-3.5 px-4 rounded-2xl bg-orange-500 hover:bg-orange-600 active:scale-[0.98] text-white font-black text-sm shadow-xl shadow-orange-500/25 flex items-center justify-center space-x-2 transition cursor-pointer"
+            >
+              <QrCode className="w-4 h-4" />
+              <span>Scan Genuine Table Standee</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setQrSecurityError(null);
+                clearCustomerSession();
+                clearBoundSessionTable();
+                setForceAuthWall(true);
+                setViewMode('admin');
+              }}
+              className="w-full py-2.5 px-4 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white font-bold text-xs border border-slate-700/60 flex items-center justify-center space-x-2 transition cursor-pointer"
+            >
+              <span>Staff / Management Login</span>
+            </button>
+          </div>
+
+          <div className="text-[11px] text-slate-500 font-mono">
+            Atmiya Dosa Hub • Cryptographic Anti-Tamper System
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // IF CUSTOMER VIEW (OR SCANNED QR CODE) -> DIRECTLY SHOW TOUCH-FRIENDLY CUSTOMER MENU (NO LOGIN WALL)
   if (!forceAuthWall && viewMode === 'customer') {
