@@ -571,6 +571,8 @@ export default function App() {
     });
   });
   const [customers, setCustomers] = useState(() => getLocalStore('customers', INITIAL_CUSTOMERS));
+  const [activity, setActivity] = useState(() => getLocalStore('activity', INITIAL_ACTIVITY));
+  const [coupons, setCoupons] = useState(() => getLocalStore('coupons', INITIAL_COUPONS));
   const [seenOrderIds, setSeenOrderIds] = useState(() => {
     try {
       const raw = localStorage.getItem('seen_order_ids');
