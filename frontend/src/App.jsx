@@ -2464,6 +2464,11 @@ export default function App() {
         );
 
         const addedQty = Number(newItem.quantity || newItem.qty || 1);
+        const isDeliveredByWaiter = Boolean(newItem.is_served);
+        const targetKitchenStatus = isDeliveredByWaiter 
+          ? 'served' 
+          : (newItem.kitchen_status || 'placed');
+
         if (existingIdx !== -1) {
           const cur = mergedItems[existingIdx];
           const curQty = Number(cur.quantity || cur.qty || 1);
@@ -2474,8 +2479,9 @@ export default function App() {
             quantity: newQty,
             qty: newQty,
             total_price: Number((newQty * unitPrice).toFixed(2)),
-            kitchen_status: 'placed',
-            is_served: false,
+            kitchen_status: isDeliveredByWaiter ? cur.kitchen_status : targetKitchenStatus,
+            is_served: isDeliveredByWaiter ? cur.is_served : false,
+            served_at: isDeliveredByWaiter ? (newItem.served_at || Date.now()) : cur.served_at,
             round: roundNumber
           };
         } else {
@@ -2485,8 +2491,9 @@ export default function App() {
             qty: addedQty,
             round: roundNumber,
             is_addon: true,
-            kitchen_status: 'placed',
-            is_served: false
+            kitchen_status: targetKitchenStatus,
+            is_served: isDeliveredByWaiter,
+            served_at: isDeliveredByWaiter ? (newItem.served_at || Date.now()) : null
           });
         }
       });
@@ -2502,6 +2509,10 @@ export default function App() {
       const cumulativeTotal = Number((parseFloat(activeParent.total || activeParent.total_amount || 0) + addedTotal).toFixed(2));
       const summaryStr = mergedItems.map(i => `${i.quantity || i.qty || 1}x ${i.name || i.item_name}`).join(', ');
 
+      const allItemsServed = mergedItems.length > 0 && mergedItems.every(i => i.is_served);
+      const hasReadyItems = mergedItems.some(i => (i.kitchen_status === 'ready' || i.kitchen_status === 'prepared') && !i.is_served);
+      const nextOrderStatus = allItemsServed ? 'Served' : (hasReadyItems ? 'Ready' : 'Placed');
+
       finalOrder = {
         ...activeParent,
         items: mergedItems,
@@ -2513,7 +2524,7 @@ export default function App() {
         total_amount: cumulativeTotal,
         items_summary: summaryStr,
         round: roundNumber,
-        status: 'Placed', // Re-activate for kitchen queue so kitchen serves the new round
+        status: nextOrderStatus,
         payment_status: 'Pending Cash', // Continuous bill remains pending until final table checkout
         last_addon_at: new Date().toISOString(),
         special_note: [activeParent.special_note, newOrder.special_note].filter(Boolean).join(' • ')
@@ -2598,6 +2609,32 @@ export default function App() {
         type: isAddonOrder ? 'info' : 'success'
       });
     }
+
+    // 1.5 If order contains ready-to-deliver items (e.g. bottled water ordered by customer via QR), dispatch food_ready alert for waiters
+    (finalOrder.items || []).forEach((it, idx) => {
+      if ((it.kitchen_status === 'ready' || it.kitchen_status === 'prepared') && !it.is_served) {
+        const cleanTbl = (finalOrder.table_number || '').replace(/table/i, '').trim();
+        const qty = it.qty || it.quantity || 1;
+        const foodReadyCall = {
+          id: `ready_item_${finalOrder.id}_${idx}_${Date.now()}`,
+          tableNumber: cleanTbl,
+          label: `Deliver: ${qty}x ${it.name}`,
+          type: 'food_ready',
+          orderId: finalOrder.id,
+          orderNumber: finalOrder.order_number || finalOrder.id,
+          itemIndex: idx,
+          itemsSummary: `${qty}x ${it.name}`,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          timestamp: Date.now()
+        };
+        setServiceCalls(prev => {
+          if (prev.some(c => c.orderId === finalOrder.id && c.itemIndex === idx)) return prev;
+          const next = [foodReadyCall, ...prev];
+          setLocalStore('service_calls', next);
+          return next;
+        });
+      }
+    });
 
     // 2. DISPATCH LIVE TO SUPABASE CLOUD POSTGRESQL (table_sessions, orders, order_items, customers)
     try {

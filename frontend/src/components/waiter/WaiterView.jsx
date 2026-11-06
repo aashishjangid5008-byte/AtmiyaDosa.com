@@ -555,8 +555,10 @@ export default function WaiterView({
       quantity: 1,
       unit_price: 20,
       total_price: 20,
-      kitchen_status: 'placed',
-      is_served: false,
+      kitchen_status: 'served',
+      is_served: true,
+      served_at: new Date().toISOString(),
+      served_by: activeWaiterName || 'Waiter',
       is_addon: Boolean(activeParent),
       station: 'Beverages & Extras'
     };
@@ -575,7 +577,8 @@ export default function WaiterView({
       tax: 0,
       total: 20,
       total_amount: 20,
-      status: 'Placed',
+      status: 'Served',
+      is_served: true,
       is_addon: Boolean(activeParent),
       payment_status: 'Pending Cash',
       payment_mode: 'Cash_Waiter',
@@ -585,7 +588,7 @@ export default function WaiterView({
       is_waiter_order: true,
       placed_at: new Date().toISOString(),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      special_note: '💧 1x Chilled Packaged Mineral Water Bottle'
+      special_note: '💧 1x Chilled Packaged Mineral Water (Delivered by Waiter)'
     };
     if (onPlaceOrder) {
       onPlaceOrder(waterTicket);
@@ -1482,35 +1485,62 @@ export default function WaiterView({
                       </div>
                     </div>
 
-                    {/* Direct 1-Tap Ready Food Delivery Button on Table Card */}
+                    {/* Direct Ready Dishes List with Specific Dish Names on Table Card */}
                     {(tableReadyDishes.length > 0 || readyDishes.length > 0) && (
-                      <div className="p-2.5 rounded-xl bg-blue-100/90 border border-blue-300 text-blue-950 flex items-center justify-between gap-2 shadow-2xs animate-pulse">
-                        <div className="flex items-center space-x-1.5 text-xs font-bold min-w-0">
-                          <ChefHat className="w-3.5 h-3.5 text-blue-700 shrink-0" />
-                          <span className="truncate">
-                            {readyDishes.length > 0 ? readyDishes.length : tableReadyDishes.length} Dish(es) Ready!
-                            {cookingDishes.length > 0 ? ` (${cookingDishes.length} cooking)` : ''}
-                          </span>
+                      <div className="p-2.5 rounded-2xl bg-blue-50/95 border-2 border-blue-400 text-blue-950 space-y-2 shadow-xs">
+                        <div className="flex items-center justify-between border-b border-blue-200/80 pb-1.5">
+                          <div className="flex items-center space-x-1.5 text-xs font-black text-blue-900">
+                            <ChefHat className="w-3.5 h-3.5 text-blue-600 animate-pulse shrink-0" />
+                            <span>Ready for Pickup ({(readyDishes.length > 0 ? readyDishes : tableReadyDishes).length})</span>
+                          </div>
+                          {cookingDishes.length > 0 && (
+                            <span className="text-[9px] font-bold text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300">
+                              {cookingDishes.length} Cooking
+                            </span>
+                          )}
                         </div>
-                        <div className="flex items-center space-x-1 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => setTableDishesModal(table)}
-                            className="px-2 py-1 rounded-lg bg-white hover:bg-blue-50 text-blue-900 border border-blue-200 font-bold text-[10px] cursor-pointer shadow-xs transition"
-                            title="Inspect dishes detail"
-                          >
-                            View
-                          </button>
+
+                        {/* List each ready dish with exact dish name and Deliver button */}
+                        <div className="space-y-1.5">
+                          {(readyDishes.length > 0 ? readyDishes : tableReadyDishes).map((rd, rdIdx) => (
+                            <div 
+                              key={rdIdx} 
+                              className="flex items-center justify-between p-2 rounded-xl bg-white border border-blue-200 shadow-2xs gap-1.5"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <span className="font-heading font-black text-xs text-slate-900 block truncate">
+                                  🟢 {rd.qty || rd.quantity || 1}x {rd.name || rd.dishName || rd.itemsSummary || 'Dish'}
+                                </span>
+                                {rd.gujaratiName && rd.gujaratiName !== (rd.name || rd.dishName) && (
+                                  <span className="text-[10px] text-slate-500 font-medium block truncate">
+                                    {rd.gujaratiName}
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleDeliverReadyDish(rd)}
+                                className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-black text-[11px] cursor-pointer shadow-xs transition shrink-0 flex items-center space-x-1"
+                                title={`Mark ${rd.name || rd.dishName} delivered`}
+                              >
+                                <CheckCheck className="w-3 h-3" />
+                                <span>Deliver</span>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* If multiple ready dishes, provide 1-tap Deliver All */}
+                        {(readyDishes.length > 1 || tableReadyDishes.length > 1) && (
                           <button
                             type="button"
                             onClick={() => handleDeliverAllTableReady(table.number)}
-                            className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-[10px] cursor-pointer shadow-xs transition flex items-center space-x-1"
-                            title="Mark all ready dishes delivered to table"
+                            className="w-full py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] cursor-pointer shadow-xs transition flex items-center justify-center space-x-1"
                           >
-                            <CheckCheck className="w-3 h-3" />
-                            <span>Deliver</span>
+                            <CheckCheck className="w-3.5 h-3.5" />
+                            <span>Deliver All Ready ({(readyDishes.length > 0 ? readyDishes : tableReadyDishes).length})</span>
                           </button>
-                        </div>
+                        )}
                       </div>
                     )}
 

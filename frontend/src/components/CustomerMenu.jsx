@@ -620,7 +620,7 @@ export default function CustomerMenu({
       quantity: waterQty,
       unit_price: 20,
       total_price: totalWaterAmt,
-      kitchen_status: 'placed',
+      kitchen_status: 'ready',
       is_served: false,
       is_addon: Boolean(activeTableOrder),
       station: 'Beverages & Extras'
@@ -635,6 +635,8 @@ export default function CustomerMenu({
         mergedItems[existingIdx] = {
           ...mergedItems[existingIdx],
           qty: (mergedItems[existingIdx].qty || 0) + waterQty,
+          kitchen_status: 'ready',
+          is_served: false,
           is_addon: true
         };
       } else {
