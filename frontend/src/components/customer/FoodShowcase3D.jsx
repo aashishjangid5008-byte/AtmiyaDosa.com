@@ -70,7 +70,8 @@ export default function FoodShowcase3D({
   onQuickSearch,
   onOpenConcierge,
   currentLang = 'en',
-  onLanguageChange
+  onLanguageChange,
+  onOpenLanguageModal
 }) {
   const [searchInput, setSearchInput] = useState('');
 
@@ -107,19 +108,30 @@ export default function FoodShowcase3D({
 
         {/* Action Controls: Language & Concierge Waiter Call */}
         <div className="flex items-center space-x-2">
-          {onLanguageChange && (
-            <div className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-700 text-xs font-bold shadow-2xs">
+          {onOpenLanguageModal ? (
+            <button
+              type="button"
+              onClick={onOpenLanguageModal}
+              className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-950 text-xs font-black transition cursor-pointer shadow-2xs"
+            >
               <Globe className="w-3.5 h-3.5 text-orange-600" />
-              <select
-                value={currentLang}
-                onChange={(e) => onLanguageChange(e.target.value)}
-                className="bg-transparent text-slate-800 font-bold focus:outline-none cursor-pointer text-xs"
-              >
-                <option value="en">English</option>
-                <option value="gu">ગુજરાતી</option>
-                <option value="hi">हिन्दी</option>
-              </select>
-            </div>
+              <span>{currentLang === 'gu' ? 'ગુજરાતી' : (currentLang === 'hi' ? 'हिन्दी' : 'English')}</span>
+            </button>
+          ) : (
+            onLanguageChange && (
+              <div className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-700 text-xs font-bold shadow-2xs">
+                <Globe className="w-3.5 h-3.5 text-orange-600" />
+                <select
+                  value={currentLang}
+                  onChange={(e) => onLanguageChange(e.target.value)}
+                  className="bg-transparent text-slate-800 font-bold focus:outline-none cursor-pointer text-xs"
+                >
+                  <option value="en">English</option>
+                  <option value="gu">ગુજરાતી</option>
+                  <option value="hi">हिन्दी</option>
+                </select>
+              </div>
+            )
           )}
 
           {onOpenConcierge && (

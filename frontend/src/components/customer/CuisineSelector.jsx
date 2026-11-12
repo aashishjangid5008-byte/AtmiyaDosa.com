@@ -1,6 +1,6 @@
 import React from 'react';
-import { ArrowRight, ChevronRight, Sparkles, Utensils, ArrowLeft } from 'lucide-react';
-import { MASTER_CUISINES } from '../../lib/cuisines';
+import { ArrowRight, ChevronRight, Sparkles, ArrowLeft, Globe } from 'lucide-react';
+import { MASTER_CUISINES, getCuisineDisplayName } from '../../lib/cuisines';
 
 export default function CuisineSelector({
   restaurantName = 'Atmiya Dosa Hub',
@@ -9,7 +9,9 @@ export default function CuisineSelector({
   onOpenTableSelect,
   onSelectCuisine,
   onBackToLanding,
-  onViewAll
+  onViewAll,
+  currentLang = 'en',
+  onOpenLanguageModal
 }) {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20 max-w-lg mx-auto">
@@ -29,22 +31,38 @@ export default function CuisineSelector({
           )}
           <div>
             <h1 className="text-base font-black text-slate-900 font-heading leading-tight">
-              Select Cuisine / વાનગી પસંદ કરો
+              {currentLang === 'gu' ? 'વાનગી પ્રકાર પસંદ કરો' : (currentLang === 'hi' ? 'व्यंजन श्रेणी चुनें' : 'Select Cuisine')}
             </h1>
             <div className="text-[11px] text-slate-600 font-bold flex items-center space-x-1">
               <span>📍 Table {tableNumber}</span>
-              <span className="text-slate-400 font-normal">• Atmiya Dosa Hub</span>
+              <span className="text-slate-400 font-normal">• {restaurantName}</span>
             </div>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onViewAll}
-          className="text-xs font-bold text-orange-600 hover:text-orange-700 underline underline-offset-2 cursor-pointer"
-        >
-          View All ({menuItems.length})
-        </button>
+        <div className="flex items-center space-x-2">
+          {onOpenLanguageModal && (
+            <button
+              type="button"
+              onClick={onOpenLanguageModal}
+              className="px-2.5 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-950 text-xs font-black transition cursor-pointer flex items-center space-x-1 shadow-2xs"
+              title="Change Language / ભાષા બદલો"
+            >
+              <Globe className="w-3.5 h-3.5 text-orange-600" />
+              <span className="uppercase text-[11px] font-mono">
+                {currentLang === 'gu' ? 'ગુજરાતી' : (currentLang === 'hi' ? 'हिन्दी' : 'EN')}
+              </span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={onViewAll}
+            className="text-xs font-bold text-orange-600 hover:text-orange-700 underline underline-offset-2 cursor-pointer"
+          >
+            {currentLang === 'gu' ? 'બધું જુઓ' : (currentLang === 'hi' ? 'सभी देखें' : 'View All')} ({menuItems.length})
+          </button>
+        </div>
       </header>
 
       {/* 2. PROMPT BANNER */}
@@ -55,10 +73,14 @@ export default function CuisineSelector({
             <span>Pure Veg Live Kitchen</span>
           </div>
           <h2 className="text-sm font-black font-heading leading-snug">
-            Choose a cuisine below to view dishes & order directly
+            {currentLang === 'gu' 
+              ? 'વાનગીઓ જોવા અને ઓર્ડર કરવા માટે કેટેગરી પસંદ કરો' 
+              : (currentLang === 'hi' ? 'व्यंजन देखने और ऑर्डर करने के लिए श्रेणी चुनें' : 'Choose a cuisine below to view dishes & order directly')}
           </h2>
           <p className="text-[11px] text-amber-100 font-medium">
-            તાજી અને ગરમાગરમ વાનગીઓ • ટેબલ પર સીધા ઓર્ડર કરો
+            {currentLang === 'gu' 
+              ? 'તાજી અને ગરમાગરમ વાનગીઓ • ટેબલ પર સીધા ઓર્ડર કરો' 
+              : (currentLang === 'hi' ? 'ताज़ा और गरमा-गरम व्यंजन • सीधे टेबल पर ऑर्डर करें' : 'Freshly prepared dishes • Delivered directly to your table')}
           </p>
         </div>
       </div>
@@ -66,6 +88,9 @@ export default function CuisineSelector({
       {/* 3. THE 4 PRIMARY CUISINE CARDS (2x2 Grid on Mobile) */}
       <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         {MASTER_CUISINES.map((cuisine) => {
+          const primaryTitle = getCuisineDisplayName(cuisine, currentLang);
+          const secondaryTitle = currentLang === 'gu' ? cuisine.name : (currentLang === 'hi' ? cuisine.name : cuisine.gujarati);
+
           return (
             <div
               key={cuisine.id}
@@ -93,10 +118,10 @@ export default function CuisineSelector({
               {/* Title & Subtitle */}
               <div>
                 <h3 className="text-base font-black text-slate-900 font-heading group-hover:text-orange-600 transition-colors">
-                  {cuisine.name}
+                  {primaryTitle}
                 </h3>
                 <p className="text-xs font-bold text-emerald-800 font-heading mt-0.5">
-                  {cuisine.gujarati}
+                  {secondaryTitle}
                 </p>
                 <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
                   {cuisine.desc}
@@ -116,7 +141,7 @@ export default function CuisineSelector({
               <div 
                 className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs font-black text-orange-600 group-hover:text-orange-700"
               >
-                <span>View Dishes</span>
+                <span>{currentLang === 'gu' ? 'વાનગીઓ જુઓ' : (currentLang === 'hi' ? 'व्यंजन देखें' : 'View Dishes')}</span>
                 <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </div>
             </div>
@@ -131,7 +156,11 @@ export default function CuisineSelector({
           onClick={onViewAll}
           className="w-full py-3.5 px-4 rounded-2xl bg-slate-900 hover:bg-black text-white font-black text-xs font-heading shadow-md transition flex items-center justify-center space-x-2 cursor-pointer active:scale-98"
         >
-          <span>View Entire Menu (બધી વાનગીઓ એકસાથે)</span>
+          <span>
+            {currentLang === 'gu' 
+              ? 'આખું મેનૂ જુઓ (View Entire Menu)' 
+              : (currentLang === 'hi' ? 'पूरा मेन्यू देखें (View Entire Menu)' : 'View Entire Menu')}
+          </span>
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>

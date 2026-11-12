@@ -49,7 +49,7 @@ import { saveCustomerProfile, lookupCustomerByPhone } from '../lib/appwrite';
 import { createPaymentIntentApi, verifyPaymentApi, settleTableSessionApi } from '../lib/supabase';
 import FoodShowcase3D from './customer/FoodShowcase3D';
 import CuisineSelector from './customer/CuisineSelector';
-import { MASTER_CUISINES, getDishCuisine } from '../lib/cuisines';
+import { MASTER_CUISINES, getDishCuisine, getCuisineDisplayName } from '../lib/cuisines';
 import { downloadSinglePageBillPdf, printSinglePageReceipt } from '../lib/generateBillPdf';
 
 // Artisanal Culinary Category Meta (Luxury Gastronomy Palette & Emblems)
@@ -254,6 +254,29 @@ export default function CustomerMenu({
 
   // Table Concierge Modal State (Water, Waiter, Bill, Clean)
   const [showConciergeModal, setShowConciergeModal] = useState(false);
+
+  // Language Preference Pop-up on QR Scan (Session-aware: prompts on first QR scan or on user tap)
+  const [showLanguageModal, setShowLanguageModal] = useState(() => {
+    try {
+      const chosen = sessionStorage.getItem('atmiya_lang_chosen');
+      if (chosen === 'true') return false;
+      return true; // Pop up for language preference on QR scan!
+    } catch {
+      return true;
+    }
+  });
+
+  const handleSelectLanguage = (langCode) => {
+    if (onLanguageChange) {
+      onLanguageChange(langCode);
+    }
+    try {
+      localStorage.setItem('preferred_language', langCode);
+      sessionStorage.setItem('atmiya_lang_chosen', 'true');
+    } catch (e) {}
+    playSound('click');
+    setShowLanguageModal(false);
+  };
 
   // Clean numeric table number for UI display (e.g. 'T10' -> '10', 'T04' -> '4')
   const cleanTableNum = String(currentTable || '1').replace(/^T0*|^t0*/i, '') || '1';
@@ -768,7 +791,9 @@ export default function CustomerMenu({
       ...cart.map(i => ({
         id: i.id,
         name: i.name,
+        english_name: i.english_name || i.name,
         gujarati: i.gujarati || i.gujarati_name || i.name,
+        hindi: i.hindi || i.hindi_name || null,
         price: i.price,
         qty: i.qty,
         image_url: i.image_url || i.imageUrl || i.image || i.photo || null,
@@ -946,6 +971,129 @@ export default function CustomerMenu({
     }, 600);
   };
 
+  // QR Scan Language Pop-up Modal Component
+  const renderLanguageModal = () => {
+    if (!showLanguageModal) return null;
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-3.5 sm:p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+        <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-slate-900 animate-scaleUp">
+          
+          {/* Header with Emblem */}
+          <div className="text-center space-y-1.5 pb-2 border-b border-slate-100">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white shadow-md mx-auto mb-1">
+              <Globe className="w-6 h-6 animate-pulse" />
+            </div>
+            <h3 className="text-lg font-black text-slate-900 font-heading">
+              {currentLang === 'gu' 
+                ? 'તમારી ભાષા પસંદ કરો' 
+                : (currentLang === 'hi' ? 'अपनी भाषा चुनें' : 'Select Your Language')}
+            </h3>
+            <p className="text-xs text-slate-500 font-medium leading-relaxed">
+              Choose your preferred language for the digital menu & ordering
+              <br />
+              <span className="text-[11px] text-orange-600 font-semibold">
+                ડિજિટલ મેનૂ અને ઓર્ડર માટે ભાષા પસંદ કરો • अपनी भाषा चुनें
+              </span>
+            </p>
+            <div className="inline-block px-3 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold font-mono text-[11px] border border-slate-200">
+              📍 Table {cleanTableNum}
+            </div>
+          </div>
+
+          {/* Language Options Grid */}
+          <div className="space-y-2.5 pt-1">
+            {[
+              {
+                code: 'en',
+                title: 'English',
+                native: 'English (US)',
+                desc: 'Browse digital menu and place table orders in English',
+                tag: 'EN'
+              },
+              {
+                code: 'gu',
+                title: 'ગુજરાતી',
+                native: 'Gujarati',
+                desc: 'અસલ સ્વાદિષ્ટ વાનગીઓ અને મેનૂ સંપૂર્ણ ગુજરાતીમાં જુઓ',
+                tag: 'GU'
+              },
+              {
+                code: 'hi',
+                title: 'हिन्दी',
+                native: 'Hindi',
+                desc: 'स्वादिष्ट व्यंजन और मेन्यू अपनी राष्ट्रभाषा हिन्दी में देखें',
+                tag: 'HI'
+              }
+            ].map((langOption) => {
+              const isSelected = currentLang === langOption.code;
+              return (
+                <button
+                  key={langOption.code}
+                  type="button"
+                  onClick={() => handleSelectLanguage(langOption.code)}
+                  className={`w-full p-3.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center justify-between gap-3 group ${
+                    isSelected
+                      ? 'border-orange-500 bg-orange-50/80 shadow-xs ring-2 ring-orange-500/20'
+                      : 'border-slate-200 bg-white hover:border-orange-300 hover:bg-slate-50/80 shadow-2xs'
+                  }`}
+                >
+                  <div className="flex items-center space-x-3 min-w-0">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black shrink-0 transition-colors ${
+                      isSelected 
+                        ? 'bg-orange-500 text-white shadow-xs' 
+                        : 'bg-slate-100 text-slate-700 group-hover:bg-orange-100 group-hover:text-orange-700'
+                    }`}>
+                      {langOption.tag}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-heading font-black text-sm text-slate-900 block">
+                          {langOption.title}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          • {langOption.native}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5 truncate leading-tight">
+                        {langOption.desc}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="shrink-0">
+                    {isSelected ? (
+                      <div className="w-6 h-6 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-xs">
+                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                      </div>
+                    ) : (
+                      <div className="w-6 h-6 rounded-full border border-slate-300 group-hover:border-orange-400" />
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Continue Button */}
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                try { sessionStorage.setItem('atmiya_lang_chosen', 'true'); } catch {}
+                playSound('click');
+                setShowLanguageModal(false);
+              }}
+              className="w-full py-3 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 active:scale-98 text-white font-black text-xs uppercase tracking-wider shadow-md transition flex items-center justify-center space-x-2 cursor-pointer"
+            >
+              <span>{t('continueButton')}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // 1. STAGE: 3D INTERACTIVE FOOD SHOWCASE (Displayed on QR Scan / First Touch)
   if (menuStage === 'landing' && !activeTableOrder && !settledSessionReceipt) {
     return (
@@ -980,7 +1128,9 @@ export default function CustomerMenu({
           onOpenConcierge={() => setShowConciergeModal(true)}
           currentLang={currentLang}
           onLanguageChange={onLanguageChange}
+          onOpenLanguageModal={() => setShowLanguageModal(true)}
         />
+        {renderLanguageModal()}
       </>
     );
   }
@@ -1004,7 +1154,10 @@ export default function CustomerMenu({
             setSelectedCategory('All');
             setMenuStage('dishes');
           }}
+          currentLang={currentLang}
+          onOpenLanguageModal={() => setShowLanguageModal(true)}
         />
+        {renderLanguageModal()}
       </>
     );
   }
@@ -1079,19 +1232,17 @@ export default function CustomerMenu({
 
             {/* Language Selector + Luxury Concierge Service Button */}
             <div className="flex items-center space-x-1.5 shrink-0">
-              <div className="flex items-center space-x-1 px-2 py-1 rounded-xl bg-slate-100 border border-slate-200/90 text-slate-700 text-xs font-bold">
-                <Globe className="w-3.5 h-3.5 text-slate-500" />
-                <select 
-                  value={currentLang} 
-                  onChange={(e) => onLanguageChange(e.target.value)}
-                  className="bg-transparent text-slate-800 font-bold focus:outline-none cursor-pointer text-xs"
-                >
-                  <option value="en">EN</option>
-                  <option value="hi">हिन्दी</option>
-                  <option value="gu">ગુજરાતી</option>
-                  <option value="hinglish">Hinglish</option>
-                </select>
-              </div>
+              <button 
+                type="button"
+                onClick={() => setShowLanguageModal(true)}
+                className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 border border-orange-200/90 text-orange-950 text-xs font-black transition cursor-pointer active:scale-95 shadow-2xs"
+                title="Change Language / ભાષા બદલો"
+              >
+                <Globe className="w-3.5 h-3.5 text-orange-600 animate-pulse" />
+                <span className="uppercase text-[11px] font-mono">
+                  {currentLang === 'gu' ? 'ગુજરાતી' : (currentLang === 'hi' ? 'हिन्दी' : 'EN')}
+                </span>
+              </button>
 
               <button
                 type="button"
@@ -1193,7 +1344,7 @@ export default function CustomerMenu({
                   }`}
                 >
                   <span className="text-xs">{cuisine.icon}</span>
-                  <span>{currentLang === 'gu' ? cuisine.gujarati : cuisine.name}</span>
+                  <span>{getCuisineDisplayName(cuisine, currentLang)}</span>
                   <span className={`text-[9.5px] font-mono px-1.5 py-0.2 rounded-full font-bold ${
                     isSelected ? 'bg-white/25 text-white' : 'bg-white text-slate-500'
                   }`}>
@@ -1351,12 +1502,12 @@ export default function CustomerMenu({
             const currentItemPrice = item.finalPrice || item.price;
             const originalItemPrice = item.originalPrice || item.price;
             const culinaryMeta = getDishCulinaryMeta(item, currentLang, t);
-            const primaryName = currentLang === 'gu'
-              ? getDishDisplayName(item, 'gu')
-              : getDishDisplayName(item, 'en');
+            const primaryName = getDishDisplayName(item, currentLang);
             const secondaryName = currentLang === 'gu'
               ? getDishDisplayName(item, 'en')
-              : getDishDisplayName(item, 'gu');
+              : (currentLang === 'hi'
+                  ? getDishDisplayName(item, 'en')
+                  : (getDishDisplayName(item, 'gu') || getDishDisplayName(item, 'hi')));
             const categoryLabel = getCategoryLabel(item.category, currentLang);
 
             return (
@@ -2250,7 +2401,8 @@ export default function CustomerMenu({
                       const isCooking = kitchenStatus === 'preparing' || kitchenStatus === 'cooking';
                       const isPlaced = kitchenStatus === 'placed' || !kitchenStatus;
                       const itemPhoto = it.image_url || it.imageUrl || it.image || it.photo;
-                      const gujaratiTitle = getDishDisplayName(it, 'gu');
+                      const localizedTitle = getDishDisplayName(it, currentLang);
+                      const subtitleFallback = currentLang !== 'en' ? getDishDisplayName(it, 'en') : getDishDisplayName(it, 'gu');
 
                       return (
                         <div
@@ -2294,11 +2446,11 @@ export default function CustomerMenu({
                                   <h4 className={`text-xs font-bold leading-snug ${
                                     dishServed ? 'line-through text-slate-500' : 'text-slate-900 font-extrabold'
                                   }`}>
-                                    {it.name}
+                                    {localizedTitle || it.name}
                                   </h4>
-                                  {gujaratiTitle && gujaratiTitle !== it.name && (
+                                  {subtitleFallback && subtitleFallback !== (localizedTitle || it.name) && (
                                     <span className="text-[11px] font-bold text-slate-600">
-                                      ({gujaratiTitle})
+                                      ({subtitleFallback})
                                     </span>
                                   )}
                                 </div>
@@ -3269,6 +3421,9 @@ export default function CustomerMenu({
           </div>
         </div>
       )}
+
+      {/* Language Preference Pop-up Modal */}
+      {renderLanguageModal()}
 
     </div>
   );

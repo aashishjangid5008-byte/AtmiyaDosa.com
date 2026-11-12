@@ -12,6 +12,7 @@ export const MASTER_CUISINES = [
     id: 'south_indian',
     name: 'South Indian',
     gujarati: 'દક્ષિણ ભારતીય',
+    hindi: 'दक्षिण भारतीय',
     image: '/hero_mysore_dosa.jpg',
     tagline: 'Crispy Dosas & Live Tawa',
     desc: 'Plain Paper, Mysore Masala, Cheese Burst, Gotala, Jini Roll & Uttapams',
@@ -24,6 +25,7 @@ export const MASTER_CUISINES = [
     id: 'chinese',
     name: 'Chinese',
     gujarati: 'ચાઈનીઝ વાનગીઓ',
+    hindi: 'चाइनीज व्यंजन',
     image: '/hero_chinese_wok.jpg',
     tagline: 'Sizzling Wok & Noodles',
     desc: 'Hakka Noodles, Schezwan Fried Rice, Manchurian, Chinese Bhel & Warm Soups',
@@ -36,6 +38,7 @@ export const MASTER_CUISINES = [
     id: 'gujarati',
     name: 'Gujarati & Pav Bhaji',
     gujarati: 'ગુજરાતી & પાંઉભાજી',
+    hindi: 'गुजराती और पाव भाजी',
     image: '/hero_pav_bhaji.jpg',
     tagline: 'Amul Butter & Desi Tadka',
     desc: 'Special Amul Pav Bhaji, Cheese Bhaji, Tawa Pulav & Roasted Masala Papad',
@@ -48,6 +51,7 @@ export const MASTER_CUISINES = [
     id: 'beverages',
     name: 'Beverages & Desserts',
     gujarati: 'પીણાં અને નાસ્તો',
+    hindi: 'पेय और मिष्ठान',
     image: '/hero_masala_chaas.jpg',
     tagline: 'Chilled Drinks & Coolers',
     desc: 'Fresh Masala Chaas, Sweet Lassi, Cold Drinks, Mineral Water & Ice Creams',
@@ -59,10 +63,17 @@ export const MASTER_CUISINES = [
 ];
 
 export const CUISINE_CONFIG = {
-  south_indian: { label: 'Dosa Tawa Station', gujaratiLabel: 'ઢોસા તવો', icon: '🥞' },
-  chinese: { label: 'Chinese Wok Station', gujaratiLabel: 'ચાઈનીઝ વૉક', icon: '🍜' },
-  gujarati: { label: 'Pav Bhaji & Desi Tadka', gujaratiLabel: 'પાંઉભાજી & પાવ', icon: '🍲' },
-  beverages: { label: 'Beverages & Counter', gujaratiLabel: 'પીણાં & કાઉન્ટર', icon: '💧' },
+  south_indian: { label: 'Dosa Tawa Station', gujaratiLabel: 'ઢોસા તવો', hindiLabel: 'डोसा तवा स्टेशन', icon: '🥞' },
+  chinese: { label: 'Chinese Wok Station', gujaratiLabel: 'ચાઈનીઝ વૉક', hindiLabel: 'चाइनीज वॉक स्टेशन', icon: '🍜' },
+  gujarati: { label: 'Pav Bhaji & Desi Tadka', gujaratiLabel: 'પાંઉભાજી & પાવ', hindiLabel: 'पाव भाजी और तड़का', icon: '🍲' },
+  beverages: { label: 'Beverages & Counter', gujaratiLabel: 'પીણાં & કાઉન્ટર', hindiLabel: 'पेय और काउंटर', icon: '💧' },
+};
+
+export const getCuisineDisplayName = (cuisine, lang = 'en') => {
+  if (!cuisine) return '';
+  if (lang === 'gu') return cuisine.gujarati || cuisine.name;
+  if (lang === 'hi') return cuisine.hindi || cuisine.name;
+  return cuisine.name;
 };
 
 /**

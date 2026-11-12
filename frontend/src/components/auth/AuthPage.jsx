@@ -308,8 +308,13 @@ export default function AuthPage({
         phone: signupPhone.trim() || '+91 98000 00000',
         shift: 'General Shift',
         active: true,
+        preferred_language: currentLang,
         createdAt: new Date().toISOString().split('T')[0]
       };
+
+      try {
+        localStorage.setItem('preferred_language', currentLang);
+      } catch (e) {}
 
       if (onAddEmployee) {
         onAddEmployee(newEmpRecord);
@@ -326,10 +331,13 @@ export default function AuthPage({
           name: newEmpRecord.name,
           email: newEmpRecord.email,
           role: signupRole === 'chef' ? 'chef' : 'waiter',
+          preferred_language: currentLang,
           restaurantName: 'Atmiya Dosa Hub',
           restaurantId: RESTAURANT_ID,
           isPrimaryOwner: false
         };
+      } else {
+        authenticatedUser.preferred_language = currentLang;
       }
 
       await recordEmployeeActivity(
@@ -385,7 +393,7 @@ export default function AuthPage({
               onClick={onOpenCustomerPreview}
               className="hidden md:inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-800 text-xs font-bold transition cursor-pointer"
             >
-              <span>Dine-In Customer Menu</span>
+              <span>{t('customerMenu') || 'Dine-In Customer Menu'}</span>
               <ArrowRight className="w-3.5 h-3.5 text-orange-600" />
             </button>
 
@@ -394,7 +402,11 @@ export default function AuthPage({
               <Globe className="w-3.5 h-3.5 text-slate-400" />
               <select 
                 value={currentLang} 
-                onChange={(e) => onLanguageChange(e.target.value)}
+                onChange={(e) => {
+                  const lang = e.target.value;
+                  if (onLanguageChange) onLanguageChange(lang);
+                  try { localStorage.setItem('preferred_language', lang); } catch(err){}
+                }}
                 className="bg-transparent text-xs font-semibold focus:outline-none cursor-pointer"
                 aria-label="Language"
               >
@@ -536,7 +548,7 @@ export default function AuthPage({
                   }`}
                 >
                   <KeyRound className="w-4 h-4 text-orange-600" />
-                  <span>Sign In</span>
+                  <span>{t('login') || t('signIn') || 'Sign In'}</span>
                 </button>
                 <button
                   type="button"
@@ -548,19 +560,19 @@ export default function AuthPage({
                   }`}
                 >
                   <UserPlus className="w-4 h-4 text-orange-600" />
-                  <span>Register Staff</span>
+                  <span>{t('registerStaff') || 'Register Staff'}</span>
                 </button>
               </div>
 
               {/* Title & Role Info */}
               <div>
                 <h2 className="text-xl sm:text-2xl font-heading font-black text-slate-900 tracking-tight">
-                  {authFlow === 'signup' ? 'Staff Registration' : 'Terminal Access'}
+                  {authFlow === 'signup' ? (t('staffRegistration') || 'Staff Registration') : (t('terminalAccess') || 'Terminal Access')}
                 </h2>
                 <p className="text-xs text-slate-500 mt-1">
                   {authFlow === 'signup'
-                    ? 'Register your waiter or chef credentials for floor duty'
-                    : 'Choose your role station to launch the touch console'}
+                    ? (t('staffRegistrationSub') || 'Register your waiter or chef credentials for floor duty')
+                    : (t('terminalAccessSub') || 'Choose your role station to launch the touch console')}
                 </p>
               </div>
 
@@ -581,7 +593,7 @@ export default function AuthPage({
                   {/* Interactive Role Cards (Admin, Waiter, Kitchen) */}
                   <div className="space-y-1.5">
                     <label className="block text-xs font-black uppercase tracking-wider text-slate-500">
-                      Select Duty Station
+                      {t('selectDutyStation') || 'Select Duty Station'}
                     </label>
                     <div className="grid grid-cols-3 gap-2">
                       
@@ -608,8 +620,8 @@ export default function AuthPage({
                           )}
                         </div>
                         <div>
-                          <span className="font-heading font-black text-xs text-slate-900 block">Admin</span>
-                          <span className="text-[10px] text-slate-500 block truncate">Owner POS</span>
+                          <span className="font-heading font-black text-xs text-slate-900 block">{t('admin') || 'Admin'}</span>
+                          <span className="text-[10px] text-slate-500 block truncate">{t('ownerPos') || 'Owner POS'}</span>
                         </div>
                       </button>
 
@@ -636,8 +648,8 @@ export default function AuthPage({
                           )}
                         </div>
                         <div>
-                          <span className="font-heading font-black text-xs text-slate-900 block">Waiter</span>
-                          <span className="text-[10px] text-slate-500 block truncate">Floor Service</span>
+                          <span className="font-heading font-black text-xs text-slate-900 block">{t('waiterStaff') || t('waiterRole') || 'Waiter'}</span>
+                          <span className="text-[10px] text-slate-500 block truncate">{t('floorService') || 'Floor Service'}</span>
                         </div>
                       </button>
 
@@ -664,8 +676,8 @@ export default function AuthPage({
                           )}
                         </div>
                         <div>
-                          <span className="font-heading font-black text-xs text-slate-900 block">Kitchen</span>
-                          <span className="text-[10px] text-slate-500 block truncate">Live KDS</span>
+                          <span className="font-heading font-black text-xs text-slate-900 block">{t('kitchenKDS') || t('kitchenRole') || 'Kitchen'}</span>
+                          <span className="text-[10px] text-slate-500 block truncate">{t('liveKds') || 'Live KDS'}</span>
                         </div>
                       </button>
 
@@ -678,7 +690,7 @@ export default function AuthPage({
                     {/* Staff ID, Username or Email */}
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        {selectedRole === 'admin' ? 'Admin ID, Username or Email' : 'Staff ID, Username or Work Email'}
+                        {selectedRole === 'admin' ? `${t('admin')} ${t('staffIdOrEmail') || 'ID, Username or Email'}` : (t('staffIdOrEmail') || 'Staff ID, Username or Work Email')}
                       </label>
                       <div className="relative">
                         <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -698,7 +710,7 @@ export default function AuthPage({
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-xs font-bold text-slate-700">
-                          Password or Staff PIN
+                          {t('password') || 'Password or Staff PIN'}
                         </label>
                       </div>
                       <div className="relative">
@@ -732,11 +744,11 @@ export default function AuthPage({
                       {loading ? (
                         <>
                           <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                          <span>Authenticating Terminal...</span>
+                          <span>{t('authenticatingTerminal') || 'Authenticating Terminal...'}</span>
                         </>
                       ) : (
                         <>
-                          <span>Enter {selectedRole.toUpperCase()} Terminal</span>
+                          <span>{(t('enterTerminalBtn') || 'Enter {role} Terminal').replace('{role}', selectedRole.toUpperCase())}</span>
                           <ArrowRight className="w-4 h-4" />
                         </>
                       )}
@@ -747,14 +759,14 @@ export default function AuthPage({
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
                     <span className="flex items-center space-x-1.5 font-medium">
                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 inline shrink-0" />
-                      <span>Type your assigned ID & password to enter</span>
+                      <span>{t('typeCredentialsNote') || 'Type your assigned ID & password to enter'}</span>
                     </span>
                     <button
                       type="button"
                       onClick={() => { setAuthFlow('signup'); setError(''); }}
                       className="text-orange-600 hover:text-orange-700 font-bold hover:underline cursor-pointer"
                     >
-                      New staff? Register →
+                      {t('newStaffRegister') || 'New staff? Register →'}
                     </button>
                   </div>
 
@@ -766,10 +778,51 @@ export default function AuthPage({
               {/* ============================================================== */}
               {authFlow === 'signup' && (
                 <form onSubmit={handleSignupSubmit} className="space-y-4">
+                  {/* Preferred Language for Staff Account & Terminal */}
+                  <div className="p-3 rounded-2xl bg-orange-50/60 border border-orange-200/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-slate-800 flex items-center space-x-1.5">
+                        <Globe className="w-3.5 h-3.5 text-orange-600" />
+                        <span>{t('choosePreferredLanguage') || 'Preferred Language'}</span>
+                      </label>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white border border-orange-200 text-orange-800">
+                        {currentLang === 'gu' ? 'ગુજરાતી સક્રિય' : currentLang === 'hi' ? 'हिन्दी सक्रिय' : 'English Active'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { code: 'en', label: 'English', sub: 'Default' },
+                        { code: 'gu', label: 'ગુજરાતી', sub: 'Gujarati' },
+                        { code: 'hi', label: 'हिन्दी', sub: 'Hindi' }
+                      ].map(l => (
+                        <button
+                          key={l.code}
+                          type="button"
+                          onClick={() => {
+                            if (onLanguageChange) onLanguageChange(l.code);
+                            try { localStorage.setItem('preferred_language', l.code); } catch(err){}
+                          }}
+                          className={`p-2.5 rounded-xl border text-center transition cursor-pointer ${
+                            currentLang === l.code
+                              ? 'bg-white border-orange-500 text-orange-950 font-black ring-2 ring-orange-400/30 shadow-xs'
+                              : 'bg-white/80 border-slate-200 text-slate-600 font-bold hover:bg-white'
+                          }`}
+                        >
+                          <div className="text-xs leading-tight font-heading">{l.label}</div>
+                          <div className="text-[10px] text-slate-400 font-normal">{l.sub}</div>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-tight">
+                      {t('chooseLangDesc') || 'All menus, terminals, and notifications will display in your selected language.'}
+                    </p>
+                  </div>
+
                   {/* Assigned Role */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                      Select Assigned Role
+                      {t('selectAssignedRole') || 'Select Assigned Role'}
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                       <button
@@ -782,7 +835,7 @@ export default function AuthPage({
                         }`}
                       >
                         <ConciergeBell className="w-4 h-4 text-orange-600" />
-                        <span>Floor Waiter</span>
+                        <span>{t('floorWaiter') || 'Floor Waiter'}</span>
                       </button>
                       <button
                         type="button"
@@ -794,7 +847,7 @@ export default function AuthPage({
                         }`}
                       >
                         <ChefHat className="w-4 h-4 text-orange-600" />
-                        <span>Kitchen Chef</span>
+                        <span>{t('kitchenChef') || 'Kitchen Chef'}</span>
                       </button>
                     </div>
                   </div>
@@ -802,7 +855,7 @@ export default function AuthPage({
                   {/* Full Name */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Staff Full Name
+                      {t('staffFullName') || 'Staff Full Name'}
                     </label>
                     <div className="relative">
                       <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -810,7 +863,7 @@ export default function AuthPage({
                         type="text"
                         value={signupName}
                         onChange={(e) => setSignupName(e.target.value)}
-                        placeholder="e.g. Ramesh Patel"
+                        placeholder={t('staffFullNamePlaceholder') || 'e.g. Ramesh Patel'}
                         className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-slate-200 bg-white text-slate-900 text-xs font-bold transition focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                         required
                       />
@@ -820,7 +873,7 @@ export default function AuthPage({
                   {/* Staff ID, Username or Email */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Staff ID, Username or Email
+                      {t('staffIdOrEmail') || 'Staff ID, Username or Email'}
                     </label>
                     <div className="relative">
                       <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -829,7 +882,7 @@ export default function AuthPage({
                         autoComplete="username"
                         value={signupEmail}
                         onChange={(e) => setSignupEmail(e.target.value)}
-                        placeholder="e.g. WTR-104 or ramesh@atmiyadosa.com"
+                        placeholder={t('staffIdPlaceholder') || 'e.g. WTR-104 or ramesh@atmiyadosa.com'}
                         className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-slate-200 bg-white text-slate-900 text-xs font-bold transition focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                         required
                       />
@@ -839,7 +892,7 @@ export default function AuthPage({
                   {/* Password / PIN */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Set Password or 4-Digit PIN
+                      {t('setPasswordOrPin') || 'Set Password or 4-Digit PIN'}
                     </label>
                     <div className="relative">
                       <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -864,7 +917,7 @@ export default function AuthPage({
                   {/* Mobile Phone */}
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Mobile Number <span className="text-slate-400 font-normal">(Optional)</span>
+                      {t('mobileOptional') || 'Mobile Number'} <span className="text-slate-400 font-normal">({t('optional') || 'Optional'})</span>
                     </label>
                     <div className="relative">
                       <Smartphone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -884,7 +937,7 @@ export default function AuthPage({
                     disabled={loading || !signupName || !signupEmail || !signupPassword}
                     className="w-full py-3.5 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-black text-xs tracking-wider uppercase shadow-md transition flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50 min-h-[46px]"
                   >
-                    <span>{loading ? 'Registering Staff...' : 'Register Staff Account & Sign In'}</span>
+                    <span>{loading ? (t('registeringStaff') || 'Registering Staff...') : (t('registerAndSignInBtn') || 'Register Staff Account & Sign In')}</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </form>
@@ -898,10 +951,10 @@ export default function AuthPage({
                   </div>
                   <div>
                     <span className="font-heading font-black text-xs text-slate-900 block leading-tight">
-                      Visiting as a Diner?
+                      {t('visitingAsDiner') || 'Visiting as a Diner?'}
                     </span>
                     <span className="text-[11px] text-orange-900 font-medium">
-                      Open Table QR Customer Menu
+                      {t('openTableMenu') || 'Open Table QR Customer Menu'}
                     </span>
                   </div>
                 </div>
@@ -911,7 +964,7 @@ export default function AuthPage({
                   onClick={onOpenCustomerPreview}
                   className="px-3 py-1.5 rounded-xl bg-white hover:bg-orange-100 text-orange-700 border border-orange-300 font-bold text-xs flex items-center space-x-1 transition cursor-pointer shadow-2xs shrink-0"
                 >
-                  <span>Open Menu</span>
+                  <span>{t('openMenuBtn') || 'Open Menu'}</span>
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
