@@ -45,7 +45,11 @@ import {
   INITIAL_CUSTOMERS,
   saveCustomerProfile,
   addCustomerLoyaltyPoints,
-  recordEmployeeActivity
+  recordEmployeeActivity,
+  loadAuthenticMenuCards,
+  clearAllMenuData,
+  AUTHENTIC_CATEGORIES,
+  AUTHENTIC_MENU_CARD_ITEMS
 } from './lib/appwrite';
 import { 
   supabase, 
@@ -1052,11 +1056,7 @@ export default function App() {
       setMenuItems(sanitizedItems);
     }
     const cachedCats = getLocalStore('categories', INITIAL_CATEGORIES);
-    if (!cachedCats.some(c => c.id === 'cat_20')) {
-      const mergedCats = [...cachedCats, { id: 'cat_20', name: 'Beverages & Water', gujarati: 'પીણાં અને પાણી', icon: 'GlassWater', percentage: 10 }];
-      setLocalStore('categories', mergedCats);
-      setCategories(mergedCats);
-    }
+    setCategories(cachedCats);
   }, []);
 
   // Live Supabase Orders Synchronization Helper
@@ -1366,7 +1366,8 @@ export default function App() {
           .select('*')
           .order('name', { ascending: true });
 
-        if (!catErr && supaCategories && supaCategories.length > 0) {
+        const isMenuCleared = typeof localStorage !== 'undefined' && localStorage.getItem('restaurant_menu_cleared') === 'true';
+        if (!isMenuCleared && !catErr && supaCategories && supaCategories.length > 0) {
           const catMap = {};
           supaCategories.forEach(c => { catMap[c.id] = c.name; });
 
@@ -3674,6 +3675,206 @@ export default function App() {
     });
   };
 
+  const handleAddCategory = (categoryData) => {
+    const catName = (categoryData.name || '').trim();
+    if (!catName) return null;
+    const catId = categoryData.id || `cat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const newCategory = {
+      id: catId,
+      name: catName,
+      gujarati: (categoryData.gujarati || categoryData.gujarati_name || catName).trim(),
+      icon: categoryData.icon || 'Utensils',
+      cuisine: categoryData.cuisine || 'south_indian',
+      percentage: Number(categoryData.percentage) || 10
+    };
+    const updated = [...categories.filter(c => c.name.toLowerCase() !== catName.toLowerCase()), newCategory];
+    setCategories(updated);
+    setLocalStore('categories', updated);
+    try {
+      localStorage.removeItem('restaurant_menu_cleared');
+      localStorage.setItem('restaurant_categories', JSON.stringify(updated));
+      localStorage.setItem('atmiya_categories', JSON.stringify(updated));
+    } catch (e) {}
+
+    window.dispatchEvent(new CustomEvent('atmiya_categories_updated', { detail: { categories: updated } }));
+    window.dispatchEvent(new Event('restaurant_data_updated'));
+
+    try {
+      supabase.channel('restaurant_alerts').send({
+        type: 'broadcast',
+        event: 'category_updated',
+        payload: { action: 'add', category: newCategory }
+      });
+    } catch (e) {}
+
+    try {
+      supabase.from('menu_categories').insert({
+        id: newCategory.id,
+        name: newCategory.name,
+        gujarati_name: newCategory.gujarati,
+        icon: newCategory.icon,
+        is_active: true
+      }).then();
+    } catch (e) {}
+
+    recordEmployeeActivity({
+      employeeName: authUser?.name || 'Admin',
+      employeeRole: authUser?.role || 'Admin',
+      tableNumber: 'Menu',
+      actionType: 'CATEGORY_ADDED',
+      details: `Created new category "${newCategory.name}" (${newCategory.gujarati})`,
+      type: 'menu',
+      color: 'emerald'
+    });
+    playSound('success');
+    return newCategory;
+  };
+
+  const handleUpdateCategory = (categoryId, updatedData) => {
+    const oldCat = categories.find(c => c.id === categoryId);
+    if (!oldCat) return;
+    const oldName = oldCat.name;
+    const newName = (updatedData.name || oldName).trim();
+
+    const updatedCat = {
+      ...oldCat,
+      ...updatedData,
+      name: newName,
+      gujarati: (updatedData.gujarati || updatedData.gujarati_name || oldCat.gujarati || newName).trim()
+    };
+
+    const updatedCats = categories.map(c => c.id === categoryId ? updatedCat : c);
+    setCategories(updatedCats);
+    setLocalStore('categories', updatedCats);
+    try {
+      localStorage.setItem('restaurant_categories', JSON.stringify(updatedCats));
+      localStorage.setItem('atmiya_categories', JSON.stringify(updatedCats));
+    } catch (e) {}
+
+    if (oldName !== newName) {
+      const updatedDishes = menuItems.map(item => {
+        if (item.category === oldName) {
+          return { ...item, category: newName };
+        }
+        return item;
+      });
+      setMenuItems(updatedDishes);
+      setLocalStore('menu_items', updatedDishes);
+      try {
+        localStorage.setItem('atmiya_menu_items', JSON.stringify(updatedDishes));
+      } catch (e) {}
+    }
+
+    window.dispatchEvent(new CustomEvent('atmiya_categories_updated', { detail: { categories: updatedCats } }));
+    window.dispatchEvent(new Event('restaurant_data_updated'));
+
+    recordEmployeeActivity({
+      employeeName: authUser?.name || 'Admin',
+      employeeRole: authUser?.role || 'Admin',
+      tableNumber: 'Menu',
+      actionType: 'CATEGORY_UPDATED',
+      details: `Updated category "${oldName}" → "${newName}"`,
+      type: 'menu',
+      color: 'orange'
+    });
+    playSound('success');
+  };
+
+  const handleDeleteCategory = (categoryId) => {
+    const targetCat = categories.find(c => c.id === categoryId);
+    if (!targetCat) return;
+    const catDishes = menuItems.filter(m => m.category === targetCat.name);
+
+    const updatedCats = categories.filter(c => c.id !== categoryId);
+    setCategories(updatedCats);
+    setLocalStore('categories', updatedCats);
+    try {
+      localStorage.setItem('restaurant_categories', JSON.stringify(updatedCats));
+      localStorage.setItem('atmiya_categories', JSON.stringify(updatedCats));
+    } catch (e) {}
+
+    if (catDishes.length > 0) {
+      const fallbackCatName = updatedCats.length > 0 ? updatedCats[0].name : 'General';
+      const updatedDishes = menuItems.map(item => {
+        if (item.category === targetCat.name) {
+          return { ...item, category: fallbackCatName };
+        }
+        return item;
+      });
+      setMenuItems(updatedDishes);
+      setLocalStore('menu_items', updatedDishes);
+      try {
+        localStorage.setItem('atmiya_menu_items', JSON.stringify(updatedDishes));
+      } catch (e) {}
+    }
+
+    window.dispatchEvent(new CustomEvent('atmiya_categories_updated', { detail: { categories: updatedCats } }));
+    window.dispatchEvent(new Event('restaurant_data_updated'));
+
+    try {
+      supabase.from('menu_categories').delete().eq('id', categoryId).then();
+    } catch (e) {}
+
+    recordEmployeeActivity({
+      employeeName: authUser?.name || 'Admin',
+      employeeRole: authUser?.role || 'Admin',
+      tableNumber: 'Menu',
+      actionType: 'CATEGORY_DELETED',
+      details: `Deleted category "${targetCat.name}" (${catDishes.length} dishes reassigned)`,
+      type: 'menu',
+      color: 'rose'
+    });
+    playSound('trash');
+  };
+
+  const handleClearAllMenuAndCategories = () => {
+    setMenuItems([]);
+    setCategories([]);
+    setLocalStore('menu_items', []);
+    setLocalStore('categories', []);
+    try {
+      localStorage.setItem('restaurant_menu_items', '[]');
+      localStorage.setItem('atmiya_menu_items', '[]');
+      localStorage.setItem('restaurant_categories', '[]');
+      localStorage.setItem('atmiya_categories', '[]');
+      localStorage.setItem('restaurant_menu_cleared', 'true');
+    } catch (e) {}
+
+    window.dispatchEvent(new CustomEvent('atmiya_menu_updated', { detail: { items: [] } }));
+    window.dispatchEvent(new CustomEvent('atmiya_categories_updated', { detail: { categories: [] } }));
+    window.dispatchEvent(new Event('restaurant_data_updated'));
+    window.dispatchEvent(new Event('atmiya_data_updated'));
+
+    try {
+      supabase.channel('restaurant_alerts').send({
+        type: 'broadcast',
+        event: 'menu_item_updated',
+        payload: { action: 'clear_all' }
+      });
+    } catch (e) {}
+
+    recordEmployeeActivity({
+      employeeName: authUser?.name || 'Admin Owner',
+      employeeRole: authUser?.role || 'Admin',
+      tableNumber: 'Menu',
+      actionType: 'MENU_CLEARED_ALL',
+      details: 'Cleared all menu dishes and categories for a fresh start',
+      type: 'menu',
+      color: 'rose'
+    });
+    playSound('trash');
+  };
+
+  const handleRestoreSampleMenu = () => {
+    try {
+      localStorage.removeItem('restaurant_menu_cleared');
+    } catch (e) {}
+    loadAuthenticMenuCards();
+    setCategories(AUTHENTIC_CATEGORIES);
+    setMenuItems(AUTHENTIC_MENU_CARD_ITEMS);
+    playSound('success');
+  };
+
   const handleAddEmployee = (empData) => {
     const updated = [...employees, empData];
     setEmployees(updated);
@@ -5202,6 +5403,11 @@ export default function App() {
               onAddMenuItem={handleAddMenuItem}
               onUpdateMenuItem={handleUpdateMenuItem}
               onDeleteMenuItem={handleDeleteMenuItem}
+              onAddCategory={handleAddCategory}
+              onUpdateCategory={handleUpdateCategory}
+              onDeleteCategory={handleDeleteCategory}
+              onClearAllMenuAndCategories={handleClearAllMenuAndCategories}
+              onRestoreSampleMenu={handleRestoreSampleMenu}
               onApplyDiscount={handleApplyDiscount}
               onRemoveDiscount={handleRemoveDiscount}
               currentLang={currentLang}

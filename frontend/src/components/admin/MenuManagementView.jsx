@@ -31,10 +31,14 @@ import {
   Upload,
   Camera,
   Image as ImageIcon,
-  Link as LinkIcon
+  Link as LinkIcon,
+  FolderPlus,
+  Folder,
+  FolderTree,
+  AlertTriangle
 } from 'lucide-react';
 import { getTranslation } from '../../lib/translations';
-import { loadAuthenticMenuCards, clearMenuItems } from '../../lib/appwrite';
+import { loadAuthenticMenuCards, clearMenuItems, clearAllMenuData } from '../../lib/appwrite';
 import { playSound } from '../../lib/sound';
 import { MASTER_CUISINES, getDishCuisine } from '../../lib/cuisines';
 import { API_BASE_URL } from '../../lib/supabase';
@@ -99,6 +103,11 @@ export default function MenuManagementView({
   onAddMenuItem, 
   onUpdateMenuItem, 
   onDeleteMenuItem, 
+  onAddCategory,
+  onUpdateCategory,
+  onDeleteCategory,
+  onClearAllMenuAndCategories,
+  onRestoreSampleMenu,
   onApplyDiscount, 
   onRemoveDiscount, 
   currentLang 
@@ -121,6 +130,25 @@ export default function MenuManagementView({
   const [imagePreview, setImagePreview] = useState('');
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
+  // Category Manager & Clear Modals State
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
+  const [catSearch, setCatSearch] = useState('');
+  const [catForm, setCatForm] = useState({
+    name: '',
+    gujarati: '',
+    icon: '🥞',
+    cuisine: 'south_indian',
+    percentage: 10
+  });
+  const [editingCatId, setEditingCatId] = useState(null);
+
+  // Quick Inline Category in Add / Edit Dish Modals
+  const [showInlineAddCat, setShowInlineAddCat] = useState(false);
+  const [quickCatName, setQuickCatName] = useState('');
+  const [quickCatGujarati, setQuickCatGujarati] = useState('');
+  const [quickCatIcon, setQuickCatIcon] = useState('🥞');
+
   // Inline Quick Price Edit State
   const [inlineEditingId, setInlineEditingId] = useState(null);
   const [inlinePriceVal, setInlinePriceVal] = useState('');
@@ -128,7 +156,7 @@ export default function MenuManagementView({
   const [newItem, setNewItem] = useState({
     name: '',
     gujarati_name: '',
-    category: 'Mysore Dosa',
+    category: '',
     cuisine: 'south_indian',
     price: '',
     description: '',
@@ -389,15 +417,111 @@ export default function MenuManagementView({
   };
 
 
+  const handleSaveCategoryModal = (e) => {
+    e.preventDefault();
+    if (!catForm.name.trim()) return;
+
+    if (editingCatId) {
+      if (onUpdateCategory) {
+        onUpdateCategory(editingCatId, catForm);
+      }
+      setEditingCatId(null);
+    } else {
+      if (onAddCategory) {
+        onAddCategory(catForm);
+      }
+    }
+    setCatForm({
+      name: '',
+      gujarati: '',
+      icon: '🥞',
+      cuisine: 'south_indian',
+      percentage: 10
+    });
+    playSound('success');
+  };
+
+  const handleStartEditCategory = (cat) => {
+    setEditingCatId(cat.id);
+    setCatForm({
+      name: cat.name || '',
+      gujarati: cat.gujarati || cat.gujarati_name || '',
+      icon: cat.icon || '🥞',
+      cuisine: cat.cuisine || 'south_indian',
+      percentage: cat.percentage || 10
+    });
+  };
+
+  const handleDeleteCategoryModal = (cat) => {
+    const dishCount = menuItems.filter(m => m.category === cat.name).length;
+    let msg = `Are you sure you want to delete category "${cat.name}"?`;
+    if (dishCount > 0) {
+      msg += `\nWarning: There are ${dishCount} dishes currently assigned to this category. They will be safely reassigned.`;
+    }
+    if (window.confirm(msg)) {
+      if (onDeleteCategory) {
+        onDeleteCategory(cat.id);
+      }
+      if (selectedCat === cat.name) {
+        setSelectedCat('All');
+      }
+      playSound('trash');
+    }
+  };
+
+  const handleQuickSaveCategory = (target = 'add') => {
+    if (!quickCatName.trim()) return;
+    const newCat = {
+      name: quickCatName.trim(),
+      gujarati: quickCatGujarati.trim() || quickCatName.trim(),
+      icon: quickCatIcon || '🥞',
+      cuisine: 'south_indian',
+      percentage: 10
+    };
+    if (onAddCategory) {
+      onAddCategory(newCat);
+    }
+    if (target === 'add') {
+      setNewItem(prev => ({ ...prev, category: newCat.name }));
+    } else if (target === 'edit') {
+      setEditingItem(prev => prev ? ({ ...prev, category: newCat.name }) : null);
+    }
+    setQuickCatName('');
+    setQuickCatGujarati('');
+    setShowInlineAddCat(false);
+    playSound('success');
+  };
+
+  const handleOpenAddModal = () => {
+    setImagePreview('');
+    setShowInlineAddCat(false);
+    setNewItem({
+      name: '',
+      gujarati_name: '',
+      category: uniqueCategories[0] || '',
+      cuisine: 'south_indian',
+      price: '',
+      description: '',
+      is_veg: true,
+      is_spicy: false,
+      is_available: true,
+      image_url: null
+    });
+    setShowAddModal(true);
+    playSound('click');
+  };
+
   const handleCreateSubmit = (e) => {
     e.preventDefault();
     if (!newItem.name || !newItem.price) return;
     const priceNum = parseFloat(newItem.price);
     const photoUrl = newItem.image_url || imagePreview || null;
     const determinedCuisine = newItem.cuisine || getDishCuisine(newItem);
+    const finalCategory = (newItem.category || uniqueCategories[0] || 'General').trim();
     
     onAddMenuItem({
       ...newItem,
+      category: finalCategory,
       english_name: newItem.name,
       gujarati_name: newItem.gujarati_name || null,
       name: newItem.gujarati_name ? `${newItem.name} (${newItem.gujarati_name})` : newItem.name,
@@ -420,10 +544,11 @@ export default function MenuManagementView({
 
     setShowAddModal(false);
     setImagePreview('');
+    setShowInlineAddCat(false);
     setNewItem({
       name: '',
       gujarati_name: '',
-      category: 'Mysore Dosa',
+      category: uniqueCategories[0] || '',
       cuisine: 'south_indian',
       price: '',
       description: '',
@@ -437,6 +562,7 @@ export default function MenuManagementView({
 
   const handleOpenEditModal = (item) => {
     const photo = item.image_url || item.imageUrl || item.image || item.photo || '';
+    setShowInlineAddCat(false);
     setEditingItem({ 
       ...item, 
       price: item.originalPrice || item.price,
@@ -587,39 +713,47 @@ export default function MenuManagementView({
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
-            onClick={() => {
-              if (window.confirm("Load all 177 authentic dishes from the 7 physical menu cards of Atmiya Dosa Hub?")) {
-                loadAuthenticMenuCards();
-                playSound('success');
-              }
-            }}
-            className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
-            title="Populate all 177 real items from 7 menu cards"
+            onClick={() => { setShowCategoryModal(true); playSound('click'); }}
+            className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-xs active:scale-95"
+            title="Create, edit, or delete menu categories"
           >
-            <Zap className="w-3.5 h-3.5 text-emerald-600" />
-            <span>⚡ Load 7 Menu Cards (177)</span>
+            <FolderTree className="w-3.5 h-3.5 text-orange-400" />
+            <span>📁 Manage Categories ({categories.length || uniqueCategories.length})</span>
           </button>
 
           <button
-            onClick={() => {
-              if (window.confirm("Are you sure you want to clear all menu dishes and start fresh?")) {
-                clearMenuItems();
-                playSound('trash');
-              }
-            }}
-            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-600 border border-slate-200 font-bold text-xs transition flex items-center space-x-1.5 cursor-pointer"
-            title="Clear menu to create all items by yourself"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Clear</span>
-          </button>
-
-          <button
-            onClick={() => { setImagePreview(''); setShowAddModal(true); }}
+            onClick={handleOpenAddModal}
             className="px-4 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-xs shadow-md shadow-orange-600/20 transition flex items-center space-x-1.5 cursor-pointer active:scale-95 shrink-0"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>+ Add New Dish</span>
+          </button>
+
+          <button
+            onClick={() => setShowClearConfirmModal(true)}
+            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-600 border border-slate-200 font-bold text-xs transition flex items-center space-x-1.5 cursor-pointer"
+            title="Delete all dishes and categories to deliver a fresh menu"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+            <span>Clear All Menu</span>
+          </button>
+
+          <button
+            onClick={() => {
+              if (window.confirm("Restore sample 177 authentic dishes and categories?")) {
+                if (onRestoreSampleMenu) {
+                  onRestoreSampleMenu();
+                } else {
+                  loadAuthenticMenuCards();
+                }
+                playSound('success');
+              }
+            }}
+            className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
+            title="Populate sample items for testing or demo"
+          >
+            <Zap className="w-3.5 h-3.5 text-emerald-600" />
+            <span>⚡ Restore Demo Menu</span>
           </button>
         </div>
 
@@ -782,14 +916,88 @@ export default function MenuManagementView({
               </button>
             );
           })}
+          <button
+            onClick={() => { setShowCategoryModal(true); playSound('click'); }}
+            className="px-2.5 py-1 rounded-full text-xs font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 transition cursor-pointer flex items-center space-x-1"
+          >
+            <Plus className="w-3 h-3 stroke-[2.5]" />
+            <span>Manage Categories</span>
+          </button>
         </div>
 
       </div>
 
       {/* 4. MAIN CONTENT AREA (Based on selected View Mode) */}
 
+      {/* If Menu is Completely Empty -> Helpful Fresh Start Welcome Card */}
+      {menuItems.length === 0 ? (
+        <div className="bg-white rounded-3xl p-8 sm:p-12 border-2 border-dashed border-slate-200 text-center shadow-xs my-4 space-y-4">
+          <div className="w-20 h-20 rounded-3xl bg-orange-50 text-orange-500 mx-auto flex items-center justify-center text-4xl shadow-inner">
+            🍽️
+          </div>
+          <div className="max-w-md mx-auto space-y-2">
+            <h3 className="text-lg sm:text-xl font-black text-slate-900 font-heading">
+              Your Menu is Fresh & Clean!
+            </h3>
+            <p className="text-xs text-slate-500 font-medium">
+              All default items and sample categories have been removed. You have a fresh slate to create your custom restaurant categories and dishes, or restore demo items anytime.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => { setShowCategoryModal(true); playSound('click'); }}
+              className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition flex items-center space-x-2 cursor-pointer active:scale-95"
+            >
+              <FolderPlus className="w-4 h-4 text-orange-400" />
+              <span>+ Create Categories</span>
+            </button>
+            <button
+              onClick={handleOpenAddModal}
+              className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-md transition flex items-center space-x-2 cursor-pointer active:scale-95"
+            >
+              <Plus className="w-4 h-4 stroke-[3]" />
+              <span>+ Add First Dish</span>
+            </button>
+            <button
+              onClick={() => {
+                if (window.confirm("Restore sample 177 authentic dishes and categories?")) {
+                  if (onRestoreSampleMenu) {
+                    onRestoreSampleMenu();
+                  } else {
+                    loadAuthenticMenuCards();
+                  }
+                  playSound('success');
+                }
+              }}
+              className="px-3.5 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
+            >
+              <Zap className="w-4 h-4 text-emerald-600" />
+              <span>⚡ Restore Demo Menu</span>
+            </button>
+          </div>
+        </div>
+      ) : filteredItems.length === 0 ? (
+        <div className="bg-white rounded-3xl p-8 border border-slate-200/90 text-center shadow-2xs my-4 space-y-3">
+          <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 mx-auto flex items-center justify-center text-2xl">
+            🔍
+          </div>
+          <h3 className="text-base font-black text-slate-900 font-heading">
+            No dishes match your filter
+          </h3>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+            Try switching category to "All Categories" or clearing your search query.
+          </p>
+          <button
+            onClick={() => { setSelectedCat('All'); setSearch(''); setStatusFilter('all'); }}
+            className="px-3 py-1.5 rounded-xl bg-orange-600 text-white font-bold text-xs hover:bg-orange-700 transition cursor-pointer"
+          >
+            Reset Filters
+          </button>
+        </div>
+      ) : null}
+
       {/* MODE A: DYNAMIC CARDS VIEW (PRO-MAX RESPONSIVE, 0 TEXT OVERFLOW) */}
-      {viewMode === 'cards' && (
+      {menuItems.length > 0 && filteredItems.length > 0 && viewMode === 'cards' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 w-full min-w-0">
             {paginatedItems.map(item => {
@@ -1015,7 +1223,7 @@ export default function MenuManagementView({
       )}
 
       {/* MODE B: ALL-IN-ONE DEMAND & SALES CONTROL TABLE VIEW */}
-      {viewMode === 'table' && (
+      {menuItems.length > 0 && filteredItems.length > 0 && viewMode === 'table' && (
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
@@ -1229,7 +1437,7 @@ export default function MenuManagementView({
       )}
 
       {/* MODE C: FAST 86 STOCK CONTROL (QUICK BATCH TOGGLE) */}
-      {viewMode === 'stock' && (
+      {menuItems.length > 0 && filteredItems.length > 0 && viewMode === 'stock' && (
         <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-2xs space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div>
@@ -1470,27 +1678,95 @@ export default function MenuManagementView({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
-                  <select
-                    value={editingItem.category}
-                    onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700">Category</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowInlineAddCat(!showInlineAddCat)}
+                    className="text-[11px] font-bold text-orange-600 hover:text-orange-700 cursor-pointer flex items-center space-x-0.5"
                   >
-                    {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                    <Plus className="w-3 h-3" />
+                    <span>{showInlineAddCat ? 'Choose Existing' : '+ New Category'}</span>
+                  </button>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Base Price (₹)</label>
-                  <input
-                    type="number"
-                    required
-                    value={editingItem.price}
-                    onChange={(e) => setEditingItem({ ...editingItem, price: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold font-mono focus:outline-none focus:border-orange-500"
-                  />
+                {showInlineAddCat && (
+                  <div className="p-2.5 rounded-xl bg-orange-50/70 border border-orange-200 space-y-2 mb-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder="New Category Name"
+                        value={quickCatName}
+                        onChange={(e) => setQuickCatName(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-lg bg-white border border-orange-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Gujarati (optional)"
+                        value={quickCatGujarati}
+                        onChange={(e) => setQuickCatGujarati(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-lg bg-white border border-orange-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="flex items-center space-x-1 overflow-x-auto py-0.5 no-scrollbar">
+                        {['🥞', '🍜', '🍛', '🫓', '🍕', '🍔', '🥤', '🍲', '🍽️'].map(em => (
+                          <button
+                            key={em}
+                            type="button"
+                            onClick={() => setQuickCatIcon(em)}
+                            className={`w-6 h-6 rounded text-xs flex items-center justify-center cursor-pointer transition ${
+                              quickCatIcon === em ? 'bg-orange-500 text-white scale-110 shadow-xs' : 'bg-white hover:bg-slate-100'
+                            }`}
+                          >
+                            {em}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickSaveCategory('edit')}
+                        className="px-3 py-1 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shrink-0 cursor-pointer shadow-2xs"
+                      >
+                        Add & Select
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <select
+                      value={editingItem.category}
+                      onChange={(e) => {
+                        if (e.target.value === '__add_new__') {
+                          setShowInlineAddCat(true);
+                        } else {
+                          setEditingItem({ ...editingItem, category: e.target.value });
+                        }
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+                    >
+                      {uniqueCategories.length === 0 ? (
+                        <option value="">No categories (click + New)</option>
+                      ) : (
+                        uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)
+                      )}
+                      <option value="__add_new__">+ Create New Category...</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <input
+                      type="number"
+                      required
+                      placeholder="Base Price (₹)"
+                      value={editingItem.price}
+                      onChange={(e) => setEditingItem({ ...editingItem, price: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold font-mono focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1719,28 +1995,95 @@ export default function MenuManagementView({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
-                  <select
-                    value={newItem.category}
-                    onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700">Category</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowInlineAddCat(!showInlineAddCat)}
+                    className="text-[11px] font-bold text-orange-600 hover:text-orange-700 cursor-pointer flex items-center space-x-0.5"
                   >
-                    {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                    <Plus className="w-3 h-3" />
+                    <span>{showInlineAddCat ? 'Choose Existing' : '+ New Category'}</span>
+                  </button>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Price (₹)</label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="180"
-                    value={newItem.price}
-                    onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold font-mono focus:outline-none focus:border-orange-500"
-                  />
+                {showInlineAddCat && (
+                  <div className="p-2.5 rounded-xl bg-orange-50/70 border border-orange-200 space-y-2 mb-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder="New Category Name (e.g. Starters)"
+                        value={quickCatName}
+                        onChange={(e) => setQuickCatName(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-lg bg-white border border-orange-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Gujarati (optional)"
+                        value={quickCatGujarati}
+                        onChange={(e) => setQuickCatGujarati(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-lg bg-white border border-orange-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="flex items-center space-x-1 overflow-x-auto py-0.5 no-scrollbar">
+                        {['🥞', '🍜', '🍛', '🫓', '🍕', '🍔', '🥤', '🍲', '🍽️'].map(em => (
+                          <button
+                            key={em}
+                            type="button"
+                            onClick={() => setQuickCatIcon(em)}
+                            className={`w-6 h-6 rounded text-xs flex items-center justify-center cursor-pointer transition ${
+                              quickCatIcon === em ? 'bg-orange-500 text-white scale-110 shadow-xs' : 'bg-white hover:bg-slate-100'
+                            }`}
+                          >
+                            {em}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickSaveCategory('add')}
+                        className="px-3 py-1 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shrink-0 cursor-pointer shadow-2xs"
+                      >
+                        Add & Select
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <select
+                      value={newItem.category}
+                      onChange={(e) => {
+                        if (e.target.value === '__add_new__') {
+                          setShowInlineAddCat(true);
+                        } else {
+                          setNewItem({ ...newItem, category: e.target.value });
+                        }
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+                    >
+                      {uniqueCategories.length === 0 ? (
+                        <option value="">No categories (click + New)</option>
+                      ) : (
+                        uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)
+                      )}
+                      <option value="__add_new__">+ Create New Category...</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <input
+                      type="number"
+                      required
+                      placeholder="Price in ₹"
+                      value={newItem.price}
+                      onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold font-mono focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1922,6 +2265,275 @@ export default function MenuManagementView({
                 )}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 8. CATEGORY MANAGEMENT MODAL */}
+      {showCategoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-2xl w-full border border-slate-200 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-slate-900">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center font-bold">
+                  <FolderTree className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 font-heading">
+                    Menu Category Manager
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Create, edit, or delete categories. Updates the customer QR menu instantly.
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setShowCategoryModal(false); setEditingCatId(null); }}
+                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Add / Edit Category Form */}
+            <form onSubmit={handleSaveCategoryModal} className="p-4 rounded-2xl bg-orange-50/60 border border-orange-200/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-orange-950 uppercase tracking-wider flex items-center gap-1.5">
+                  {editingCatId ? <Edit2 className="w-3.5 h-3.5 text-orange-600" /> : <Plus className="w-3.5 h-3.5 text-orange-600" />}
+                  <span>{editingCatId ? 'Edit Category' : 'Create New Category'}</span>
+                </span>
+                {editingCatId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCatId(null);
+                      setCatForm({ name: '', gujarati: '', icon: '🥞', cuisine: 'south_indian', percentage: 10 });
+                    }}
+                    className="text-[11px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
+                  >
+                    Cancel Edit
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Category Name (English) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Special Dosa, Starters, Pizzas..."
+                    value={catForm.name}
+                    onChange={(e) => setCatForm({ ...catForm, name: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Gujarati / Regional Name (વિકલ્પિક)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="દા.ત. સ્પેશિયલ ઢોસા, સ્ટાર્ટર..."
+                    value={catForm.gujarati}
+                    onChange={(e) => setCatForm({ ...catForm, gujarati: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+                  />
+                </div>
+              </div>
+
+              {/* Icon / Emoji Selector */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Category Icon / Emoji
+                </label>
+                <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-xl bg-white border border-slate-200 mb-2">
+                  {['🥞', '🍛', '🍜', '🫓', '🍕', '🍔', '🥪', '🥟', '🍲', '🥗', '🍟', '🥤', '☕', '🍨', '🍰', '🍹', '🥘', '🍱', '🥣', '🍽️'].map(emoji => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => setCatForm({ ...catForm, icon: emoji })}
+                      className={`w-7 h-7 rounded-lg text-sm flex items-center justify-center transition cursor-pointer ${
+                        catForm.icon === emoji ? 'bg-orange-500 text-white shadow-xs scale-110' : 'hover:bg-slate-100'
+                      }`}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cuisine Assignment */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    QR Menu Cuisine Section
+                  </label>
+                  <select
+                    value={catForm.cuisine || 'south_indian'}
+                    onChange={(e) => setCatForm({ ...catForm, cuisine: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+                  >
+                    <option value="south_indian">South Indian (દક્ષિણ ભારતીય)</option>
+                    <option value="chinese">Indo-Chinese (ચાઈનીઝ)</option>
+                    <option value="gujarati">Pav Bhaji & Gujarati (ગુજરાતી)</option>
+                    <option value="beverages">Coolers & Beverages (પીણાં)</option>
+                    <option value="snacks">Snacks & Fast Food</option>
+                    <option value="desserts">Desserts & Sweets</option>
+                    <option value="general">General / Other</option>
+                  </select>
+                </div>
+
+                <div className="flex items-end">
+                  <button
+                    type="submit"
+                    className="w-full py-2 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-md transition flex items-center justify-center space-x-1.5 cursor-pointer active:scale-95"
+                  >
+                    <Check className="w-4 h-4 stroke-[2.5]" />
+                    <span>{editingCatId ? 'Update Category' : 'Save Category'}</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            {/* Existing Categories List */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-slate-900 font-heading">
+                  All Existing Categories ({uniqueCategories.length})
+                </span>
+                {uniqueCategories.length > 5 && (
+                  <div className="relative w-44">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Filter categories..."
+                      value={catSearch}
+                      onChange={(e) => setCatSearch(e.target.value)}
+                      className="w-full pl-7 pr-2 py-1 rounded-lg bg-slate-50 border border-slate-200 text-[11px] font-semibold focus:outline-none focus:bg-white"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {uniqueCategories.length === 0 ? (
+                <div className="p-6 rounded-2xl bg-slate-50 border border-dashed border-slate-200 text-center">
+                  <p className="text-xs text-slate-500 font-medium">
+                    No categories found. Create your first category above to begin adding dishes!
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
+                  {uniqueCategories
+                    .filter(cName => !catSearch || cName.toLowerCase().includes(catSearch.toLowerCase()))
+                    .map(catName => {
+                      const foundObj = categories.find(c => c.name === catName) || {
+                        id: `cat_derived_${catName}`,
+                        name: catName,
+                        gujarati: catName,
+                        icon: '🥞'
+                      };
+                      const dishCount = menuItems.filter(m => m.category === catName).length;
+                      return (
+                        <div
+                          key={foundObj.id || catName}
+                          className="p-3 rounded-2xl bg-white border border-slate-200 hover:border-orange-300 shadow-2xs flex items-center justify-between gap-2 transition"
+                        >
+                          <div className="flex items-center space-x-2.5 min-w-0">
+                            <span className="w-8 h-8 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center text-base shrink-0 border border-orange-200/50">
+                              {foundObj.icon || '🥞'}
+                            </span>
+                            <div className="min-w-0">
+                              <span className="text-xs font-black text-slate-900 block truncate font-heading">
+                                {foundObj.name}
+                              </span>
+                              <span className="text-[10px] text-slate-500 block truncate">
+                                {foundObj.gujarati && foundObj.gujarati !== foundObj.name ? `${foundObj.gujarati} • ` : ''}
+                                <span className="font-mono font-bold text-orange-600">{dishCount} dishes</span>
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditCategory(foundObj)}
+                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-orange-50 text-slate-600 hover:text-orange-600 transition cursor-pointer"
+                              title="Edit category"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCategoryModal(foundObj)}
+                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                              title="Delete category"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* 9. CLEAR ALL MENU & CATEGORIES CONFIRMATION MODAL */}
+      {showClearConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4 text-slate-900">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 mx-auto flex items-center justify-center">
+              <AlertTriangle className="w-6 h-6 stroke-[2.5]" />
+            </div>
+
+            <div className="text-center space-y-1.5">
+              <h3 className="text-base font-black text-slate-900 font-heading">
+                Clear All Dishes & Categories?
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                This will delete all current menu items ({menuItems.length}) and custom categories ({uniqueCategories.length}) from the system so you can deliver a 100% fresh menu to your client.
+              </p>
+              <div className="p-2.5 rounded-xl bg-amber-50 text-amber-900 text-[11px] font-medium border border-amber-200/80 mt-2 text-left">
+                💡 <strong>Good to know:</strong> You can always reload the full 177 sample dishes and categories anytime using the <strong>"Restore Demo Menu"</strong> button.
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowClearConfirmModal(false)}
+                className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onClearAllMenuAndCategories) {
+                    onClearAllMenuAndCategories();
+                  } else {
+                    clearAllMenuData();
+                  }
+                  setSelectedCat('All');
+                  setShowClearConfirmModal(false);
+                  playSound('trash');
+                }}
+                className="flex-1 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition flex items-center justify-center space-x-1.5 cursor-pointer active:scale-95"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Yes, Clear Everything</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

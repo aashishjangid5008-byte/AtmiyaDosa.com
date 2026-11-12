@@ -216,7 +216,7 @@ export default function CustomerMenu({
   // 'landing' (Interactive 3D Food Showcase) -> 'cuisines' (4 Master Cuisines Grid) -> 'dishes' (Zomato-Style Dishes Stream)
   const [menuStage, setMenuStage] = useState(() => {
     try {
-      if (sessionStorage.getItem('atmiya_seen_landing') === 'true') {
+      if (sessionStorage.getItem('atmiya_seen_landing') === 'true' || (!menuItems || menuItems.length === 0)) {
         return 'dishes';
       }
     } catch {}
@@ -441,12 +441,12 @@ export default function CustomerMenu({
     }
   }, [placedOrderId, activeTableOrder, settledSessionReceipt, orders, currentTable]);
 
-  // If table already has an active order running in the kitchen, default to dishes view
+  // If table already has an active order running in the kitchen or menu is empty, default to dishes view
   React.useEffect(() => {
-    if (activeTableOrder && menuStage === 'landing') {
+    if ((activeTableOrder || !menuItems || menuItems.length === 0) && menuStage === 'landing') {
       setMenuStage('dishes');
     }
-  }, [activeTableOrder]);
+  }, [activeTableOrder, menuItems, menuStage]);
 
   // Handle mobile hardware back button and browser back navigation inside customer menu
   // Prevents jumping out to the staff login screen when customer hits back
@@ -512,9 +512,12 @@ export default function CustomerMenu({
       ? menuItems 
       : menuItems.filter(m => getDishCuisine(m) === selectedCuisine)
     ).filter(m => !isWaterItem(m));
-    const uniqueCats = Array.from(new Set(pool.map(m => m.category).filter(Boolean)));
+    const uniqueCats = Array.from(new Set([
+      ...(categories || []).map(c => c.name),
+      ...pool.map(m => m.category)
+    ].filter(Boolean)));
     return ['All', ...uniqueCats];
-  }, [menuItems, selectedCuisine]);
+  }, [menuItems, selectedCuisine, categories]);
 
   // Filter items
   const filteredItems = menuItems.filter(item => {
@@ -1299,8 +1302,38 @@ export default function CustomerMenu({
         )}
 
         {/* Menu Items - Zomato / Swiggy Style Mobile-Ready Stream */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-          {sortedItems.map(item => {
+        {sortedItems.length === 0 ? (
+          <div className="bg-white rounded-3xl p-8 border border-slate-200/90 text-center shadow-2xs my-6 space-y-3">
+            <div className="w-16 h-16 rounded-2xl bg-orange-50 text-orange-500 mx-auto flex items-center justify-center text-3xl shadow-inner">
+              🍽️
+            </div>
+            <h3 className="text-base font-black text-slate-900 font-heading">
+              {searchQuery || selectedCategory !== 'All' ? 'No dishes match your filter' : 'Menu Under Preparation'}
+            </h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+              {searchQuery || selectedCategory !== 'All'
+                ? 'Try selecting "All" categories or clearing your search keywords.'
+                : 'The kitchen is preparing fresh dishes. Please ask your table server or check back in a moment!'}
+            </p>
+            {(searchQuery || selectedCategory !== 'All' || selectedCuisine !== 'all' || jainOnly || spicyOnly) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedCategory('All');
+                  setSelectedCuisine('all');
+                  setJainOnly(false);
+                  setSpicyOnly(false);
+                }}
+                className="px-4 py-2 rounded-xl bg-orange-600 text-white font-bold text-xs hover:bg-orange-700 transition cursor-pointer shadow-xs"
+              >
+                View All Dishes
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+            {sortedItems.map(item => {
             const qty = getItemCartQty(item.id);
             const currentItemPrice = item.finalPrice || item.price;
             const originalItemPrice = item.originalPrice || item.price;
@@ -1520,7 +1553,8 @@ export default function CustomerMenu({
               </div>
             );
           })}
-        </div>
+          </div>
+        )}
 
       </main>
 

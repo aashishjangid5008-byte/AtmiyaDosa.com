@@ -8,10 +8,9 @@ export { supabase, RESTAURANT_ID };
 export const getLocalStore = (key, fallback) => {
   try {
     const raw = localStorage.getItem(`restaurant_${key}`) || localStorage.getItem(`atmiya_${key}`);
-    if (!raw) return fallback;
+    if (raw === null || raw === undefined) return fallback;
     const parsed = JSON.parse(raw);
     if (key === 'menu_items' && Array.isArray(parsed)) {
-      if (parsed.length === 0) return fallback;
       return parsed.map(dish => {
         const photo = dish.image_url || dish.imageUrl || dish.image || dish.photo || null;
         return {
@@ -24,7 +23,7 @@ export const getLocalStore = (key, fallback) => {
       });
     }
     if (key === 'categories' && Array.isArray(parsed)) {
-      if (parsed.length === 0) return fallback;
+      return parsed;
     }
     return parsed;
   } catch (e) {
@@ -178,23 +177,46 @@ import { AUTHENTIC_CATEGORIES, AUTHENTIC_MENU_CARD_ITEMS } from './authenticMenu
 
 export { AUTHENTIC_CATEGORIES, AUTHENTIC_MENU_CARD_ITEMS };
 
-export const INITIAL_CATEGORIES = AUTHENTIC_CATEGORIES;
-export const INITIAL_MENU_ITEMS = AUTHENTIC_MENU_CARD_ITEMS;
+export const INITIAL_CATEGORIES = [];
+export const INITIAL_MENU_ITEMS = [];
 
 // 1-Click Load Authentic 7 Menu Cards or Clear Menu for Manual Creation
 export const loadAuthenticMenuCards = () => {
   setLocalStore('categories', AUTHENTIC_CATEGORIES);
   setLocalStore('menu_items', AUTHENTIC_MENU_CARD_ITEMS);
+  try {
+    localStorage.removeItem('restaurant_menu_cleared');
+  } catch (e) {}
   window.dispatchEvent(new Event('restaurant_data_updated'));
-  recordEmployeeActivity('DARSHIT RANA', 'Admin', 'MENU_SEEDED', 'Loaded all 177 authentic dishes from the 7 restaurant menu cards (ATM0001 - ATM0177, pure-veg, zero stock photos)');
+  recordEmployeeActivity('Admin Owner', 'Admin', 'MENU_SEEDED', 'Loaded all 177 sample dishes from the 7 menu cards');
   return AUTHENTIC_MENU_CARD_ITEMS;
 };
 
 export const clearMenuItems = () => {
   setLocalStore('menu_items', []);
+  try {
+    localStorage.setItem('restaurant_menu_items', '[]');
+    localStorage.setItem('atmiya_menu_items', '[]');
+  } catch (e) {}
   window.dispatchEvent(new Event('restaurant_data_updated'));
-  recordEmployeeActivity('DARSHIT RANA', 'Admin', 'MENU_CLEARED', 'Cleared all menu items so user can create their custom menu from scratch');
+  recordEmployeeActivity('Admin Owner', 'Admin', 'MENU_CLEARED', 'Cleared all menu items');
   return [];
+};
+
+export const clearAllMenuData = () => {
+  setLocalStore('menu_items', []);
+  setLocalStore('categories', []);
+  try {
+    localStorage.setItem('restaurant_menu_items', '[]');
+    localStorage.setItem('atmiya_menu_items', '[]');
+    localStorage.setItem('restaurant_categories', '[]');
+    localStorage.setItem('atmiya_categories', '[]');
+    localStorage.setItem('restaurant_menu_cleared', 'true');
+  } catch (e) {}
+  window.dispatchEvent(new Event('restaurant_data_updated'));
+  window.dispatchEvent(new Event('atmiya_data_updated'));
+  recordEmployeeActivity('Admin Owner', 'Admin', 'MENU_CLEARED_ALL', 'Cleared all menu items and categories for fresh menu creation');
+  return { menu_items: [], categories: [] };
 };
 
 // Real Orders (Cleaned of all demo data - only real orders from Supabase/QR)
