@@ -95,6 +95,49 @@ export const FOOD_PHOTO_PRESETS = [
   }
 ];
 
+export const CATEGORY_PHOTO_PRESETS = [
+  {
+    name: 'Dosa & South Indian',
+    cuisine: 'south_indian',
+    url: 'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=400&auto=format&fit=crop&q=80'
+  },
+  {
+    name: 'Pav Bhaji & Pulao',
+    cuisine: 'gujarati',
+    url: 'https://images.unsplash.com/photo-1606491956689-2ea866880c84?w=400&auto=format&fit=crop&q=80'
+  },
+  {
+    name: 'Indo-Chinese Wok',
+    cuisine: 'chinese',
+    url: 'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=400&auto=format&fit=crop&q=80'
+  },
+  {
+    name: 'Coolers & Beverages',
+    cuisine: 'beverages',
+    url: 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=400&auto=format&fit=crop&q=80'
+  },
+  {
+    name: 'Crispy Starters',
+    cuisine: 'snacks',
+    url: 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?w=400&auto=format&fit=crop&q=80'
+  },
+  {
+    name: 'Pizzas & Breads',
+    cuisine: 'snacks',
+    url: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400&auto=format&fit=crop&q=80'
+  },
+  {
+    name: 'Desserts & Sweets',
+    cuisine: 'desserts',
+    url: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=400&auto=format&fit=crop&q=80'
+  },
+  {
+    name: 'Special Combos',
+    cuisine: 'general',
+    url: 'https://images.unsplash.com/photo-1610057099443-fde8c4d50f91?w=400&auto=format&fit=crop&q=80'
+  }
+];
+
 export default function MenuManagementView({ 
   categories = [], 
   menuItems = [], 
@@ -134,10 +177,12 @@ export default function MenuManagementView({
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [catSearch, setCatSearch] = useState('');
+  const [catImagePreview, setCatImagePreview] = useState('');
+  const [isUploadingCatPhoto, setIsUploadingCatPhoto] = useState(false);
   const [catForm, setCatForm] = useState({
     name: '',
     gujarati: '',
-    icon: '🥞',
+    image_url: null,
     cuisine: 'south_indian',
     percentage: 10
   });
@@ -147,7 +192,7 @@ export default function MenuManagementView({
   const [showInlineAddCat, setShowInlineAddCat] = useState(false);
   const [quickCatName, setQuickCatName] = useState('');
   const [quickCatGujarati, setQuickCatGujarati] = useState('');
-  const [quickCatIcon, setQuickCatIcon] = useState('🥞');
+  const [quickCatImage, setQuickCatImage] = useState(null);
 
   // Inline Quick Price Edit State
   const [inlineEditingId, setInlineEditingId] = useState(null);
@@ -417,36 +462,88 @@ export default function MenuManagementView({
   };
 
 
+  const handleCatImageFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsUploadingCatPhoto(true);
+      try {
+        const compressed = await compressImage(file, 600, 600, 0.78);
+        if (compressed) {
+          setCatImagePreview(compressed);
+          setCatForm(prev => ({ ...prev, image_url: compressed }));
+          playSound('click');
+
+          try {
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await fetch(`${API_BASE_URL}/menu/upload-photo`, {
+              method: 'POST',
+              body: formData
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data?.url) {
+                setCatImagePreview(data.url);
+                setCatForm(prev => ({ ...prev, image_url: data.url }));
+              }
+            }
+          } catch (uploadErr) {
+            console.warn('[CATEGORY] Server upload fallback to compressed base64:', uploadErr);
+          }
+        }
+      } catch (err) {
+        console.error('Category photo upload error:', err);
+      } finally {
+        setIsUploadingCatPhoto(false);
+      }
+    }
+  };
+
   const handleSaveCategoryModal = (e) => {
     e.preventDefault();
     if (!catForm.name.trim()) return;
 
+    const finalPhoto = catForm.image_url || catImagePreview || null;
+    const payload = {
+      ...catForm,
+      image_url: finalPhoto,
+      imageUrl: finalPhoto,
+      image: finalPhoto,
+      photo: finalPhoto,
+      icon: catForm.icon || 'Utensils'
+    };
+
     if (editingCatId) {
       if (onUpdateCategory) {
-        onUpdateCategory(editingCatId, catForm);
+        onUpdateCategory(editingCatId, payload);
       }
       setEditingCatId(null);
     } else {
       if (onAddCategory) {
-        onAddCategory(catForm);
+        onAddCategory(payload);
       }
     }
     setCatForm({
       name: '',
       gujarati: '',
-      icon: '🥞',
+      image_url: null,
+      icon: 'Utensils',
       cuisine: 'south_indian',
       percentage: 10
     });
+    setCatImagePreview('');
     playSound('success');
   };
 
   const handleStartEditCategory = (cat) => {
     setEditingCatId(cat.id);
+    const photoUrl = cat.image_url || cat.imageUrl || cat.photo || cat.image || '';
+    setCatImagePreview(photoUrl);
     setCatForm({
       name: cat.name || '',
       gujarati: cat.gujarati || cat.gujarati_name || '',
-      icon: cat.icon || '🥞',
+      image_url: photoUrl,
+      icon: cat.icon || 'Utensils',
       cuisine: cat.cuisine || 'south_indian',
       percentage: cat.percentage || 10
     });
@@ -471,10 +568,15 @@ export default function MenuManagementView({
 
   const handleQuickSaveCategory = (target = 'add') => {
     if (!quickCatName.trim()) return;
+    const finalPhoto = quickCatImage || null;
     const newCat = {
       name: quickCatName.trim(),
       gujarati: quickCatGujarati.trim() || quickCatName.trim(),
-      icon: quickCatIcon || '🥞',
+      image_url: finalPhoto,
+      imageUrl: finalPhoto,
+      image: finalPhoto,
+      photo: finalPhoto,
+      icon: 'Utensils',
       cuisine: 'south_indian',
       percentage: 10
     };
@@ -488,6 +590,7 @@ export default function MenuManagementView({
     }
     setQuickCatName('');
     setQuickCatGujarati('');
+    setQuickCatImage(null);
     setShowInlineAddCat(false);
     playSound('success');
   };
@@ -1692,42 +1795,43 @@ export default function MenuManagementView({
                 </div>
 
                 {showInlineAddCat && (
-                  <div className="p-2.5 rounded-xl bg-orange-50/70 border border-orange-200 space-y-2 mb-2">
+                  <div className="p-3 rounded-2xl bg-orange-50/80 border border-orange-200/90 space-y-2 mb-2 shadow-2xs">
                     <div className="grid grid-cols-2 gap-2">
                       <input
                         type="text"
-                        placeholder="New Category Name"
+                        placeholder="Category Name (e.g. Starters)"
                         value={quickCatName}
                         onChange={(e) => setQuickCatName(e.target.value)}
-                        className="px-2.5 py-1.5 rounded-lg bg-white border border-orange-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+                        className="px-2.5 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
                       />
                       <input
                         type="text"
                         placeholder="Gujarati (optional)"
                         value={quickCatGujarati}
                         onChange={(e) => setQuickCatGujarati(e.target.value)}
-                        className="px-2.5 py-1.5 rounded-lg bg-white border border-orange-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+                        className="px-2.5 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
                       />
                     </div>
-                    <div className="flex items-center justify-between gap-1">
-                      <div className="flex items-center space-x-1 overflow-x-auto py-0.5 no-scrollbar">
-                        {['🥞', '🍜', '🍛', '🫓', '🍕', '🍔', '🥤', '🍲', '🍽️'].map(em => (
+                    <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                      <div className="flex items-center space-x-1.5 overflow-x-auto py-0.5 no-scrollbar">
+                        {CATEGORY_PHOTO_PRESETS.slice(0, 4).map(p => (
                           <button
-                            key={em}
+                            key={p.name}
                             type="button"
-                            onClick={() => setQuickCatIcon(em)}
-                            className={`w-6 h-6 rounded text-xs flex items-center justify-center cursor-pointer transition ${
-                              quickCatIcon === em ? 'bg-orange-500 text-white scale-110 shadow-xs' : 'bg-white hover:bg-slate-100'
+                            onClick={() => setQuickCatImage(p.url)}
+                            className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center space-x-1 cursor-pointer transition shrink-0 ${
+                              quickCatImage === p.url ? 'bg-orange-500 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
                             }`}
                           >
-                            {em}
+                            <img src={p.url} alt="" className="w-3.5 h-3.5 rounded object-cover" />
+                            <span className="truncate max-w-[65px]">{p.name.split(' ')[0]}</span>
                           </button>
                         ))}
                       </div>
                       <button
                         type="button"
                         onClick={() => handleQuickSaveCategory('edit')}
-                        className="px-3 py-1 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shrink-0 cursor-pointer shadow-2xs"
+                        className="px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shrink-0 cursor-pointer shadow-2xs"
                       >
                         Add & Select
                       </button>
@@ -2009,42 +2113,43 @@ export default function MenuManagementView({
                 </div>
 
                 {showInlineAddCat && (
-                  <div className="p-2.5 rounded-xl bg-orange-50/70 border border-orange-200 space-y-2 mb-2">
+                  <div className="p-3 rounded-2xl bg-orange-50/80 border border-orange-200/90 space-y-2 mb-2 shadow-2xs">
                     <div className="grid grid-cols-2 gap-2">
                       <input
                         type="text"
-                        placeholder="New Category Name (e.g. Starters)"
+                        placeholder="Category Name (e.g. Starters)"
                         value={quickCatName}
                         onChange={(e) => setQuickCatName(e.target.value)}
-                        className="px-2.5 py-1.5 rounded-lg bg-white border border-orange-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+                        className="px-2.5 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
                       />
                       <input
                         type="text"
                         placeholder="Gujarati (optional)"
                         value={quickCatGujarati}
                         onChange={(e) => setQuickCatGujarati(e.target.value)}
-                        className="px-2.5 py-1.5 rounded-lg bg-white border border-orange-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+                        className="px-2.5 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
                       />
                     </div>
-                    <div className="flex items-center justify-between gap-1">
-                      <div className="flex items-center space-x-1 overflow-x-auto py-0.5 no-scrollbar">
-                        {['🥞', '🍜', '🍛', '🫓', '🍕', '🍔', '🥤', '🍲', '🍽️'].map(em => (
+                    <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                      <div className="flex items-center space-x-1.5 overflow-x-auto py-0.5 no-scrollbar">
+                        {CATEGORY_PHOTO_PRESETS.slice(0, 4).map(p => (
                           <button
-                            key={em}
+                            key={p.name}
                             type="button"
-                            onClick={() => setQuickCatIcon(em)}
-                            className={`w-6 h-6 rounded text-xs flex items-center justify-center cursor-pointer transition ${
-                              quickCatIcon === em ? 'bg-orange-500 text-white scale-110 shadow-xs' : 'bg-white hover:bg-slate-100'
+                            onClick={() => setQuickCatImage(p.url)}
+                            className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center space-x-1 cursor-pointer transition shrink-0 ${
+                              quickCatImage === p.url ? 'bg-orange-500 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
                             }`}
                           >
-                            {em}
+                            <img src={p.url} alt="" className="w-3.5 h-3.5 rounded object-cover" />
+                            <span className="truncate max-w-[65px]">{p.name.split(' ')[0]}</span>
                           </button>
                         ))}
                       </div>
                       <button
                         type="button"
                         onClick={() => handleQuickSaveCategory('add')}
-                        className="px-3 py-1 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shrink-0 cursor-pointer shadow-2xs"
+                        className="px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shrink-0 cursor-pointer shadow-2xs"
                       >
                         Add & Select
                       </button>
@@ -2298,18 +2403,19 @@ export default function MenuManagementView({
             </div>
 
             {/* Add / Edit Category Form */}
-            <form onSubmit={handleSaveCategoryModal} className="p-4 rounded-2xl bg-orange-50/60 border border-orange-200/80 space-y-3">
+            <form onSubmit={handleSaveCategoryModal} className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-50/95 via-orange-50/30 to-slate-50/95 border border-slate-200/90 shadow-2xs space-y-3.5">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-black text-orange-950 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5 font-heading">
                   {editingCatId ? <Edit2 className="w-3.5 h-3.5 text-orange-600" /> : <Plus className="w-3.5 h-3.5 text-orange-600" />}
-                  <span>{editingCatId ? 'Edit Category' : 'Create New Category'}</span>
+                  <span>{editingCatId ? `Edit Category: ${catForm.name || ''}` : 'Add New Menu Category'}</span>
                 </span>
                 {editingCatId && (
                   <button
                     type="button"
                     onClick={() => {
                       setEditingCatId(null);
-                      setCatForm({ name: '', gujarati: '', icon: '🥞', cuisine: 'south_indian', percentage: 10 });
+                      setCatForm({ name: '', gujarati: '', image_url: null, icon: 'Utensils', cuisine: 'south_indian', percentage: 10 });
+                      setCatImagePreview('');
                     }}
                     className="text-[11px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
                   >
@@ -2329,7 +2435,7 @@ export default function MenuManagementView({
                     placeholder="e.g. Special Dosa, Starters, Pizzas..."
                     value={catForm.name}
                     onChange={(e) => setCatForm({ ...catForm, name: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
                   />
                 </div>
 
@@ -2342,34 +2448,145 @@ export default function MenuManagementView({
                     placeholder="દા.ત. સ્પેશિયલ ઢોસા, સ્ટાર્ટર..."
                     value={catForm.gujarati}
                     onChange={(e) => setCatForm({ ...catForm, gujarati: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
                   />
                 </div>
               </div>
 
-              {/* Icon / Emoji Selector */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Category Icon / Emoji
-                </label>
-                <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-xl bg-white border border-slate-200 mb-2">
-                  {['🥞', '🍛', '🍜', '🫓', '🍕', '🍔', '🥪', '🥟', '🍲', '🥗', '🍟', '🥤', '☕', '🍨', '🍰', '🍹', '🥘', '🍱', '🥣', '🍽️'].map(emoji => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      onClick={() => setCatForm({ ...catForm, icon: emoji })}
-                      className={`w-7 h-7 rounded-lg text-sm flex items-center justify-center transition cursor-pointer ${
-                        catForm.icon === emoji ? 'bg-orange-500 text-white shadow-xs scale-110' : 'hover:bg-slate-100'
-                      }`}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
+              {/* Category Photo & Visual (Replaced Emoji Selector) */}
+              <div className="space-y-2 pt-0.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-slate-700">
+                    Category Photo / Thumbnail (for Customer QR Menu & Admin)
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-medium">Auto-compressed JPG / PNG</span>
+                </div>
+
+                {catImagePreview ? (
+                  <div className="flex items-center space-x-3.5 p-3 rounded-2xl bg-white border border-slate-200 shadow-2xs">
+                    <img 
+                      src={catImagePreview} 
+                      alt="Category preview" 
+                      className="w-16 h-16 rounded-xl object-cover shrink-0 border border-slate-200 shadow-2xs"
+                      onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&auto=format&fit=crop&q=80'; }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-slate-900 flex items-center space-x-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>Category Photo Ready</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        Appears inside category pills on customer phone QR menu & dashboard
+                      </p>
+                      <div className="flex items-center space-x-3 mt-1.5">
+                        <label 
+                          htmlFor="cat-photo-file-input"
+                          className="inline-flex items-center space-x-1 text-[11px] font-bold text-orange-600 hover:text-orange-700 cursor-pointer"
+                        >
+                          <Camera className="w-3 h-3" />
+                          <span>Change Photo</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCatImagePreview('');
+                            setCatForm(prev => ({ ...prev, image_url: null }));
+                          }}
+                          className="text-[11px] font-bold text-rose-500 hover:text-rose-700 cursor-pointer"
+                        >
+                          Remove Photo
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-slate-200 hover:border-orange-400 rounded-2xl p-3.5 bg-white hover:bg-orange-50/20 transition-all text-center">
+                    <div className="flex flex-col items-center justify-center space-y-1.5">
+                      <div className="w-9 h-9 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
+                        <Camera className="w-4 h-4" />
+                      </div>
+                      <div className="space-y-1">
+                        <label 
+                          htmlFor="cat-photo-file-input"
+                          className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-black shadow-xs cursor-pointer active:scale-95 transition"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Upload Category Photo</span>
+                        </label>
+                        <p className="text-[10px] text-slate-400">
+                          Take camera photo or choose from device gallery (auto-optimized)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <input
+                  type="file"
+                  id="cat-photo-file-input"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleCatImageFileChange}
+                />
+
+                {/* Direct Image URL input */}
+                <div className="relative pt-0.5">
+                  <input
+                    type="url"
+                    placeholder="Or paste web image URL (https://...)"
+                    value={catForm.image_url && !catForm.image_url.startsWith('data:') ? catForm.image_url : ''}
+                    onChange={(e) => {
+                      const val = e.target.value.trim();
+                      setCatForm(prev => ({ ...prev, image_url: val || null }));
+                      setCatImagePreview(val || '');
+                    }}
+                    className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 text-[11px] font-medium text-slate-700 focus:outline-none focus:border-orange-500 bg-white"
+                  />
+                  <LinkIcon className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 mt-0.5" />
+                </div>
+
+                {/* 1-Click HD Food Photo Presets */}
+                <div className="space-y-1.5 pt-1">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Or Pick 1-Click HD Category Photo Preset
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    {CATEGORY_PHOTO_PRESETS.map(preset => {
+                      const isSel = (catForm.image_url === preset.url || catImagePreview === preset.url);
+                      return (
+                        <button
+                          key={preset.name}
+                          type="button"
+                          onClick={() => {
+                            setCatImagePreview(preset.url);
+                            setCatForm(prev => ({ 
+                              ...prev, 
+                              image_url: preset.url,
+                              cuisine: preset.cuisine || prev.cuisine 
+                            }));
+                            playSound('click');
+                          }}
+                          className={`p-1.5 rounded-xl text-left border transition cursor-pointer flex items-center space-x-2 ${
+                            isSel
+                              ? 'bg-orange-50 border-orange-500 ring-1 ring-orange-400 text-orange-950 font-bold'
+                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+                          }`}
+                        >
+                          <img 
+                            src={preset.url} 
+                            alt={preset.name} 
+                            className="w-7 h-7 rounded-lg object-cover shrink-0" 
+                          />
+                          <span className="text-[10px] font-bold truncate block">{preset.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
-              {/* Cuisine Assignment */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Cuisine Assignment & Submit */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
                     QR Menu Cuisine Section
@@ -2392,10 +2609,20 @@ export default function MenuManagementView({
                 <div className="flex items-end">
                   <button
                     type="submit"
-                    className="w-full py-2 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-md transition flex items-center justify-center space-x-1.5 cursor-pointer active:scale-95"
+                    disabled={isUploadingCatPhoto}
+                    className="w-full py-2.5 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-md transition flex items-center justify-center space-x-1.5 cursor-pointer active:scale-95 disabled:opacity-50"
                   >
-                    <Check className="w-4 h-4 stroke-[2.5]" />
-                    <span>{editingCatId ? 'Update Category' : 'Save Category'}</span>
+                    {isUploadingCatPhoto ? (
+                      <>
+                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        <span>Saving Photo...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4 stroke-[2.5]" />
+                        <span>{editingCatId ? 'Update Category' : 'Save Category'}</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -2436,7 +2663,7 @@ export default function MenuManagementView({
                         id: `cat_derived_${catName}`,
                         name: catName,
                         gujarati: catName,
-                        icon: '🥞'
+                        icon: 'Utensils'
                       };
                       const dishCount = menuItems.filter(m => m.category === catName).length;
                       return (
@@ -2445,9 +2672,18 @@ export default function MenuManagementView({
                           className="p-3 rounded-2xl bg-white border border-slate-200 hover:border-orange-300 shadow-2xs flex items-center justify-between gap-2 transition"
                         >
                           <div className="flex items-center space-x-2.5 min-w-0">
-                            <span className="w-8 h-8 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center text-base shrink-0 border border-orange-200/50">
-                              {foundObj.icon || '🥞'}
-                            </span>
+                            {foundObj.image_url ? (
+                              <img
+                                src={foundObj.image_url}
+                                alt={foundObj.name}
+                                className="w-10 h-10 rounded-xl object-cover shrink-0 border border-slate-200 shadow-2xs"
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                              />
+                            ) : (
+                              <span className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center text-base shrink-0 border border-orange-200/50">
+                                <FolderTree className="w-4 h-4" />
+                              </span>
+                            )}
                             <div className="min-w-0">
                               <span className="text-xs font-black text-slate-900 block truncate font-heading">
                                 {foundObj.name}

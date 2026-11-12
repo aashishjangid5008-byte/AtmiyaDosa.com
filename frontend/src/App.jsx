@@ -3679,10 +3679,15 @@ export default function App() {
     const catName = (categoryData.name || '').trim();
     if (!catName) return null;
     const catId = categoryData.id || `cat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const photoUrl = categoryData.image_url || categoryData.imageUrl || categoryData.image || categoryData.photo || null;
     const newCategory = {
       id: catId,
       name: catName,
       gujarati: (categoryData.gujarati || categoryData.gujarati_name || catName).trim(),
+      image_url: photoUrl,
+      imageUrl: photoUrl,
+      image: photoUrl,
+      photo: photoUrl,
       icon: categoryData.icon || 'Utensils',
       cuisine: categoryData.cuisine || 'south_indian',
       percentage: Number(categoryData.percentage) || 10
@@ -3713,6 +3718,7 @@ export default function App() {
         name: newCategory.name,
         gujarati_name: newCategory.gujarati,
         icon: newCategory.icon,
+        image_url: photoUrl,
         is_active: true
       }).then();
     } catch (e) {}
@@ -3735,12 +3741,17 @@ export default function App() {
     if (!oldCat) return;
     const oldName = oldCat.name;
     const newName = (updatedData.name || oldName).trim();
+    const photoUrl = updatedData.image_url !== undefined ? updatedData.image_url : (oldCat.image_url || oldCat.imageUrl || null);
 
     const updatedCat = {
       ...oldCat,
       ...updatedData,
       name: newName,
-      gujarati: (updatedData.gujarati || updatedData.gujarati_name || oldCat.gujarati || newName).trim()
+      gujarati: (updatedData.gujarati || updatedData.gujarati_name || oldCat.gujarati || newName).trim(),
+      image_url: photoUrl,
+      imageUrl: photoUrl,
+      image: photoUrl,
+      photo: photoUrl
     };
 
     const updatedCats = categories.map(c => c.id === categoryId ? updatedCat : c);

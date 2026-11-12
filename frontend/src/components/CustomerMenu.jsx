@@ -1207,20 +1207,33 @@ export default function CustomerMenu({
           {/* Row 4: Sub-Category Navigator (Dynamically Scoped to Selected Cuisine) */}
           {availableCategories.length > 1 && (
             <div className="flex items-center space-x-1.5 overflow-x-auto pb-0.5 no-scrollbar scroll-smooth pt-1 border-t border-slate-100">
-              {availableCategories.map(cat => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold transition whitespace-nowrap shrink-0 cursor-pointer ${
-                    selectedCategory === cat
-                      ? 'bg-orange-500 text-white shadow-xs'
-                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 font-semibold'
-                  }`}
-                >
-                  {getCategoryLabel(cat, currentLang)}
-                </button>
-              ))}
+              {availableCategories.map(cat => {
+                const catObj = (categories || []).find(c => c.name === cat);
+                const catImg = catObj?.image_url || catObj?.imageUrl || catObj?.photo || catObj?.image || null;
+                const isSelected = selectedCategory === cat;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-[11px] font-bold transition whitespace-nowrap shrink-0 cursor-pointer ${
+                      isSelected
+                        ? 'bg-orange-500 text-white shadow-xs'
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 font-semibold'
+                    }`}
+                  >
+                    {cat !== 'All' && catImg ? (
+                      <img 
+                        src={catImg} 
+                        alt="" 
+                        className="w-3.5 h-3.5 rounded-full object-cover shrink-0" 
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                    ) : null}
+                    <span>{getCategoryLabel(cat, currentLang)}</span>
+                  </button>
+                );
+              })}
               <span className="text-[10px] text-slate-400 font-mono font-medium whitespace-nowrap pl-1">
                 {sortedItems.length} {t('dishesCount')}
               </span>
