@@ -1162,16 +1162,16 @@ export default function App() {
               const isStale = orderTime && (syncNow - new Date(orderTime).getTime() > THREE_HOURS_MS);
               if (isStale) return false;
 
-              // If order is served or completed AND paid, it is completed - table is free!
-              if ((st === 'served' || st === 'completed' || st === 'settled') && (paySt === 'paid' || paySt === 'void')) {
+              // If order is completed, cancelled, or settled, it is done - table is free!
+              if (isCancelled || st === 'completed' || st === 'settled') {
+                return false;
+              }
+              if (st === 'served' && (paySt === 'paid' || paySt === 'void')) {
                 return false;
               }
 
-              const isUnpaid = !isCancelled && (
-                paySt === 'pending cash' || 
-                paySt === 'unpaid'
-              );
-              return (!isCancelled && st !== 'completed' && st !== 'settled') || isUnpaid;
+              const isUnpaid = paySt === 'pending cash' || paySt === 'unpaid';
+              return st !== 'served' || isUnpaid;
             })
             .map(o => (o.table_number || '').replace(/\D/g, '').padStart(2, '0'))
         );
@@ -1255,15 +1255,16 @@ export default function App() {
             const key = code ? parseInt(code, 10) : pt.number;
             if (map.has(key)) {
               const existing = map.get(key);
+              const isVacant = String(existing.status || '').toLowerCase() === 'vacant' || String(existing.status || '').toLowerCase() === 'available';
               map.set(key, {
                 ...existing,
-                current_order_id: pt.current_order_id || existing.current_order_id,
-                current_customer_name: pt.current_customer_name || existing.current_customer_name,
-                current_customer_phone: pt.current_customer_phone || existing.current_customer_phone,
-                timing: pt.timing || existing.timing,
-                food_delivered_at: pt.food_delivered_at || existing.food_delivered_at,
-                turnover_notified: pt.turnover_notified || existing.turnover_notified,
-                status: pt.status || existing.status
+                current_order_id: isVacant ? null : (pt.current_order_id || existing.current_order_id),
+                current_customer_name: isVacant ? null : (pt.current_customer_name || existing.current_customer_name),
+                current_customer_phone: isVacant ? null : (pt.current_customer_phone || existing.current_customer_phone),
+                timing: isVacant ? null : (pt.timing || existing.timing),
+                food_delivered_at: isVacant ? null : (pt.food_delivered_at || existing.food_delivered_at),
+                turnover_notified: isVacant ? false : (pt.turnover_notified || existing.turnover_notified),
+                status: isVacant ? 'available' : (existing.status || pt.status || 'available')
               });
             } else {
               map.set(key, pt);
@@ -3114,15 +3115,15 @@ export default function App() {
           const paySt = String(o?.payment_status || '').toLowerCase().trim();
           const isCancelled = st === 'cancelled';
           const isPaid = paySt === 'paid' || paySt === 'void';
-          if (isCancelled) return false;
-          if ((st === 'completed' || st === 'settled' || st === 'served') && isPaid) return false;
+          if (isCancelled || st === 'completed' || st === 'settled') return false;
+          if (st === 'served' && (paySt === 'paid' || paySt === 'void')) return false;
 
           const orderTime = o.placed_at || o.created_at;
           const isStale = orderTime && (now - new Date(orderTime).getTime() > THREE_HOURS_MS);
           if (isStale) return false;
 
           const isUnpaid = paySt === 'pending cash' || paySt === 'unpaid';
-          return (!isCancelled && st !== 'completed' && st !== 'settled') || isUnpaid;
+          return st !== 'served' || isUnpaid;
         })
         .map(o => (o.table_number || '').replace(/\D/g, '').padStart(2, '0'))
     );
@@ -4245,11 +4246,46 @@ export default function App() {
       settledBy: authUser?.name || 'Admin'
     });
 
+    const cleanDigits = String(tableNum || '').replace(/\D/g, '');
+    const intNum = cleanDigits ? parseInt(cleanDigits, 10) : null;
+    const padNum = intNum !== null ? (intNum < 10 ? `0${intNum}` : `${intNum}`) : cleanDigits;
+    const tableVariants = Array.from(new Set([
+      tableNum,
+      targetTblCode,
+      String(intNum),
+      padNum,
+      `T${intNum}`,
+      `T${padNum}`,
+      `T-${intNum}`,
+      `T-${padNum}`,
+      `Table ${intNum}`,
+      `Table ${padNum}`
+    ].filter(Boolean)));
+    const orFilter = tableVariants.map(v => `table_number.eq.${v}`).join(',');
+
     try {
-      await supabase
-        .from('orders')
-        .update({ status: 'Completed', payment_status: 'Paid', payment_mode: 'Cash' })
-        .or(`table_number.eq.${targetTblCode},table_number.eq.Table ${targetTblCode}`);
+      if (orFilter) {
+        await supabase
+          .from('orders')
+          .update({ 
+            status: 'Completed', 
+            payment_status: 'Paid', 
+            payment_mode: 'Cash',
+            settled_at: new Date().toISOString(),
+            completed_at: new Date().toISOString()
+          })
+          .or(orFilter);
+
+        await supabase
+          .from('restaurant_tables')
+          .update({ status: 'VACANT', current_customer_name: null, current_order_id: null })
+          .or(orFilter);
+
+        await supabase
+          .from('table_sessions')
+          .update({ status: 'COMPLETED', closed_at: new Date().toISOString() })
+          .or(orFilter);
+      }
     } catch (e) {
       console.warn('Order status sync error during vacate:', e);
     }
@@ -4259,30 +4295,15 @@ export default function App() {
       setActiveToast(null);
     }
 
-    // 🧹 Automated Dispatch to Floor Waiters: Clean & Reset Table
-    const cleanCall = {
-      id: `clean_${targetTblCode}_${Date.now()}`,
-      tableNumber: tableNum,
-      type: 'table_clean',
-      label: `🧹 Table Vacated — Clean & Reset Table ${tableNum}`,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      timestamp: Date.now(),
-      status: 'pending',
-      dispatchedBy: authUser?.name || 'Admin',
-      priority: 'high'
-    };
-
+    // Purge ALL service calls (food_ready, waiter calls, bill requests, cleaning) for this vacated table
+    // Table is immediately VACANT, CLEAN, and READY TO SEAT across all terminals (Waiter & Admin)
     setServiceCalls(prev => {
-      // Purge ALL prior service calls (food_ready, waiter calls, bill requests, etc.) for this vacated table
       const filtered = (prev || []).filter(c => normalizeTbl(c.tableNumber) !== targetTblCode);
-      const updated = [cleanCall, ...filtered].slice(0, 30);
-      setLocalStore('service_calls', updated);
-      return updated;
+      setLocalStore('service_calls', filtered);
+      return filtered;
     });
 
-    // Sound & voice alert for floor waiters: Clean Table
-    playSound('alert');
-    speakTableCleanAlert(tableNum);
+    playSound('success');
 
     // Realtime broadcast to all waiter and kitchen devices
     try {

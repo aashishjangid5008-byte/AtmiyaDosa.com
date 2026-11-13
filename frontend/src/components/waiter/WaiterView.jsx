@@ -1668,17 +1668,10 @@ export default function WaiterView({
                           </div>
                         )}
                       </div>
-                    ) : tableCleanCall ? (
-                      <div className="text-center py-0.5">
-                        <p className="text-[11px] text-amber-800 font-bold flex items-center justify-center gap-1">
-                          <span>🧹</span>
-                          <span>Admin Vacated • Please Clean & Reset</span>
-                        </p>
-                      </div>
                     ) : (
                       <div className="text-center py-0.5">
                         <p className="text-[11px] text-slate-500 font-medium">
-                          Table Clean & Sanitized • Ready to Seat
+                          {tableCleanCall ? '🧹 Table Vacated & Clean • Ready to Seat' : 'Table Clean & Sanitized • Ready to Seat'}
                         </p>
                       </div>
                     )}
@@ -1686,37 +1679,23 @@ export default function WaiterView({
 
                   {/* Card Action Footer */}
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5 flex-wrap">
-                    {tableCleanCall ? (
-                      <div className="w-full space-y-1.5 animate-in fade-in">
-                        <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-300 flex items-center space-x-2">
-                          <span className="text-lg">🧹</span>
-                          <div className="min-w-0 flex-1">
-                            <span className="text-xs font-black text-amber-950 block leading-tight">Admin Vacated Table</span>
-                            <span className="text-[11px] text-amber-800 font-medium">Please clean & reset table for guests</span>
-                          </div>
-                        </div>
+                    {!isOccupied ? (
+                      /* Table is available: 1-Tap Seat Guests & Take Order */
+                      <div className="w-full space-y-1.5">
                         <button
                           type="button"
                           onClick={() => {
-                            if (onDismissServiceCall) onDismissServiceCall(tableCleanCall.id, activeWaiterName, activeWaiterId);
-                            if (audioEnabled) playSound('success');
+                            if (tableCleanCall && onDismissServiceCall) {
+                              onDismissServiceCall(tableCleanCall.id, activeWaiterName, activeWaiterId);
+                            }
+                            handleOpenOrderPad(table);
                           }}
-                          className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-xs shadow-xs transition flex items-center justify-center space-x-1.5 cursor-pointer min-h-[42px]"
+                          className="w-full py-2.5 px-3 rounded-xl bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-black text-xs shadow-xs transition flex items-center justify-center space-x-1.5 cursor-pointer min-h-[44px]"
                         >
-                          <Check className="w-4 h-4 text-white stroke-[3]" />
-                          <span>✓ Attend & Mark Cleaned · સાફ કર્યું</span>
+                          <Plus className="w-4 h-4 text-white" />
+                          <span>Seat Guests & Take Order</span>
                         </button>
                       </div>
-                    ) : !isOccupied ? (
-                      /* Table is available: 1-Tap Seat Guests & Take Order */
-                      <button
-                        type="button"
-                        onClick={() => handleOpenOrderPad(table)}
-                        className="w-full py-2.5 px-3 rounded-xl bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-black text-xs shadow-xs transition flex items-center justify-center space-x-1.5 cursor-pointer min-h-[44px]"
-                      >
-                        <Plus className="w-4 h-4 text-white" />
-                        <span>Seat Guests & Take Order</span>
-                      </button>
                     ) : (
                       <div className="space-y-1.5 w-full">
                         <div className="grid grid-cols-5 gap-1.5 w-full">
@@ -1763,18 +1742,32 @@ export default function WaiterView({
                           </button>
                         </div>
 
-                        {/* Shift Table Row (Clean, Settle & Vacate handled strictly by Admin) */}
-                        <div className="flex items-center justify-center text-[11px] pt-1">
+                        {/* Table Actions Row: Shift Table & Vacate Table */}
+                        <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100">
                           <button
                             type="button"
                             onClick={() => {
                               setShiftingTable(table);
                               setShiftTarget('');
                             }}
-                            className="text-slate-500 hover:text-slate-800 font-semibold flex items-center space-x-1.5 transition cursor-pointer py-1 px-3 rounded-lg hover:bg-slate-100"
+                            className="text-slate-500 hover:text-slate-800 font-semibold flex items-center space-x-1.5 transition cursor-pointer py-1 px-2 rounded-lg hover:bg-slate-100"
                           >
                             <ArrowRightLeft className="w-3 h-3 text-slate-400" />
                             <span>Shift Table</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`Vacate Table ${table.number} and mark it available?`)) {
+                                if (onVacateTable) onVacateTable(table.number);
+                              }
+                            }}
+                            className="text-emerald-700 hover:text-emerald-900 font-bold flex items-center space-x-1 transition cursor-pointer py-1 px-2 rounded-lg hover:bg-emerald-50"
+                            title="Vacate and free this table"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Vacate Table</span>
                           </button>
                         </div>
                       </div>
@@ -2947,8 +2940,23 @@ export default function WaiterView({
 
                 <button
                   type="button"
+                  onClick={() => {
+                    if (window.confirm(`Vacate Table ${viewingBillTable.number} and mark it available?`)) {
+                      if (onVacateTable) onVacateTable(viewingBillTable.number);
+                      setViewingBillTable(null);
+                    }
+                  }}
+                  className="px-4 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-xs transition cursor-pointer min-h-[46px] flex items-center justify-center space-x-1 shadow-sm shrink-0"
+                  title="Vacate and free Table"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Vacate Table</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setViewingBillTable(null)}
-                  className="px-5 py-3.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs transition cursor-pointer min-h-[46px]"
+                  className="px-4 py-3.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs transition cursor-pointer min-h-[46px]"
                 >
                   Close
                 </button>

@@ -808,16 +808,34 @@ export const settleTableSessionInSupabase = async (tableNumber, orderIdOrNumber,
         .eq('id', tableData.id);
     }
 
-    // 4. Update order payment status to PAID and status to COMPLETED
+    // 4. Update order payment status to PAID and status to SERVED / COMPLETED
+    const rawDigits = String(formattedTableNum || tableNumber || '').replace(/\D/g, '');
+    const intNum = rawDigits ? parseInt(rawDigits, 10) : null;
+    const padNum = intNum !== null ? (intNum < 10 ? `0${intNum}` : `${intNum}`) : rawDigits;
+    const tableVariants = Array.from(new Set([
+      formattedTableNum,
+      String(tableNumber),
+      rawDigits,
+      String(intNum),
+      padNum,
+      `T${intNum}`,
+      `T${padNum}`,
+      `T-${intNum}`,
+      `T-${padNum}`,
+      `Table ${intNum}`,
+      `Table ${padNum}`
+    ].filter(Boolean)));
+    const orFilter = tableVariants.map(v => `table_number.eq.${v}`).join(',');
+
+    const updatePayload = {
+      payment_status: 'PAID',
+      payment_method: mappedPaymentMethod,
+      status: 'SERVED', // DB check constraint permits 'SERVED', 'CANCELLED', 'READY', 'PREPARING', 'PLACED'
+      served_at: new Date().toISOString()
+    };
+
     if (orderIdOrNumber) {
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderIdOrNumber);
-      const updatePayload = {
-        payment_status: 'PAID',
-        payment_method: mappedPaymentMethod,
-        status: 'SERVED', // DB check constraint permits 'SERVED', 'CANCELLED', 'READY', 'PREPARING', 'PLACED'
-        served_at: new Date().toISOString()
-      };
-
       if (isUuid) {
         await supabase.from('orders').update(updatePayload).eq('id', orderIdOrNumber);
         try {
@@ -831,6 +849,18 @@ export const settleTableSessionInSupabase = async (tableNumber, orderIdOrNumber,
             await supabase.from('order_items').update({ status: 'READY' }).eq('order_id', ord.id);
           } catch (itemErr) {}
         }
+      }
+    }
+
+    // Always update all active orders for this table in Supabase so no orphaned unpaid orders remain
+    if (orFilter) {
+      try {
+        await supabase
+          .from('orders')
+          .update(updatePayload)
+          .or(orFilter);
+      } catch (tblOrdErr) {
+        console.warn('[SUPABASE] Settle all table orders notice:', tblOrdErr);
       }
     }
 

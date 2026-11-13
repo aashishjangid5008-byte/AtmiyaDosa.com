@@ -1239,10 +1239,43 @@ export default function ExecutiveDashboard({
       }
       // Clear holds and complete orders in Supabase
       if (tblNum) {
-        await supabase
-          .from('orders')
-          .update({ status: 'COMPLETED', payment_status: 'PAID', payment_method: 'CASH' })
-          .eq('table_number', tblNum);
+        const cleanDigits = String(tblNum || '').replace(/\D/g, '');
+        const intNum = cleanDigits ? parseInt(cleanDigits, 10) : null;
+        const padNum = intNum !== null ? (intNum < 10 ? `0${intNum}` : `${intNum}`) : cleanDigits;
+        const tableVariants = Array.from(new Set([
+          tblNum,
+          String(intNum),
+          padNum,
+          `T${intNum}`,
+          `T${padNum}`,
+          `T-${intNum}`,
+          `T-${padNum}`,
+          `Table ${intNum}`,
+          `Table ${padNum}`
+        ].filter(Boolean)));
+        const orFilter = tableVariants.map(v => `table_number.eq.${v}`).join(',');
+
+        if (orFilter) {
+          await supabase
+            .from('orders')
+            .update({ 
+              status: 'COMPLETED', 
+              payment_status: 'PAID', 
+              payment_method: 'CASH',
+              settled_at: new Date().toISOString()
+            })
+            .or(orFilter);
+
+          await supabase
+            .from('restaurant_tables')
+            .update({ status: 'VACANT', current_customer_name: null, current_order_id: null })
+            .or(orFilter);
+
+          await supabase
+            .from('table_sessions')
+            .update({ status: 'COMPLETED', closed_at: new Date().toISOString() })
+            .or(orFilter);
+        }
       }
       await recordEmployeeActivity(
         'DARSHIT RANA',
