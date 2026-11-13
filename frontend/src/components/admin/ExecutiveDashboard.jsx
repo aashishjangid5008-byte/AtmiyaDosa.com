@@ -51,7 +51,7 @@ import {
   SlidersHorizontal,
   ChevronDown
 } from 'lucide-react';
-import { getTranslation } from '../../lib/translations';
+import { getTranslation, getCategoryLabel, getDishDisplayName } from '../../lib/translations';
 import { playSound } from '../../lib/sound';
 import { supabase, RESTAURANT_ID, recordEmployeeActivity } from '../../lib/supabase';
 
@@ -541,13 +541,13 @@ export default function ExecutiveDashboard({
 
       let statusText = slot.defaultStatus;
       if (rev > 1500) {
-        statusText = '🔥 Peak Dining Rush';
+        statusText = currentLang === 'gu' ? '🔥 મહત્તમ રશ' : currentLang === 'hi' ? '🔥 अधिकतम रश' : '🔥 Peak Dining Rush';
       } else if (rev > 500) {
-        statusText = '⚡ High Demand Window';
+        statusText = currentLang === 'gu' ? '⚡ ભારે માગ' : currentLang === 'hi' ? '⚡ भारी मांग' : '⚡ High Demand Window';
       } else if (rev > 0) {
-        statusText = '🥗 Steady Service';
+        statusText = currentLang === 'gu' ? '🥗 સામાન્ય સેવા' : currentLang === 'hi' ? '🥗 सामान्य सेवा' : '🥗 Steady Service';
       } else {
-        statusText = '💤 Pre-Rush Prep';
+        statusText = currentLang === 'gu' ? '💤 તૈયારી સમય' : currentLang === 'hi' ? '💤 तैयारी समय' : '💤 Pre-Rush Prep';
       }
 
       return {
@@ -593,7 +593,9 @@ export default function ExecutiveDashboard({
         orders: dayOrders.length,
         volume: vol,
         peakDish: topEntry ? `${topEntry[0]} (${topEntry[1]}p)` : (dayOrders.length > 0 ? 'Live Dishes' : '-'),
-        status: targetDay.getDay() === 0 || targetDay.getDay() === 6 ? 'Weekend Peak' : 'Weekday Flow',
+        status: targetDay.getDay() === 0 || targetDay.getDay() === 6 
+          ? (currentLang === 'gu' ? 'વીકેન્ડ પીક' : currentLang === 'hi' ? 'सप्ताहांत पीक' : 'Weekend Peak')
+          : (currentLang === 'gu' ? 'સાપ્તાહિક પ્રવાહ' : currentLang === 'hi' ? 'साप्ताहिक प्रवाह' : 'Weekday Flow'),
         isPeak: false
       });
     }
@@ -635,7 +637,7 @@ export default function ExecutiveDashboard({
         orders: wOrders.length,
         volume: vol,
         peakDish: topEntry ? `${topEntry[0]} (${topEntry[1]}p)` : '-',
-        status: `Week Period`,
+        status: currentLang === 'gu' ? 'અઠવાડિક સમયગાળો' : currentLang === 'hi' ? 'साप्ताहिक अवधि' : 'Week Period',
         isPeak: false
       };
     });
@@ -649,31 +651,37 @@ export default function ExecutiveDashboard({
 
     return {
       hourly: {
-        title: "Today's Sales & Volume Velocity",
-        subtitle: `Recorded ${todayOrders.length} orders & ${todayVolume} plates live today (${todayDateStr})`,
+        title: currentLang === 'gu' ? "આજનું વેચાણ અને વૉલ્યુમ" : (currentLang === 'hi' ? "आज की बिक्री और मात्रा गति" : "Today's Sales & Volume Velocity"),
+        subtitle: currentLang === 'gu' 
+          ? `આજે (${todayDateStr}) ${todayOrders.length} ઓર્ડર્સ અને ${todayVolume} પ્લેટ્સ નોંધાયા` 
+          : (currentLang === 'hi' ? `आज (${todayDateStr}) ${todayOrders.length} ऑर्डर्स और ${todayVolume} प्लेट्स दर्ज हुए` : `Recorded ${todayOrders.length} orders & ${todayVolume} plates live today (${todayDateStr})`),
         total: `₹${todayRevenue.toLocaleString('en-IN')}`,
         totalOrders: todayOrders.length,
         totalVolume: todayVolume,
         points: hourlyPoints
       },
       weekly: {
-        title: "7-Day Sales & Volume Velocity",
-        subtitle: `Recorded ${weeklyPoints.reduce((s,p)=>s+p.orders,0)} orders & ${weeklyPoints.reduce((s,p)=>s+p.volume,0)} plates across the last 7 days`,
+        title: currentLang === 'gu' ? "૭ દિવસનું વેચાણ અને વૉલ્યુમ" : (currentLang === 'hi' ? "७ दिनों की बिक्री और मात्रा" : "7-Day Sales & Volume Velocity"),
+        subtitle: currentLang === 'gu' 
+          ? `છેલ્લા ૭ દિવસમાં ${weeklyPoints.reduce((s,p)=>s+p.orders,0)} ઓર્ડર્સ અને ${weeklyPoints.reduce((s,p)=>s+p.volume,0)} પ્લેટ્સ નોંધાયા` 
+          : (currentLang === 'hi' ? `पिछले ७ दिनों में ${weeklyPoints.reduce((s,p)=>s+p.orders,0)} ऑर्डर्स और ${weeklyPoints.reduce((s,p)=>s+p.volume,0)} प्लेट्स दर्ज हुए` : `Recorded ${weeklyPoints.reduce((s,p)=>s+p.orders,0)} orders & ${weeklyPoints.reduce((s,p)=>s+p.volume,0)} plates across the last 7 days`),
         total: `₹${weeklyPoints.reduce((s,p)=>s+p.revenue,0).toLocaleString('en-IN')}`,
         totalOrders: weeklyPoints.reduce((s,p)=>s+p.orders,0),
         totalVolume: weeklyPoints.reduce((s,p)=>s+p.volume,0),
         points: weeklyPoints
       },
       monthly: {
-        title: "Monthly Sales & Volume Velocity",
-        subtitle: `Recorded ${currentMonthOrders.length} orders & ${monthlyPoints.reduce((s,p)=>s+p.volume,0)} plates in ${currentMonthStr}`,
+        title: currentLang === 'gu' ? "માસિક વેચાણ અને વૉલ્યુમ" : (currentLang === 'hi' ? "मासिक बिक्री और मात्रा गति" : "Monthly Sales & Volume Velocity"),
+        subtitle: currentLang === 'gu' 
+          ? `${currentMonthStr} માં ${currentMonthOrders.length} ઓર્ડર્સ અને ${monthlyPoints.reduce((s,p)=>s+p.volume,0)} પ્લેટ્સ નોંધાયા` 
+          : (currentLang === 'hi' ? `${currentMonthStr} में ${currentMonthOrders.length} ऑर्डर्स और ${monthlyPoints.reduce((s,p)=>s+p.volume,0)} प्लेट्स दर्ज हुए` : `Recorded ${currentMonthOrders.length} orders & ${monthlyPoints.reduce((s,p)=>s+p.volume,0)} plates in ${currentMonthStr}`),
         total: `₹${monthlyPoints.reduce((s,p)=>s+p.revenue,0).toLocaleString('en-IN')}`,
         totalOrders: currentMonthOrders.length,
         totalVolume: monthlyPoints.reduce((s,p)=>s+p.volume,0),
         points: monthlyPoints
       }
     };
-  }, [validOrders, menuItems, categories]);
+  }, [validOrders, menuItems, categories, currentLang]);
 
   const currentDataset = chartDatasets[timeframe] || chartDatasets.hourly;
   const maxRevenue = Math.max(1, ...currentDataset.points.map(p => p.revenue));
@@ -1076,11 +1084,36 @@ export default function ExecutiveDashboard({
   // Hourly Peak Rush Heatmap Data - Dynamically calculated from live orders
   const rushHours = useMemo(() => {
     const slots = [
-      { hour: '10 AM - 12 PM', session: 'Morning Breakfast', minH: 10, maxH: 12, tip: 'Idli & Medu Vada counters active' },
-      { hour: '12 PM - 03 PM', session: 'Lunch Rush', minH: 12, maxH: 15, tip: 'Pav Bhaji & Mysore Dosa combo peak' },
-      { hour: '03 PM - 07 PM', session: 'Afternoon & Snacks', minH: 15, maxH: 19, tip: 'Cold Drinks, Chaas & Light Dosa' },
-      { hour: '07 PM - 10 PM', session: '🔥 Mega Peak Dinner', minH: 19, maxH: 22, tip: 'Bahubali, Gotala, Jini Roll peak demand' },
-      { hour: '10 PM - 11 PM', session: 'Late Dining & Takeout', minH: 22, maxH: 24, tip: 'Kitchen closing & parcel orders' },
+      { 
+        hour: '10 AM - 12 PM', 
+        session: currentLang === 'gu' ? 'સવારનો નાસ્તો' : currentLang === 'hi' ? 'सुबह का नाश्ता' : 'Morning Breakfast', 
+        minH: 10, maxH: 12, 
+        tip: currentLang === 'gu' ? 'ઇડલી અને મેદુ વડા કાઉન્ટર સક્રિય' : currentLang === 'hi' ? 'इडली और मेदू वड़ा काउंटर सक्रिय' : 'Idli & Medu Vada counters active' 
+      },
+      { 
+        hour: '12 PM - 03 PM', 
+        session: currentLang === 'gu' ? 'બપોરનો રશ' : currentLang === 'hi' ? 'दोपहर का भोजन' : 'Lunch Rush', 
+        minH: 12, maxH: 15, 
+        tip: currentLang === 'gu' ? 'પાવભાજી અને મૈસુર ઢોંસા કોમ્બો પીક' : currentLang === 'hi' ? 'पाव भाजी और मैसूर डोसा कॉम्बो पीक' : 'Pav Bhaji & Mysore Dosa combo peak' 
+      },
+      { 
+        hour: '03 PM - 07 PM', 
+        session: currentLang === 'gu' ? 'બપોર પછી નાસ્તો' : currentLang === 'hi' ? 'दोपहर बाद नाश्ता' : 'Afternoon & Snacks', 
+        minH: 15, maxH: 19, 
+        tip: currentLang === 'gu' ? 'કોલ્ડ ડ્રિંક્સ, છાસ અને હળવો ઢોંસો' : currentLang === 'hi' ? 'कोल्ड ड्रिंक्स, छाछ और हल्का डोसा' : 'Cold Drinks, Chaas & Light Dosa' 
+      },
+      { 
+        hour: '07 PM - 10 PM', 
+        session: currentLang === 'gu' ? '🔥 મેગા પીક ડિનર' : currentLang === 'hi' ? '🔥 मेगा पीक डिनर' : '🔥 Mega Peak Dinner', 
+        minH: 19, maxH: 22, 
+        tip: currentLang === 'gu' ? 'બાહુબલી, ગોટાળા, જીની રોલ ભારે માગ' : currentLang === 'hi' ? 'बाहुबली, घोटाला, जिनी रोल भारी मांग' : 'Bahubali, Gotala, Jini Roll peak demand' 
+      },
+      { 
+        hour: '10 PM - 11 PM', 
+        session: currentLang === 'gu' ? 'મોડી રાત્રિ ભોજન' : currentLang === 'hi' ? 'देर रात भोजन' : 'Late Dining & Takeout', 
+        minH: 22, maxH: 24, 
+        tip: currentLang === 'gu' ? 'રસોડું બંધ અને પાર્સલ ઓર્ડર' : currentLang === 'hi' ? 'रसोई बंद और पार्सल ऑर्डर' : 'Kitchen closing & parcel orders' 
+      },
     ];
 
     return slots.map(s => {
@@ -1095,7 +1128,15 @@ export default function ExecutiveDashboard({
         const itms = getOrderItems(o);
         return sum + itms.reduce((isum, itm) => isum + itm.qty, 0);
       }, 0);
-      const rushLevel = ords.length >= 10 ? 'HOUSEFULL' : ords.length >= 5 ? 'High' : ords.length >= 2 ? 'Medium' : ords.length > 0 ? 'Active' : 'Quiet';
+      const rushLevel = ords.length >= 10 
+        ? (t('housefull') || 'HOUSEFULL') 
+        : ords.length >= 5 
+          ? (currentLang === 'gu' ? 'ઉચ્ચ' : currentLang === 'hi' ? 'उच्च' : 'High') 
+          : ords.length >= 2 
+            ? (currentLang === 'gu' ? 'મધ્યમ' : currentLang === 'hi' ? 'मध्यम' : 'Medium') 
+            : ords.length > 0 
+              ? (t('active') || 'Active') 
+              : (currentLang === 'gu' ? 'શાંત' : currentLang === 'hi' ? 'शांत' : 'Quiet');
       const load = Math.min(100, ords.length * 20);
 
       return {
@@ -1106,10 +1147,10 @@ export default function ExecutiveDashboard({
         rush: rushLevel,
         speed: '10m avg',
         load: `${load}%`,
-        tip: ords.length > 0 ? `${ords.length} orders recorded` : s.tip
+        tip: ords.length > 0 ? `${ords.length} ${t('ordersCount') || 'orders'}` : s.tip
       };
     });
-  }, [validOrders]);
+  }, [validOrders, currentLang]);
 
   // Fetch live Supabase data
   const fetchLiveSupabaseData = async () => {
@@ -1241,18 +1282,18 @@ export default function ExecutiveDashboard({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className={`text-base sm:text-lg font-semibold font-heading tracking-tight ${palette.textPrimary} truncate`}>
-                {authUser?.name || 'Admin Owner'}
+                {authUser?.name || t('adminOwner') || 'Admin Owner'}
               </h1>
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200/80">
-                Owner & Director
+                {t('ownerAndDirector') || 'Owner & Director'}
               </span>
               <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-medium border border-emerald-200/80 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>Cloud POS Online</span>
+                <span>{t('cloudPosOnline') || 'Cloud POS Online'}</span>
               </span>
             </div>
             <p className="text-xs text-slate-500 font-normal mt-0.5 truncate">
-              Atmiya Dosa Hub • Executive Operations & Analytics (Petlad, Anand)
+              {t('executiveOpsAnalytics') || 'Atmiya Dosa Hub • Executive Operations & Analytics (Petlad, Anand)'}
             </p>
           </div>
         </div>
@@ -1266,31 +1307,31 @@ export default function ExecutiveDashboard({
               onClick={() => setDateFilter('today')}
               className={`px-2.5 py-1 rounded-lg transition text-xs cursor-pointer ${dateFilter === 'today' ? 'bg-white text-slate-900 shadow-xs font-semibold' : 'text-slate-500 hover:text-slate-900'}`}
             >
-              Today
+              {t('today') || 'Today'}
             </button>
             <button
               onClick={() => setDateFilter('yesterday')}
               className={`px-2.5 py-1 rounded-lg transition text-xs cursor-pointer ${dateFilter === 'yesterday' ? 'bg-white text-slate-900 shadow-xs font-semibold' : 'text-slate-500 hover:text-slate-900'}`}
             >
-              Yesterday
+              {t('yesterday') || 'Yesterday'}
             </button>
             <button
               onClick={() => setDateFilter('7days')}
               className={`px-2.5 py-1 rounded-lg transition text-xs cursor-pointer ${dateFilter === '7days' ? 'bg-white text-slate-900 shadow-xs font-semibold' : 'text-slate-500 hover:text-slate-900'}`}
             >
-              7 Days
+              {t('days7') || '7 Days'}
             </button>
             <button
               onClick={() => setDateFilter('month')}
               className={`px-2.5 py-1 rounded-lg transition text-xs cursor-pointer ${dateFilter === 'month' ? 'bg-white text-slate-900 shadow-xs font-semibold' : 'text-slate-500 hover:text-slate-900'}`}
             >
-              Month
+              {t('month') || 'Month'}
             </button>
             <button
               onClick={() => setDateFilter('all')}
               className={`px-2.5 py-1 rounded-lg transition text-xs cursor-pointer ${dateFilter === 'all' ? 'bg-white text-slate-900 shadow-xs font-semibold' : 'text-slate-500 hover:text-slate-900'}`}
             >
-              All Time
+              {t('allTime') || 'All Time'}
             </button>
           </div>
 
@@ -1301,8 +1342,8 @@ export default function ExecutiveDashboard({
             title="Adjust & customize what you see on the dashboard"
           >
             <SlidersHorizontal className="w-3.5 h-3.5 text-orange-600" />
-            <span className="hidden sm:inline">Customize View</span>
-            <span className="sm:hidden">Views</span>
+            <span className="hidden sm:inline">{t('customizeView') || 'Customize View'}</span>
+            <span className="sm:hidden">{t('customizeView') || 'Views'}</span>
           </button>
 
           <button
@@ -1310,7 +1351,7 @@ export default function ExecutiveDashboard({
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 text-xs font-medium transition cursor-pointer shadow-2xs"
           >
             <QrCode className="w-3.5 h-3.5 text-slate-600" />
-            <span>Floor QRs</span>
+            <span>{t('floorQrs') || 'Floor QRs'}</span>
           </button>
           
           <button
@@ -1318,7 +1359,7 @@ export default function ExecutiveDashboard({
             className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-medium transition shadow-xs cursor-pointer active:scale-95"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Add Dish</span>
+            <span>{t('addDish') || 'Add Dish'}</span>
           </button>
         </div>
       </div>
@@ -1331,10 +1372,10 @@ export default function ExecutiveDashboard({
           <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.03),0_6px_16px_-4px_rgba(0,0,0,0.02)] hover:border-slate-300 hover:shadow-md transition-all duration-200 flex flex-col justify-between min-w-0 group">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-slate-500 truncate pr-1">
-                {dateFilter === 'today' ? "Today's Revenue" : 
-                 dateFilter === 'yesterday' ? "Yesterday's Revenue" :
-                 dateFilter === '7days' ? "7-Day Revenue" :
-                 dateFilter === 'month' ? "Monthly Revenue" : "All-Time Revenue"}
+                {dateFilter === 'today' ? (t('todaysRevenue') || "Today's Revenue") : 
+                 dateFilter === 'yesterday' ? (t('yesterdaysRevenue') || "Yesterday's Revenue") :
+                 dateFilter === '7days' ? (t('sevenDaysRevenue') || "7-Day Revenue") :
+                 dateFilter === 'month' ? (t('monthlyRevenue') || "Monthly Revenue") : (t('allTimeRevenue') || "All-Time Revenue")}
               </span>
               <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100/80 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                 <IndianRupee className="w-4 h-4 stroke-[2]" />
@@ -1353,10 +1394,10 @@ export default function ExecutiveDashboard({
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
                 </span>
-                <span className="text-[11px]">POS Live</span>
+                <span className="text-[11px]">{t('posLive') || 'POS Live'}</span>
               </div>
               <span className="text-[11px] font-normal text-slate-500 tabular-nums">
-                {dateFilteredOrders.length} orders
+                {dateFilteredOrders.length} {t('ordersCount') || 'orders'}
               </span>
             </div>
           </div>
@@ -1365,7 +1406,7 @@ export default function ExecutiveDashboard({
           <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.03),0_6px_16px_-4px_rgba(0,0,0,0.02)] hover:border-slate-300 hover:shadow-md transition-all duration-200 flex flex-col justify-between min-w-0 group">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-slate-500 truncate pr-1">
-                Volume Tracked
+                {t('volumeTracked') || 'Volume Tracked'}
               </span>
               <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 border border-amber-100/80 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                 <Flame className="w-4 h-4 stroke-[2]" />
@@ -1378,17 +1419,17 @@ export default function ExecutiveDashboard({
                   {realTotalVolume}
                 </span>
                 <span className="text-xs font-normal text-slate-500">
-                  Plates
+                  {t('plates') || 'Plates'}
                 </span>
               </div>
             </div>
 
             <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
               <span className="text-[11px] font-normal text-slate-500 tabular-nums truncate">
-                {dateFilteredOrders.length} tickets
+                {dateFilteredOrders.length} {t('ticketsCount') || 'tickets'}
               </span>
               <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60 shrink-0">
-                Kitchen
+                {t('kitchen') || 'Kitchen'}
               </span>
             </div>
           </div>
@@ -1397,7 +1438,7 @@ export default function ExecutiveDashboard({
           <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.03),0_6px_16px_-4px_rgba(0,0,0,0.02)] hover:border-slate-300 hover:shadow-md transition-all duration-200 flex flex-col justify-between min-w-0 group">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-slate-500 truncate pr-1">
-                Avg Ticket (AOV)
+                {t('avgTicketAov') || 'Avg Ticket (AOV)'}
               </span>
               <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100/80 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                 <Receipt className="w-4 h-4 stroke-[2]" />
@@ -1410,17 +1451,17 @@ export default function ExecutiveDashboard({
                   ₹{realAov}
                 </span>
                 <span className="text-xs font-normal text-slate-500">
-                  avg
+                  {t('avg') || 'avg'}
                 </span>
               </div>
             </div>
 
             <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
               <span className="text-[11px] font-normal text-slate-500 tabular-nums truncate">
-                {dateFilteredOrders.length} orders
+                {dateFilteredOrders.length} {t('ordersCount') || 'orders'}
               </span>
               <span className="text-[11px] font-medium text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/60 shrink-0">
-                Per Table
+                {t('perTable') || 'Per Table'}
               </span>
             </div>
           </div>
@@ -1429,7 +1470,7 @@ export default function ExecutiveDashboard({
           <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.03),0_6px_16px_-4px_rgba(0,0,0,0.02)] hover:border-slate-300 hover:shadow-md transition-all duration-200 flex flex-col justify-between min-w-0 group">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-slate-500 truncate pr-1">
-                Floor Seated
+                {t('floorSeated') || 'Floor Seated'}
               </span>
               <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 border border-sky-100/80 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                 <Users className="w-4 h-4 stroke-[2]" />
@@ -1445,17 +1486,17 @@ export default function ExecutiveDashboard({
                   / {totalTablesCount}
                 </span>
                 <span className="text-xs font-normal text-slate-500 ml-1">
-                  Tables
+                  {t('tables') || 'Tables'}
                 </span>
               </div>
             </div>
 
             <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
               <span className="text-[11px] font-normal text-slate-500 truncate">
-                {Math.max(0, totalTablesCount - occupiedTablesCount)} free
+                {Math.max(0, totalTablesCount - occupiedTablesCount)} {t('free') || 'free'}
               </span>
               <span className="text-[11px] font-medium text-sky-700 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-200/60 shrink-0">
-                {occupancyPercent}% Seated
+                {occupancyPercent}% {t('seated') || 'Seated'}
               </span>
             </div>
           </div>
@@ -1465,7 +1506,7 @@ export default function ExecutiveDashboard({
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-slate-500 flex items-center space-x-1.5 truncate pr-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0"></span>
-                <span>Daily Target</span>
+                <span>{t('dailyTarget') || 'Daily Target'}</span>
               </span>
               <button
                 onClick={() => { setIsEditingTarget(true); setTargetInputVal(dailyTarget); }}
@@ -1473,7 +1514,7 @@ export default function ExecutiveDashboard({
                 title="Click to edit your daily target goal"
               >
                 <Edit2 className="w-2.5 h-2.5" />
-                <span>Edit</span>
+                <span>{t('edit') || 'Edit'}</span>
               </button>
             </div>
 
@@ -1491,7 +1532,7 @@ export default function ExecutiveDashboard({
                   onClick={handleSaveDailyTarget}
                   className="px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-[10px] font-medium cursor-pointer transition active:scale-95"
                 >
-                  Save
+                  {t('save') || 'Save'}
                 </button>
               </div>
             ) : (
@@ -1502,7 +1543,7 @@ export default function ExecutiveDashboard({
                       {targetPercent}%
                     </span>
                     <span className="text-xs font-normal text-slate-500">
-                      Done
+                      {t('done') || 'Done'}
                     </span>
                   </div>
                   <div className="text-right">
@@ -1510,7 +1551,7 @@ export default function ExecutiveDashboard({
                       ₹{Math.round(currentTodaySales).toLocaleString('en-IN')}
                     </span>
                     <span className="text-[10px] text-slate-400 block">
-                      of ₹{dailyTarget.toLocaleString('en-IN')}
+                      {t('of') || 'of'} ₹{dailyTarget.toLocaleString('en-IN')}
                     </span>
                   </div>
                 </div>
@@ -1529,10 +1570,10 @@ export default function ExecutiveDashboard({
 
                 <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                   <span className="text-[11px] font-normal text-slate-500 truncate">
-                    {targetPercent >= 100 ? 'Goal Hit' : `₹${Math.max(0, Math.round(dailyTarget - currentTodaySales)).toLocaleString('en-IN')} left`}
+                    {targetPercent >= 100 ? (t('goalHit') || 'Goal Hit') : `₹${Math.max(0, Math.round(dailyTarget - currentTodaySales)).toLocaleString('en-IN')} ${t('left') || 'left'}`}
                   </span>
                   <span className="text-[11px] font-medium text-orange-700 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-200/60 shrink-0">
-                    Target: ₹{dailyTarget.toLocaleString('en-IN')}
+                    {t('target') || 'Target'}: ₹{dailyTarget.toLocaleString('en-IN')}
                   </span>
                 </div>
               </div>
@@ -1555,11 +1596,11 @@ export default function ExecutiveDashboard({
                 <div className="flex items-center space-x-2">
                   <PieChartIcon className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500" />
                   <h2 className={`text-base font-semibold font-heading ${palette.textPrimary}`}>
-                    Category Demand Pie & Volume
+                    {t('categoryDemandPie') || 'Category Demand Pie & Volume'}
                   </h2>
                 </div>
                 <p className="text-xs text-slate-400 font-normal mt-0.5">
-                  Click any slice to filter and inspect items in that category
+                  {t('clickSliceFilter') || 'Click any slice to filter and inspect items in that category'}
                 </p>
               </div>
 
@@ -1576,7 +1617,7 @@ export default function ExecutiveDashboard({
                         : 'text-slate-500 hover:text-slate-900'
                     }`}
                   >
-                    Donut
+                    {t('donut') || 'Donut'}
                   </button>
                   <button
                     onClick={() => { setPieChartStyle('pie'); updateConfig('chartType', 'pie'); }}
@@ -1586,7 +1627,7 @@ export default function ExecutiveDashboard({
                         : 'text-slate-500 hover:text-slate-900'
                     }`}
                   >
-                    Pie
+                    {t('pie') || 'Pie'}
                   </button>
                 </div>
 
@@ -1600,7 +1641,7 @@ export default function ExecutiveDashboard({
                         : 'text-slate-500 hover:text-slate-900'
                     }`}
                   >
-                    Volume
+                    {t('volume') || 'Volume'}
                   </button>
                   <button
                     onClick={() => setPieMetric('revenue')}
@@ -1610,7 +1651,7 @@ export default function ExecutiveDashboard({
                         : 'text-slate-500 hover:text-slate-900'
                     }`}
                   >
-                    Revenue (₹)
+                    {t('revenue') || 'Revenue (₹)'}
                   </button>
                 </div>
 
@@ -1692,7 +1733,7 @@ export default function ExecutiveDashboard({
                             className="text-[10px] font-medium uppercase tracking-wider truncate max-w-[130px]"
                             style={{ color: activeHoveredOrSelected.color }}
                           >
-                            {activeHoveredOrSelected.name}
+                            {getCategoryLabel(activeHoveredOrSelected.name, currentLang)}
                           </span>
                           <span className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900 tabular-nums mt-0.5 font-heading">
                             {pieMetric === 'volume' ? `${activeHoveredOrSelected.volume}p` : `₹${activeHoveredOrSelected.revenue.toLocaleString()}`}
@@ -1701,19 +1742,19 @@ export default function ExecutiveDashboard({
                             className="text-[10px] font-medium mt-1 px-2.5 py-0.5 rounded-full border border-slate-200/80 bg-white shadow-2xs"
                             style={{ color: activeHoveredOrSelected.color }}
                           >
-                            {activeHoveredOrSelected.share}% Share
+                            {activeHoveredOrSelected.share}% {t('share') || 'Share'}
                           </span>
                         </>
                       ) : (
                         <>
                           <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400">
-                            {pieMetric === 'volume' ? 'Total Volume' : 'Total Revenue'}
+                            {pieMetric === 'volume' ? (t('totalVolume') || 'Total Volume') : (t('totalRevenue') || 'Total Revenue')}
                           </span>
                           <span className="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900 tabular-nums mt-0.5 font-heading">
                             {pieMetric === 'volume' ? `${totalCategoryVolume}p` : `₹${(totalCategoryRevenue / 1000).toFixed(1)}k`}
                           </span>
                           <span className="text-[10px] text-emerald-700 font-medium mt-1 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200/60 shadow-2xs">
-                            100% Demand
+                            100% {t('demand') || 'Demand'}
                           </span>
                         </>
                       )}
@@ -1726,7 +1767,7 @@ export default function ExecutiveDashboard({
                 <div className="flex items-center space-x-2 mt-3">
                   {selectedSlice === 'all' ? (
                     <span className="text-xs font-medium text-slate-500 bg-slate-100/80 px-2.5 py-1 rounded-lg border border-slate-200/70">
-                      Viewing: All Categories
+                      {t('viewingAllCategories') || 'Viewing: All Categories'}
                     </span>
                   ) : (
                     <button
@@ -1734,7 +1775,7 @@ export default function ExecutiveDashboard({
                       className="text-xs font-medium px-2.5 py-1 rounded-lg border bg-orange-50 text-orange-700 border-orange-200/80 hover:bg-orange-100 transition cursor-pointer flex items-center space-x-1.5 shadow-2xs"
                     >
                       <X className="w-3 h-3" />
-                      <span>Clear Filter ({categoryStats.find(c => c.id === selectedSlice)?.name})</span>
+                      <span>{t('clearFilter') || 'Clear Filter'} ({getCategoryLabel(categoryStats.find(c => c.id === selectedSlice)?.name || '', currentLang)})</span>
                     </button>
                   )}
                 </div>
@@ -1745,7 +1786,7 @@ export default function ExecutiveDashboard({
                 {/* Header with Active vs All Toggle */}
                 <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
                   <div className="flex items-center space-x-1.5">
-                    <span className="text-xs font-medium text-slate-600">Categories</span>
+                    <span className="text-xs font-medium text-slate-600">{t('categories') || 'Categories'}</span>
                     <span className="text-[11px] font-medium text-orange-600 bg-orange-50 px-2 py-0.2 rounded-full border border-orange-200/60">
                       {displayedCategorySegments.length}
                     </span>
@@ -1761,7 +1802,7 @@ export default function ExecutiveDashboard({
                           : 'text-slate-500 hover:text-slate-900'
                       }`}
                     >
-                      Active ({activeCategorySegments.length})
+                      {t('active') || 'Active'} ({activeCategorySegments.length})
                     </button>
                     <button
                       onClick={() => setCategoryViewMode('all')}
@@ -1771,7 +1812,7 @@ export default function ExecutiveDashboard({
                           : 'text-slate-500 hover:text-slate-900'
                       }`}
                     >
-                      All ({pieAndDonutSegments.length})
+                      {t('all') || 'All'} ({pieAndDonutSegments.length})
                     </button>
                   </div>
                 </div>
@@ -1802,7 +1843,7 @@ export default function ExecutiveDashboard({
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between text-xs">
                               <span className={`truncate ${isSelected || isHovered ? 'text-amber-900 font-semibold' : 'text-slate-800 font-medium'}`}>
-                                {cat.name}
+                                {getCategoryLabel(cat.name, currentLang)}
                               </span>
                               <span className="font-semibold text-slate-900 tabular-nums text-xs ml-2 shrink-0">
                                 {pieMetric === 'volume' ? `${cat.volume}p` : `₹${cat.revenue.toLocaleString()}`}
@@ -1830,6 +1871,7 @@ export default function ExecutiveDashboard({
 
             </div>
 
+
             {/* INTERACTIVE CATEGORY PLANNING & DISH DEMAND DRAWER (REAL DATABASE DISH BREAKDOWN & CHEF ADVICE) */}
             {selectedSlice !== 'all' && (
               (() => {
@@ -1843,13 +1885,13 @@ export default function ExecutiveDashboard({
                         <div className="w-3 h-3 rounded-full ring-2 ring-white shadow-xs shrink-0" style={{ backgroundColor: selectedCat.color }} />
                         <div>
                           <div className="flex items-center space-x-2">
-                            <h4 className="text-sm font-semibold font-heading text-slate-900">{selectedCat.name}</h4>
+                            <h4 className="text-sm font-semibold font-heading text-slate-900">{getCategoryLabel(selectedCat.name, currentLang)}</h4>
                             <span className="text-[11px] font-medium text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200/60">
-                              {selectedCat.share || selectedCat.percentage}% Share
+                              {selectedCat.share || selectedCat.percentage}% {t('share') || 'Share'}
                             </span>
                           </div>
                           <p className="text-xs text-slate-500 font-medium mt-0.5">
-                            {selectedCat.volume} plates sold • ₹{(selectedCat.revenue || selectedCat.dishList?.reduce((s, d) => s + (d.revenue || (d.qty * (d.unitPrice || 70))), 0) || (selectedCat.volume * 70)).toLocaleString('en-IN')} revenue in this scope
+                            {selectedCat.volume} {t('plates') || 'plates'} • ₹{(selectedCat.revenue || selectedCat.dishList?.reduce((s, d) => s + (d.revenue || (d.qty * (d.unitPrice || 70))), 0) || (selectedCat.volume * 70)).toLocaleString('en-IN')} {t('revenue') || 'revenue'}
                           </p>
                         </div>
                       </div>
@@ -1857,7 +1899,7 @@ export default function ExecutiveDashboard({
                         onClick={() => setSelectedSlice('all')}
                         className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-xs font-medium text-slate-600 shadow-xs cursor-pointer transition self-start sm:self-auto"
                       >
-                        ✕ Close Details
+                        ✕ {t('closeDetails') || 'Close Details'}
                       </button>
                     </div>
 
@@ -1865,12 +1907,12 @@ export default function ExecutiveDashboard({
                     {/* Dishes breakdown in this category */}
                     <div>
                       <div className="text-xs font-medium text-slate-500 mb-1.5 flex items-center justify-between">
-                        <span>Authentic Dishes Ordered ({selectedCat.dishList?.length || 0})</span>
-                        <span className="text-slate-400 text-[11px]">Database Records</span>
+                        <span>{t('dishesOrdered') || 'Authentic Dishes Ordered'} ({selectedCat.dishList?.length || 0})</span>
+                        <span className="text-slate-400 text-[11px]">{t('databaseRecords') || 'Database Records'}</span>
                       </div>
                       {(!selectedCat.dishList || selectedCat.dishList.length === 0) ? (
                         <div className="p-4 rounded-xl bg-white border border-slate-200 text-center text-xs text-slate-400 font-normal">
-                          No orders recorded for dishes in this category during the selected timeframe.
+                          {t('noOrdersRecorded') || 'No orders recorded for dishes in this category during the selected timeframe.'}
                         </div>
                       ) : (
                         <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-xs divide-y divide-slate-100">
@@ -1883,13 +1925,13 @@ export default function ExecutiveDashboard({
                                     {dIdx + 1}
                                   </span>
                                   <div className="min-w-0">
-                                    <span className="font-medium text-slate-800 block truncate">{dish.name}</span>
-                                    <span className="text-[11px] text-slate-400 font-normal">₹{dish.unitPrice || (dish.qty > 0 ? Math.round(dish.revenue / dish.qty) : 0)} / plate</span>
+                                    <span className="font-medium text-slate-800 block truncate">{getDishDisplayName(dish, currentLang)}</span>
+                                    <span className="text-[11px] text-slate-400 font-normal">₹{dish.unitPrice || (dish.qty > 0 ? Math.round(dish.revenue / dish.qty) : 0)} / {t('plates') || 'plate'}</span>
                                   </div>
                                 </div>
                                 <div className="flex items-center space-x-3 shrink-0 text-right">
                                   <div>
-                                    <span className="font-semibold text-slate-900 block tabular-nums">{dish.qty} plates</span>
+                                    <span className="font-semibold text-slate-900 block tabular-nums">{dish.qty} {t('plates') || 'plates'}</span>
                                     <span className="text-[11px] text-slate-400 font-normal tabular-nums">₹{dish.revenue.toLocaleString('en-IN')}</span>
                                   </div>
                                   <span className="text-[11px] font-medium text-amber-700 bg-amber-50/80 border border-amber-200/60 px-2 py-0.5 rounded-md tabular-nums">
@@ -1935,13 +1977,13 @@ export default function ExecutiveDashboard({
                     onClick={() => setChartMetric('revenue')}
                     className={`px-2.5 py-1 rounded-md transition cursor-pointer font-medium text-xs ${chartMetric === 'revenue' ? 'bg-white text-slate-900 shadow-xs font-semibold' : 'text-slate-500 hover:text-slate-900'}`}
                   >
-                    Revenue (₹)
+                    {t('revenue') || 'Revenue (₹)'}
                   </button>
                   <button
                     onClick={() => setChartMetric('volume')}
                     className={`px-2.5 py-1 rounded-md transition cursor-pointer font-medium text-xs ${chartMetric === 'volume' ? 'bg-white text-slate-900 shadow-xs font-semibold' : 'text-slate-500 hover:text-slate-900'}`}
                   >
-                    Volume (Plates)
+                    {t('volume') || 'Volume (Plates)'}
                   </button>
                 </div>
 
@@ -1950,19 +1992,19 @@ export default function ExecutiveDashboard({
                     onClick={() => { setTimeframe('hourly'); setSelectedPointIndex(3); }}
                     className={`px-2.5 py-1 rounded-md transition cursor-pointer font-medium text-xs ${timeframe === 'hourly' ? 'bg-white text-slate-900 shadow-xs font-semibold' : 'text-slate-500 hover:text-slate-900'}`}
                   >
-                    Today
+                    {t('today') || 'Today'}
                   </button>
                   <button
                     onClick={() => { setTimeframe('weekly'); setSelectedPointIndex(5); }}
                     className={`px-2.5 py-1 rounded-md transition cursor-pointer font-medium text-xs ${timeframe === 'weekly' ? 'bg-white text-slate-900 shadow-xs font-semibold' : 'text-slate-500 hover:text-slate-900'}`}
                   >
-                    Week
+                    {t('week') || 'Week'}
                   </button>
                   <button
                     onClick={() => { setTimeframe('monthly'); setSelectedPointIndex(3); }}
                     className={`px-2.5 py-1 rounded-md transition cursor-pointer font-medium text-xs ${timeframe === 'monthly' ? 'bg-white text-slate-900 shadow-xs font-semibold' : 'text-slate-500 hover:text-slate-900'}`}
                   >
-                    Month
+                    {t('month') || 'Month'}
                   </button>
                 </div>
               </div>
@@ -1979,7 +2021,7 @@ export default function ExecutiveDashboard({
                     <span className={`font-semibold text-sm sm:text-base font-heading tabular-nums ${palette.textPrimary}`}>
                       {chartMetric === 'revenue' 
                         ? `₹${activePoint.revenue.toLocaleString('en-IN')}` 
-                        : `${activePoint.volume || (activePoint.orders > 0 ? activePoint.orders * 2 : 0)} Plates`}
+                        : `${activePoint.volume || (activePoint.orders > 0 ? activePoint.orders * 2 : 0)} ${t('plates') || 'Plates'}`}
                     </span>
                     <span className={`px-2 py-0.5 rounded-full font-medium text-[10px] border ${
                       activePoint.revenue > 1500 
@@ -1993,9 +2035,9 @@ export default function ExecutiveDashboard({
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5 truncate font-normal">
                     {activePoint.orders > 0 ? (
-                      <>{activePoint.orders} dining tickets • Top Seller: <strong className="font-semibold text-slate-800">{activePoint.peakDish}</strong></>
+                      <>{activePoint.orders} {t('diningTickets') || 'dining tickets'} • {t('topSeller') || 'Top Seller'}: <strong className="font-semibold text-slate-800">{getDishDisplayName({ name: activePoint.peakDish }, currentLang)}</strong></>
                     ) : (
-                      <>No dining orders in this window • Table capacity ready</>
+                      <>{t('noOrdersInWindow') || 'No dining orders in this window • Table capacity ready'}</>
                     )}
                   </p>
                 </div>
@@ -2004,11 +2046,11 @@ export default function ExecutiveDashboard({
               <div className="flex items-center space-x-1.5 shrink-0 self-start sm:self-auto">
                 <span className="px-2 py-0.5 rounded-lg bg-white border border-slate-200/80 font-medium text-xs text-slate-600 shadow-2xs flex items-center space-x-1">
                   <Clock className="w-3 h-3 text-orange-500" />
-                  <span>Turn: {activePoint.revenue > 0 ? '22m' : '-'}</span>
+                  <span>{t('turnoverTime') || 'Turn'}: {activePoint.revenue > 0 ? '22m' : '-'}</span>
                 </span>
                 <span className="px-2 py-0.5 rounded-lg bg-white border border-slate-200/80 font-medium text-xs text-slate-600 shadow-2xs flex items-center space-x-1">
                   <Zap className="w-3 h-3 text-amber-500" />
-                  <span>Prep: {activePoint.revenue > 0 ? '11m' : '-'}</span>
+                  <span>{t('prepTime') || 'Prep'}: {activePoint.revenue > 0 ? '11m' : '-'}</span>
                 </span>
               </div>
             </div>
@@ -2104,18 +2146,18 @@ export default function ExecutiveDashboard({
                     <div className="w-5 h-5 rounded-md bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
                       <Flame className="w-3 h-3" />
                     </div>
-                    <span className="text-xs font-medium">Rush Velocity</span>
+                    <span className="text-xs font-medium">{t('rushVelocity') || 'Rush Velocity'}</span>
                   </div>
                   <div className="mt-2">
                     <span className="text-sm font-semibold text-slate-800 block truncate">
                       {peakPointInfo && peakPointInfo.orders > 0 
-                        ? `${peakPointInfo.label}: Peak Demand` 
-                        : 'Pace: Normal Flow'}
+                        ? `${peakPointInfo.label}: ${t('peakDemand') || 'Peak Demand'}` 
+                        : (t('normalFlow') || 'Pace: Normal Flow')}
                     </span>
                     <span className="text-xs text-slate-500 block mt-0.5 font-medium tabular-nums">
                       {peakPointInfo && peakPointInfo.orders > 0 
-                        ? `₹${peakPointInfo.revenue.toLocaleString('en-IN')} (${peakPointInfo.orders} tickets)`
-                        : '0 orders recorded'}
+                        ? `₹${peakPointInfo.revenue.toLocaleString('en-IN')} (${peakPointInfo.orders} ${t('ticketsCount') || 'tickets'})`
+                        : `0 ${t('ordersCount') || 'orders'}`}
                     </span>
                   </div>
                 </div>
@@ -2126,12 +2168,12 @@ export default function ExecutiveDashboard({
                     <div className="w-5 h-5 rounded-md bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
                       <ShieldCheck className="w-3 h-3" />
                     </div>
-                    <span className="text-xs font-medium">Settlement Split</span>
+                    <span className="text-xs font-medium">{t('settlementSplit') || 'Settlement Split'}</span>
                   </div>
                   <div className="mt-2">
                     <div className="flex items-baseline justify-between text-xs font-semibold text-slate-800 tabular-nums">
                       <span>UPI: {paymentBreakdown.upiPct}%</span>
-                      <span className="text-slate-500 font-medium">Cash: {paymentBreakdown.cashPct}%</span>
+                      <span className="text-slate-500 font-medium">{t('cash') || 'Cash'}: {paymentBreakdown.cashPct}%</span>
                     </div>
                     {/* Two-tone progress bar */}
                     <div className="w-full h-1.5 rounded-full bg-slate-200 mt-1.5 flex overflow-hidden">
@@ -2151,18 +2193,18 @@ export default function ExecutiveDashboard({
                     <div className="w-5 h-5 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
                       <Award className="w-3 h-3" />
                     </div>
-                    <span className="text-xs font-medium">Top Velocity Dish</span>
+                    <span className="text-xs font-medium">{t('topVelocityDish') || 'Top Velocity Dish'}</span>
                   </div>
                   <div className="mt-2">
                     <span className="text-sm font-semibold text-slate-800 block truncate">
                       {topDishesToday && topDishesToday.length > 0 
-                        ? topDishesToday[0].name 
-                        : 'No orders in timeframe'}
+                        ? getDishDisplayName(topDishesToday[0], currentLang) 
+                        : (t('noOrdersRecorded') || 'No orders in timeframe')}
                     </span>
                     <span className="text-xs text-slate-500 block mt-0.5 font-medium tabular-nums">
                       {topDishesToday && topDishesToday.length > 0 
-                        ? `${topDishesToday[0].qty} Plates Sold (₹${topDishesToday[0].revenue.toLocaleString('en-IN')})` 
-                        : '0 Plates (₹0)'}
+                        ? `${topDishesToday[0].qty} ${t('plates') || 'Plates'} (₹${topDishesToday[0].revenue.toLocaleString('en-IN')})` 
+                        : `0 ${t('plates') || 'Plates'} (₹0)`}
                     </span>
                   </div>
                 </div>
@@ -2183,11 +2225,11 @@ export default function ExecutiveDashboard({
               <div className="flex items-center space-x-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                 <h2 className={`text-base font-semibold font-heading ${palette.textPrimary}`}>
-                  Live Table Sessions & Bill Settlement ({displaySessions.filter(s => s.status === 'ACTIVE').length} Tables Seated)
+                  {t('liveTableSessions') || 'Live Table Sessions & Bill Settlement'} ({displaySessions.filter(s => s.status === 'ACTIVE').length} {t('tablesSeatedCount') || 'Tables Seated'})
                 </h2>
               </div>
               <p className="text-xs text-slate-400 font-normal mt-0.5">
-                Real-time tracking of active table sessions, cash collections, and 1-click vacate and settlement.
+                {t('liveTableSessionsSub') || 'Real-time tracking of active table sessions, cash collections, and 1-click vacate and settlement.'}
               </p>
             </div>
 
@@ -2196,14 +2238,14 @@ export default function ExecutiveDashboard({
               className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Refresh Live Supabase Tables</span>
+              <span>{t('refreshTables') || 'Refresh Live Tables'}</span>
             </button>
           </div>
 
           {displaySessions.filter(s => s.status === 'ACTIVE').length === 0 ? (
             <div className="p-8 text-center rounded-2xl bg-slate-50 border border-dashed border-slate-200">
-              <p className="text-sm font-medium text-slate-700">All dining tables are currently clean & VACANT</p>
-              <p className="text-xs text-slate-400 mt-1">Live table sessions will appear here as soon as guests scan table QR codes.</p>
+              <p className="text-sm font-medium text-slate-700">{t('allTablesVacant') || 'All dining tables are currently clean & VACANT'}</p>
+              <p className="text-xs text-slate-400 mt-1">{t('liveTableSessionsEmptyTip') || 'Live table sessions will appear here as soon as guests scan table QR codes.'}</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -2233,25 +2275,25 @@ export default function ExecutiveDashboard({
                         ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
                         : 'bg-amber-50 text-amber-800 border-amber-200'
                     }`}>
-                      {isOnlinePaid ? 'Paid in Cash 🟢' : 'COD (Cash Due) 🟠'}
+                      {isOnlinePaid ? (t('paidInCash') || 'Paid in Cash 🟢') : (t('codCashDue') || 'COD (Cash Due) 🟠')}
                     </span>
                   </div>
 
                   <div className="p-3 rounded-xl bg-white border border-slate-200/70 space-y-1 text-xs">
                     <div className="flex justify-between">
-                      <span className="text-slate-400">Order Items:</span>
+                      <span className="text-slate-400">{t('orderItems') || 'Order Items:'}</span>
                       <strong className="text-slate-800 font-medium truncate max-w-[170px]" title={session.items_summary}>
                         {session.items_summary || 'Running Table Order'}
                       </strong>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-400">Elapsed Time:</span>
+                      <span className="text-slate-400">{t('elapsedTime') || 'Elapsed Time:'}</span>
                       <span className="font-mono font-medium text-slate-600">
                         {elapsedMinutes} mins
                       </span>
                     </div>
                     <div className="flex justify-between font-semibold text-sm pt-1 border-t border-slate-100 tabular-nums">
-                      <span className="text-slate-600 font-medium">Total Bill:</span>
+                      <span className="text-slate-600 font-medium">{t('totalBill') || 'Total Bill:'}</span>
                       <span className="text-orange-600">₹{session.total_amount}</span>
                     </div>
                   </div>
@@ -2262,7 +2304,7 @@ export default function ExecutiveDashboard({
                       className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center space-x-1 shadow-xs cursor-pointer"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Vacate & Settle</span>
+                      <span>{t('vacateAndSettle') || 'Vacate & Settle'}</span>
                     </button>
 
                     <button
@@ -2298,11 +2340,11 @@ export default function ExecutiveDashboard({
             <div className="flex items-center space-x-2">
               <Clock className="w-5 h-5 text-orange-500" />
               <h2 className={`text-sm sm:text-base font-semibold font-heading tracking-tight ${palette.textPrimary}`}>
-                Hourly Kitchen Prep & Tawa Staffing Heatmap
+                {t('hourlyHeatmap') || 'Hourly Kitchen Prep & Tawa Staffing Heatmap'}
               </h2>
             </div>
             <span className="text-xs font-medium text-slate-500">
-              Kitchen Turnaround: 11m Average
+              {t('kitchenTurnaround') || 'Kitchen Turnaround: 11m Average'}
             </span>
           </div>
 
@@ -2311,7 +2353,7 @@ export default function ExecutiveDashboard({
               <div 
                 key={i}
                 className={`p-4 rounded-2xl border transition ${
-                  slot.rush === 'HOUSEFULL' 
+                  slot.rush === (t('housefull') || 'HOUSEFULL') 
                     ? 'bg-orange-50/80 border-orange-300 ring-2 ring-orange-400/20' 
                     : 'bg-slate-50 border-slate-200'
                 }`}
@@ -2323,9 +2365,9 @@ export default function ExecutiveDashboard({
                   {slot.session}
                 </h4>
                 <div className="mt-2 flex items-center justify-between text-xs">
-                  <span className="font-mono font-semibold text-slate-700 tabular-nums">{slot.plates} Plates</span>
+                  <span className="font-mono font-semibold text-slate-700 tabular-nums">{slot.plates} {t('plates') || 'Plates'}</span>
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                    slot.rush === 'HOUSEFULL' ? 'bg-orange-600 text-white' : 'bg-slate-200 text-slate-800'
+                    slot.rush === (t('housefull') || 'HOUSEFULL') ? 'bg-orange-600 text-white' : 'bg-slate-200 text-slate-800'
                   }`}>
                     {slot.rush}
                   </span>
@@ -2333,7 +2375,7 @@ export default function ExecutiveDashboard({
                 <div className="w-full h-1.5 rounded-full bg-slate-200 mt-2 overflow-hidden">
                   <div 
                     style={{ width: slot.load }} 
-                    className={`h-full rounded-full ${slot.rush === 'HOUSEFULL' ? 'bg-orange-500' : 'bg-slate-400'}`}
+                    className={`h-full rounded-full ${slot.rush === (t('housefull') || 'HOUSEFULL') ? 'bg-orange-500' : 'bg-slate-400'}`}
                   />
                 </div>
                 <p className="text-[10px] text-slate-500 mt-2 leading-tight">
@@ -2354,7 +2396,7 @@ export default function ExecutiveDashboard({
               <div className="flex items-center space-x-2">
                 <SlidersHorizontal className="w-5 h-5 text-orange-600" />
                 <h3 className="text-base font-semibold font-heading tracking-tight text-slate-900">
-                  Customize Executive Dashboard
+                  {t('customizeDashboard') || 'Customize Executive Dashboard'}
                 </h3>
               </div>
               <button 
@@ -2370,8 +2412,8 @@ export default function ExecutiveDashboard({
               
               {/* Daily Sales Target Goal Setting */}
               <div className="p-4 rounded-2xl bg-orange-50/70 border border-orange-200/80 space-y-2">
-                <span className="font-bold text-slate-900 block">Daily Target Sales Goal (₹)</span>
-                <p className="text-[11px] text-slate-600">Set your restaurant's daily sales milestone. The progress bar updates in real time.</p>
+                <span className="font-bold text-slate-900 block">{t('dailySalesGoalSetting') || 'Daily Target Sales Goal (₹)'}</span>
+                <p className="text-[11px] text-slate-600">{t('dailySalesGoalSub') || 'Set your restaurant\'s daily sales milestone. The progress bar updates in real time.'}</p>
                 <div className="flex items-center space-x-2 mt-2">
                   <span className="font-bold text-sm text-slate-800">₹</span>
                   <input
@@ -2384,7 +2426,7 @@ export default function ExecutiveDashboard({
                     onClick={handleSaveDailyTarget}
                     className="px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs"
                   >
-                    Save Target
+                    {t('saveTarget') || 'Save Target'}
                   </button>
                 </div>
               </div>
@@ -2392,11 +2434,11 @@ export default function ExecutiveDashboard({
               {/* Toggle Sections Visibility */}
               <div className="space-y-2">
                 <span className="font-bold text-slate-900 block text-[11px] uppercase tracking-wider text-slate-400">
-                  Visible Dashboard Sections
+                  {t('visibleDashboardSections') || 'Visible Dashboard Sections'}
                 </span>
 
                 <label className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 cursor-pointer border border-slate-100">
-                  <span className="font-medium text-slate-800">1. Executive KPI Cards & Daily Goal</span>
+                  <span className="font-medium text-slate-800">{t('sectionKpis') || '1. Executive KPI Cards & Daily Goal'}</span>
                   <input
                     type="checkbox"
                     checked={dashboardConfig.showKpis}
@@ -2406,7 +2448,7 @@ export default function ExecutiveDashboard({
                 </label>
 
                 <label className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 cursor-pointer border border-slate-100">
-                  <span className="font-medium text-slate-800">2. Interactive Category Pie / Donut Chart</span>
+                  <span className="font-medium text-slate-800">{t('sectionPie') || '2. Interactive Category Pie / Donut Chart'}</span>
                   <input
                     type="checkbox"
                     checked={dashboardConfig.showPieChart}
@@ -2416,7 +2458,7 @@ export default function ExecutiveDashboard({
                 </label>
 
                 <label className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 cursor-pointer border border-slate-100">
-                  <span className="font-medium text-slate-800">3. Sales Velocity & Order Volume Spline Wave</span>
+                  <span className="font-medium text-slate-800">{t('sectionSalesWave') || '3. Sales Velocity & Order Volume Spline Wave'}</span>
                   <input
                     type="checkbox"
                     checked={dashboardConfig.showSalesWave}
@@ -2426,7 +2468,7 @@ export default function ExecutiveDashboard({
                 </label>
 
                 <label className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 cursor-pointer border border-slate-100">
-                  <span className="font-medium text-slate-800">5. Live Table Sessions & Bill Settlement</span>
+                  <span className="font-medium text-slate-800">{t('sectionLiveTables') || '4. Live Table Sessions & Bill Settlement'}</span>
                   <input
                     type="checkbox"
                     checked={dashboardConfig.showLiveTables}
@@ -2436,7 +2478,7 @@ export default function ExecutiveDashboard({
                 </label>
 
                 <label className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 cursor-pointer border border-slate-100">
-                  <span className="font-medium text-slate-800">6. Hourly Kitchen Prep & Staffing Heatmap</span>
+                  <span className="font-medium text-slate-800">{t('sectionHeatmap') || '5. Hourly Kitchen Prep & Staffing Heatmap'}</span>
                   <input
                     type="checkbox"
                     checked={dashboardConfig.showRushHeatmap}
@@ -2453,7 +2495,7 @@ export default function ExecutiveDashboard({
                 onClick={() => setShowCustomizeModal(false)}
                 className="px-5 py-2.5 rounded-2xl bg-orange-600 text-white font-bold text-xs hover:bg-orange-700 cursor-pointer shadow-xs"
               >
-                Done
+                {t('doneBtn') || t('done') || 'Done'}
               </button>
             </div>
 
@@ -2546,7 +2588,7 @@ export default function ExecutiveDashboard({
                 className="flex-1 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-orange-600/20 cursor-pointer"
               >
                 <Printer className="w-4 h-4" />
-                <span>Print Bill (KOT / Thermal)</span>
+                <span>{t('printBillThermal') || 'Print Bill (KOT / Thermal)'}</span>
               </button>
               <button
                 onClick={() => {
@@ -2556,7 +2598,7 @@ export default function ExecutiveDashboard({
                 className="py-2.5 px-4 rounded-xl border bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200 font-bold text-xs flex items-center justify-center space-x-1 cursor-pointer"
               >
                 <Download className="w-4 h-4" />
-                <span>Download</span>
+                <span>{t('downloadInvoice') || 'Download'}</span>
               </button>
             </div>
 
@@ -2577,19 +2619,19 @@ export default function ExecutiveDashboard({
 
                 <div className="space-y-1.5">
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-900 border border-amber-300">
-                    Step 1 of 2 • Cash Verification
+                    {t('step1CashVerification') || 'Step 1 of 2 • Cash Verification'}
                   </span>
                   <h3 className="text-base font-black text-slate-900 font-heading">
-                    Did you receive the cash?
+                    {t('didYouReceiveCash') || 'Did you receive the cash?'}
                   </h3>
                   <p className="text-xs text-slate-600">
-                    Table <strong>{dashboardVacateConfirm.session?.table_number || dashboardVacateConfirm.session?.restaurant_tables?.table_number || 'Dining'}</strong> bill amount:
+                    {t('tableBillAmount') || 'Table bill amount:'} <strong>{dashboardVacateConfirm.session?.table_number || dashboardVacateConfirm.session?.restaurant_tables?.table_number || 'Dining'}</strong>:
                   </p>
                   <div className="text-3xl font-black font-mono text-emerald-700 py-1">
                     ₹{dashboardVacateConfirm.session?.total_amount || 0}
                   </div>
                   <p className="text-[11px] text-slate-500 leading-relaxed">
-                    Confirm that the guest finished dining and paid in cash.
+                    {t('confirmGuestPaidCash') || 'Confirm that the guest finished dining and paid in cash.'}
                   </p>
                 </div>
 
@@ -2599,14 +2641,14 @@ export default function ExecutiveDashboard({
                     onClick={() => setDashboardVacateConfirm(null)}
                     className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
                   >
-                    Cancel / Not Yet
+                    {t('cancelNotYet') || 'Cancel / Not Yet'}
                   </button>
                   <button
                     type="button"
                     onClick={() => setDashboardVacateConfirm(prev => ({ ...prev, step: 2 }))}
                     className="py-2.5 px-3 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-xs shadow-xs transition flex items-center justify-center space-x-1 cursor-pointer"
                   >
-                    <span>Yes, Cash Received</span>
+                    <span>{t('yesCashReceived') || 'Yes, Cash Received'}</span>
                     <span>→</span>
                   </button>
                 </div>
@@ -2619,30 +2661,30 @@ export default function ExecutiveDashboard({
 
                 <div className="space-y-1.5">
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-900 border border-emerald-300">
-                    Step 2 of 2 • Final Confirmation
+                    {t('step2FinalConfirmation') || 'Step 2 of 2 • Final Confirmation'}
                   </span>
                   <h3 className="text-base font-black text-slate-900 font-heading">
-                    Double Check: Settle & Vacate?
+                    {t('doubleCheckVacate') || 'Double Check: Settle & Vacate?'}
                   </h3>
                   <p className="text-xs text-slate-600">
-                    Are you 100% sure you received <strong>₹{dashboardVacateConfirm.session?.total_amount || 0} in cash</strong>?
+                    {t('areYouSureCash') || 'Are you 100% sure you received'} <strong>₹{dashboardVacateConfirm.session?.total_amount || 0}</strong> {t('inCash') || 'in cash?'}
                   </p>
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-left text-[11px] text-slate-700 space-y-1.5">
                     <div className="flex items-center space-x-2 text-emerald-800 font-bold">
                       <span className="text-emerald-600 font-black">✓</span>
-                      <span>Orders marked COMPLETED & PAID</span>
+                      <span>{t('ordersCompletedPaid') || 'Orders marked COMPLETED & PAID'}</span>
                     </div>
                     <div className="flex items-center space-x-2 text-emerald-800 font-bold">
                       <span className="text-emerald-600 font-black">✓</span>
-                      <span>Remove all holds from orders & KDS</span>
+                      <span>{t('removeAllHolds') || 'Remove all holds from orders & KDS'}</span>
                     </div>
                     <div className="flex items-center space-x-2 text-emerald-800 font-bold">
                       <span className="text-emerald-600 font-black">✓</span>
-                      <span>Remove hold from Table & mark VACANT on dashboard</span>
+                      <span>{t('removeTableHoldVacant') || 'Remove hold from Table & mark VACANT on dashboard'}</span>
                     </div>
                     <div className="flex items-center space-x-2 text-emerald-800 font-bold">
                       <span className="text-emerald-600 font-black">✓</span>
-                      <span>🧹 Auto-dispatch cleaning alert to floor waiters</span>
+                      <span>{t('dispatchCleaningAlert') || '🧹 Auto-dispatch cleaning alert to floor waiters'}</span>
                     </div>
                   </div>
                 </div>
@@ -2653,14 +2695,14 @@ export default function ExecutiveDashboard({
                     onClick={() => setDashboardVacateConfirm(null)}
                     className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
                   >
-                    Back / Cancel
+                    {t('backCancel') || 'Back / Cancel'}
                   </button>
                   <button
                     type="button"
                     onClick={executeSettleDashboardSession}
                     className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/30 transition flex items-center justify-center space-x-1 cursor-pointer"
                   >
-                    <span>✓ Confirm & Vacate</span>
+                    <span>{t('confirmVacateBtn') || '✓ Confirm & Vacate'}</span>
                   </button>
                 </div>
               </>

@@ -4923,7 +4923,7 @@ export default function App() {
                   }`}
                 >
                   <Sparkles className="w-4 h-4 text-amber-500" />
-                  <span>Guest CRM & Loyalty</span>
+                  <span>{t('guestCrmLoyalty') || 'Guest CRM & Loyalty'}</span>
                 </button>
 
                 {/* Reports & Analytics */}
@@ -4974,11 +4974,11 @@ export default function App() {
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
                 <span className="text-[11px] font-bold font-heading text-slate-800">
-                  Live POS Cloud
+                  {t('livePosCloud') || 'Live POS Cloud'}
                 </span>
               </div>
               <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 font-bold">
-                Online
+                {t('online') || 'Online'}
               </span>
             </div>
             <div className="mt-2 text-[10px] text-slate-400 font-medium flex items-center justify-between">
@@ -4993,7 +4993,7 @@ export default function App() {
             className="w-full flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition border border-rose-200/80 cursor-pointer shadow-xs"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out / Switch Role</span>
+            <span>{t('signOutSwitchRole') || 'Sign Out / Switch Role'}</span>
           </button>
         </div>
 
