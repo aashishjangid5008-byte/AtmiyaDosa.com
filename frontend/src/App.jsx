@@ -24,7 +24,8 @@ import {
   BellRing,
   Moon,
   Clock,
-  ShieldAlert
+  ShieldAlert,
+  Check
 } from 'lucide-react';
 
 import { 
@@ -530,6 +531,7 @@ export default function App() {
       console.warn('Failed to persist preferred_language', e);
     }
   };
+  const [showGlobalLangModal, setShowGlobalLangModal] = useState(false);
   // 100% Clean White Classic Theme Only (No Dark / Sapphire Mode)
   const [theme, setThemeState] = useState('light');
   const setTheme = () => {
@@ -4987,6 +4989,22 @@ export default function App() {
             </div>
           </div>
 
+          {/* Language Selector Button in Sidebar */}
+          <button
+            type="button"
+            onClick={() => setShowGlobalLangModal(true)}
+            className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-950 text-xs font-bold transition border border-orange-200/90 cursor-pointer shadow-2xs active:scale-98"
+            title="Change Language / ભાષા બદલો / भाषा चुनें"
+          >
+            <div className="flex items-center space-x-2">
+              <Globe className="w-3.5 h-3.5 text-orange-600 animate-pulse shrink-0" />
+              <span>{t('language') || 'Language / ભાષા'}</span>
+            </div>
+            <span className="font-mono text-[11px] font-black uppercase px-2 py-0.5 rounded-lg bg-white text-orange-600 border border-orange-200 shadow-2xs">
+              {currentLang === 'gu' ? 'ગુજરાતી' : currentLang === 'hi' ? 'हिन्दी' : 'EN'}
+            </span>
+          </button>
+
           {/* Sign Out Button in Sidebar */}
           <button
             onClick={handleLogout}
@@ -5070,20 +5088,18 @@ export default function App() {
                 <span className="whitespace-nowrap">{currentTimeStr}</span>
               </div>
 
-              {/* Language Selector (Hidden on mobile phones to prevent overflow) */}
-              <div className="hidden md:flex items-center space-x-1 px-2 py-1.5 rounded-xl border text-xs font-semibold shrink-0 bg-slate-100/90 border-slate-200 text-slate-700">
-                <Globe className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                <select
-                  value={currentLang}
-                  onChange={(e) => setCurrentLang(e.target.value)}
-                  className="bg-transparent font-semibold focus:outline-none cursor-pointer text-xs text-slate-800"
-                >
-                  <option value="en">EN</option>
-                  <option value="hi">हिन्दी</option>
-                  <option value="gu">ગુજરાતી</option>
-                  <option value="hinglish">Hinglish</option>
-                </select>
-              </div>
+              {/* Language Selector Button (Visible on ALL devices - Mobile & Desktop) */}
+              <button
+                type="button"
+                onClick={() => setShowGlobalLangModal(true)}
+                className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer bg-slate-100/90 hover:bg-orange-50 hover:border-orange-300 border-slate-200 text-slate-800 shadow-2xs active:scale-95 shrink-0"
+                title="Change Language / ભાષા બદલો / भाषा चुनें"
+              >
+                <Globe className="w-3.5 h-3.5 text-orange-600 animate-pulse shrink-0" />
+                <span className="font-heading font-black text-xs uppercase tracking-wider">
+                  {currentLang === 'gu' ? 'ગુજરાતી' : currentLang === 'hi' ? 'हिन्दी' : 'English'}
+                </span>
+              </button>
 
               {/* Quick POS Rapid Counter Button (Desktop/Tablet for Admin & Waiter) */}
               {!isChefUser && (
@@ -5501,6 +5517,129 @@ export default function App() {
           onClose={() => setShowQuickPos(false)}
           currentStaff={{ name: authUser?.name || 'Admin Owner', role: authUser?.role || 'Admin' }}
         />
+      )}
+
+      {/* 6. UNIVERSAL GLOBAL LANGUAGE POPUP MODAL */}
+      {showGlobalLangModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3.5 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-slate-900 animate-scaleUp relative">
+            <button
+              type="button"
+              onClick={() => setShowGlobalLangModal(false)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 cursor-pointer transition z-10"
+              title="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Header */}
+            <div className="text-center space-y-1.5 pb-2 border-b border-slate-100">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white shadow-md mx-auto mb-1">
+                <Globe className="w-6 h-6 animate-pulse" />
+              </div>
+              <h3 className="text-lg font-black text-slate-900 font-heading">
+                {currentLang === 'gu' 
+                  ? 'તમારી ભાષા પસંદ કરો' 
+                  : (currentLang === 'hi' ? 'अपनी भाषा चुनें' : 'Select System Language')}
+              </h3>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                Choose your preferred language for POS, Admin, KDS & Menu
+                <br />
+                <span className="text-[11px] text-orange-600 font-semibold">
+                  ડિજિટલ પોસ અને સિસ્ટમ માટે ભાષા પસંદ કરો • भाषा चुनें
+                </span>
+              </p>
+            </div>
+
+            {/* Options */}
+            <div className="space-y-2.5 pt-1">
+              {[
+                {
+                  code: 'en',
+                  title: 'English',
+                  native: 'English (US)',
+                  desc: 'Standard restaurant operations, executive analytics, and POS in English',
+                  tag: 'EN'
+                },
+                {
+                  code: 'gu',
+                  title: 'ગુજરાતી',
+                  native: 'Gujarati',
+                  desc: 'સંપૂર્ણ વહીવટી ડેશબોર્ડ, કેશિયર પોસ અને મેનૂ ગુજરાતી ભાષામાં વાપરો',
+                  tag: 'GU'
+                },
+                {
+                  code: 'hi',
+                  title: 'हिन्दी',
+                  native: 'Hindi',
+                  desc: 'पूरा रेस्टोरेंट डैशबोर्ड, ऑर्डर बिलिंग और मेनू हिन्दी में चलाएं',
+                  tag: 'HI'
+                }
+              ].map((langOpt) => {
+                const isSelected = currentLang === langOpt.code;
+                return (
+                  <button
+                    key={langOpt.code}
+                    type="button"
+                    onClick={() => {
+                      setCurrentLang(langOpt.code);
+                      setShowGlobalLangModal(false);
+                    }}
+                    className={`w-full p-3.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center justify-between gap-3 group ${
+                      isSelected
+                        ? 'border-orange-500 bg-orange-50/80 shadow-xs ring-2 ring-orange-500/20'
+                        : 'border-slate-200 bg-white hover:border-orange-300 hover:bg-slate-50/80 shadow-2xs'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3 min-w-0">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black shrink-0 transition-colors ${
+                        isSelected 
+                          ? 'bg-orange-500 text-white shadow-xs' 
+                          : 'bg-slate-100 text-slate-700 group-hover:bg-orange-100 group-hover:text-orange-700'
+                      }`}>
+                        {langOpt.tag}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-heading font-black text-sm text-slate-900 block">
+                            {langOpt.title}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            • {langOpt.native}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5 truncate leading-tight">
+                          {langOpt.desc}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0">
+                      {isSelected ? (
+                        <div className="w-6 h-6 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-xs">
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        </div>
+                      ) : (
+                        <div className="w-6 h-6 rounded-full border border-slate-300 group-hover:border-orange-400" />
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Confirm & Close */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setShowGlobalLangModal(false)}
+                className="w-full py-3 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 active:scale-98 text-white font-black text-xs uppercase tracking-wider shadow-md transition flex items-center justify-center space-x-2 cursor-pointer"
+              >
+                <span>{currentLang === 'gu' ? 'આગળ વધો (ચાલુ રાખો)' : currentLang === 'hi' ? 'आगे बढ़ें (जारी रखें)' : 'Apply & Continue'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

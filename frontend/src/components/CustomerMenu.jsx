@@ -255,12 +255,23 @@ export default function CustomerMenu({
   // Table Concierge Modal State (Water, Waiter, Bill, Clean)
   const [showConciergeModal, setShowConciergeModal] = useState(false);
 
-  // Language Preference Pop-up on QR Scan (Session-aware: prompts on first QR scan or on user tap)
+  // Language Preference Pop-up on QR Scan (Session-aware: prompts on QR scan or on user tap)
   const [showLanguageModal, setShowLanguageModal] = useState(() => {
     try {
+      // If user arrived via table QR scan (e.g. ?table=T04 or ?qr=...), ALWAYS show language choice modal on arrival!
+      const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+      const isQrArrival = Boolean(urlParams && (urlParams.has('table') || urlParams.has('qr')));
+      if (isQrArrival) {
+        const currentUrlTable = urlParams.get('table') || '1';
+        const lastPrompted = sessionStorage.getItem('atmiya_qr_prompted_table');
+        if (lastPrompted !== currentUrlTable) {
+          sessionStorage.setItem('atmiya_qr_prompted_table', currentUrlTable);
+          return true; // Always pop up on table QR scan!
+        }
+      }
       const chosen = sessionStorage.getItem('atmiya_lang_chosen');
       if (chosen === 'true') return false;
-      return true; // Pop up for language preference on QR scan!
+      return true; // Pop up on initial visit
     } catch {
       return true;
     }
@@ -976,8 +987,17 @@ export default function CustomerMenu({
     if (!showLanguageModal) return null;
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center p-3.5 sm:p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-        <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-slate-900 animate-scaleUp">
+        <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-slate-900 animate-scaleUp relative">
           
+          <button
+            type="button"
+            onClick={() => setShowLanguageModal(false)}
+            className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 cursor-pointer transition z-10"
+            title="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
           {/* Header with Emblem */}
           <div className="text-center space-y-1.5 pb-2 border-b border-slate-100">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white shadow-md mx-auto mb-1">

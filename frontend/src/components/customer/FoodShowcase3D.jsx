@@ -13,6 +13,7 @@ import {
   Heart,
   Award
 } from 'lucide-react';
+import { getTranslation } from '../../lib/translations';
 
 const MASTER_CUISINES = [
   {
@@ -74,6 +75,7 @@ export default function FoodShowcase3D({
   onOpenLanguageModal
 }) {
   const [searchInput, setSearchInput] = useState('');
+  const t = (key) => getTranslation(currentLang, key);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -97,12 +99,12 @@ export default function FoodShowcase3D({
           <div className="px-3 py-1.5 rounded-full bg-slate-100 border border-slate-200 text-xs font-mono font-bold text-slate-800 flex items-center space-x-1.5 shadow-2xs">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span>📍 Table T-{cleanTableNum}</span>
-            <span className="text-[10px] text-slate-500 font-sans font-medium hidden xs:inline">• Verified</span>
+            <span className="text-[10px] text-slate-500 font-sans font-medium hidden xs:inline">• {currentLang === 'gu' ? 'ચકાસાયેલ' : (currentLang === 'hi' ? 'सत्यापित' : 'Verified')}</span>
           </div>
 
           <span className="hidden sm:inline-flex items-center space-x-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-            <span>100% Pure Veg</span>
+            <span>{t('pureVeg100') || '100% Pure Veg'}</span>
           </span>
         </div>
 
@@ -112,9 +114,10 @@ export default function FoodShowcase3D({
             <button
               type="button"
               onClick={onOpenLanguageModal}
-              className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-950 text-xs font-black transition cursor-pointer shadow-2xs"
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-950 text-xs font-black transition cursor-pointer shadow-2xs active:scale-95"
+              title="Change Language / ભાષા બદલો / भाषा चुनें"
             >
-              <Globe className="w-3.5 h-3.5 text-orange-600" />
+              <Globe className="w-3.5 h-3.5 text-orange-600 animate-pulse" />
               <span>{currentLang === 'gu' ? 'ગુજરાતી' : (currentLang === 'hi' ? 'हिन्दी' : 'English')}</span>
             </button>
           ) : (
@@ -142,7 +145,7 @@ export default function FoodShowcase3D({
               title="Call Captain / Request Water"
             >
               <BellRing className="w-3.5 h-3.5" />
-              <span className="hidden xs:inline">Call Server</span>
+              <span className="hidden xs:inline">{t('callServer') || t('service') || 'Call Server'}</span>
             </button>
           )}
         </div>
@@ -155,17 +158,17 @@ export default function FoodShowcase3D({
         <div className="bg-white rounded-3xl p-5 border border-slate-200/90 shadow-xs text-center space-y-2">
           <div className="inline-flex items-center space-x-1.5 px-3 py-0.5 rounded-full bg-orange-50 text-orange-800 border border-orange-200 text-[10px] font-black uppercase tracking-wider">
             <Sparkles className="w-3 h-3 text-orange-600" />
-            <span>Authentic Live Tawa & Gujarat Hospitality</span>
+            <span>{currentLang === 'gu' ? 'અસલ લાઈવ તવા અને ગુજરાતની મહેમાનગતિ' : (currentLang === 'hi' ? 'प्रामाणिक लाइव तवा और गुजरात का सत्कार' : 'Authentic Live Tawa & Gujarat Hospitality')}</span>
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-black font-heading tracking-tight text-slate-900">
             {restaurantName}
           </h1>
           <p className="text-xs text-orange-700 font-bold">
-            આત્મીય ઢોસા હબ • શુદ્ધ શાકાહારી લાઈવ તવા સ્પેશિયાલિટી
+            {currentLang === 'gu' ? 'આત્મીય ઢોસા હબ • શુદ્ધ શાકાહારી લાઈવ તવા સ્પેશિયાલિટી' : (currentLang === 'hi' ? 'आत्मीय डोसा हब • शुद्ध शाकाहारी लाइव तवा स्पेशियलिटी' : 'Atmiya Dosa Hub • 100% Pure Veg Live Tawa Specialty')}
           </p>
           <p className="text-[11px] text-slate-500 font-medium">
-            📍 Station Road, Petlad, Anand District • Touchless Dining at Table T-{cleanTableNum}
+            📍 {currentLang === 'gu' ? `સ્ટેશન રોડ, પેટલાદ, આણંદ • ટેબલ T-${cleanTableNum} પર ડિજિટલ મેનૂ` : (currentLang === 'hi' ? `स्टेशन रोड, पेटलाद, आणंद • टेबल T-${cleanTableNum} पर डिजिटल मेन्यू` : `Station Road, Petlad, Anand District • Touchless Dining at Table T-${cleanTableNum}`)}
           </p>
         </div>
 
@@ -176,14 +179,14 @@ export default function FoodShowcase3D({
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search 177+ dishes (e.g. Mysore, Pav Bhaji, Manchurian)..."
+            placeholder={currentLang === 'gu' ? '૧૭૭+ વાનગીઓ શોધો (દા.ત. મૈસુર, પાવભાજી, મંચુરિયન)...' : (currentLang === 'hi' ? '१७७+ व्यंजन खोजें (उदा. मैसूर, पाव भाजी, मंचूरियन)...' : 'Search 177+ dishes (e.g. Mysore, Pav Bhaji, Manchurian)...')}
             className="w-full pl-10 pr-24 py-3 rounded-2xl bg-white border border-slate-200 focus:border-slate-800 focus:ring-2 focus:ring-slate-900/10 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:outline-none transition shadow-2xs"
           />
           <button
             type="submit"
             className="absolute right-1.5 top-1/2 -translate-y-1/2 px-4 py-2 rounded-xl bg-slate-900 hover:bg-black active:scale-95 text-white font-black text-xs transition cursor-pointer shadow-xs"
           >
-            Search
+            {t('search') || 'Search'}
           </button>
         </form>
 
@@ -192,14 +195,14 @@ export default function FoodShowcase3D({
           <div className="flex items-center justify-between px-1">
             <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center space-x-1.5">
               <Utensils className="w-3.5 h-3.5 text-orange-600" />
-              <span>Explore Menu Categories · મુખ્ય વાનગીઓ</span>
+              <span>{currentLang === 'gu' ? 'મુખ્ય વાનગીઓ અને કેટેગરીઝ' : (currentLang === 'hi' ? 'मुख्य व्यंजन और श्रेणियां' : 'Explore Menu Categories')}</span>
             </span>
             <button
               type="button"
               onClick={onViewAllDishes}
               className="text-[11px] font-bold text-orange-600 hover:text-orange-700 flex items-center space-x-0.5 cursor-pointer"
             >
-              <span>View All (177)</span>
+              <span>{t('viewAll') || 'View All'} (177)</span>
               <ArrowRight className="w-3 h-3 ml-0.5" />
             </button>
           </div>
@@ -241,10 +244,10 @@ export default function FoodShowcase3D({
                 <div className="p-3 sm:p-3.5 flex flex-col justify-between flex-1">
                   <div>
                     <h3 className="font-heading font-black text-xs sm:text-sm text-slate-900 group-hover:text-orange-600 transition-colors leading-tight">
-                      {cuisine.name}
+                      {currentLang === 'gu' ? cuisine.gujarati : cuisine.name}
                     </h3>
                     <p className="text-[10px] text-orange-700 font-bold mt-0.5">
-                      {cuisine.gujarati}
+                      {currentLang === 'gu' ? cuisine.name : cuisine.gujarati}
                     </p>
                     <p className="text-[10px] text-slate-500 font-normal line-clamp-1 mt-0.5">
                       {cuisine.highlight}
@@ -254,7 +257,7 @@ export default function FoodShowcase3D({
                   <div className="mt-2.5 pt-2 border-t border-slate-100 text-[10px] font-mono text-slate-900 font-black flex items-center justify-between">
                     <span className="text-orange-600 font-black">{cuisine.price}</span>
                     <span className="text-slate-400 group-hover:text-orange-600 font-bold flex items-center gap-0.5 text-[9px] transition-colors">
-                      Explore <ArrowRight className="w-2.5 h-2.5" />
+                      {currentLang === 'gu' ? 'જુઓ' : (currentLang === 'hi' ? 'देखें' : 'Explore')} <ArrowRight className="w-2.5 h-2.5" />
                     </span>
                   </div>
                 </div>
@@ -269,24 +272,24 @@ export default function FoodShowcase3D({
             <div className="w-7 h-7 rounded-xl bg-amber-500/10 text-amber-600 mx-auto flex items-center justify-center">
               <Award className="w-4 h-4" />
             </div>
-            <span className="text-[10px] font-black text-amber-950 block">100% Amul</span>
-            <span className="text-[9px] text-slate-500 block leading-tight font-medium">Pure Butter Only</span>
+            <span className="text-[10px] font-black text-amber-950 block">{currentLang === 'gu' ? '૧૦૦% અમૂલ' : (currentLang === 'hi' ? '१००% अमूल' : '100% Amul')}</span>
+            <span className="text-[9px] text-slate-500 block leading-tight font-medium">{currentLang === 'gu' ? 'શુદ્ધ બટર માત્ર' : (currentLang === 'hi' ? 'केवल शुद्ध मक्खन' : 'Pure Butter Only')}</span>
           </div>
 
           <div className="p-2.5 sm:p-3 rounded-2xl bg-white border border-slate-200 text-center space-y-1 shadow-2xs">
             <div className="w-7 h-7 rounded-xl bg-emerald-500/10 text-emerald-600 mx-auto flex items-center justify-center">
               <ShieldCheck className="w-4 h-4" />
             </div>
-            <span className="text-[10px] font-black text-emerald-950 block">Pure Veg</span>
-            <span className="text-[9px] text-slate-500 block leading-tight font-medium">Jain Options Ready</span>
+            <span className="text-[10px] font-black text-emerald-950 block">{currentLang === 'gu' ? 'શુદ્ધ શાકાહારી' : (currentLang === 'hi' ? 'शुद्ध शाकाहारी' : 'Pure Veg')}</span>
+            <span className="text-[9px] text-slate-500 block leading-tight font-medium">{currentLang === 'gu' ? 'જૈન વિકલ્પ ઉપલબ્ધ' : (currentLang === 'hi' ? 'जैन विकल्प उपलब्ध' : 'Jain Options Ready')}</span>
           </div>
 
           <div className="p-2.5 sm:p-3 rounded-2xl bg-white border border-slate-200 text-center space-y-1 shadow-2xs">
             <div className="w-7 h-7 rounded-xl bg-orange-500/10 text-orange-600 mx-auto flex items-center justify-center">
               <Flame className="w-4 h-4" />
             </div>
-            <span className="text-[10px] font-black text-orange-950 block">Live Tawa</span>
-            <span className="text-[9px] text-slate-500 block leading-tight font-medium">Fresh Cooked</span>
+            <span className="text-[10px] font-black text-orange-950 block">{currentLang === 'gu' ? 'લાઈવ તવા' : (currentLang === 'hi' ? 'लाइव तवा' : 'Live Tawa')}</span>
+            <span className="text-[9px] text-slate-500 block leading-tight font-medium">{currentLang === 'gu' ? 'તાજું તૈયાર' : (currentLang === 'hi' ? 'ताज़ा तैयार' : 'Fresh Cooked')}</span>
           </div>
         </div>
 
@@ -302,9 +305,9 @@ export default function FoodShowcase3D({
             className="w-full py-3.5 px-5 rounded-2xl bg-slate-900 hover:bg-black active:scale-[0.99] text-white font-black text-sm sm:text-base font-heading shadow-md flex items-center justify-between transition cursor-pointer"
           >
             <div className="text-left">
-              <span className="block leading-tight">Explore Full Menu & Order</span>
+              <span className="block leading-tight">{currentLang === 'gu' ? 'આખું મેનૂ જુઓ અને ઓર્ડર કરો' : (currentLang === 'hi' ? 'पूरा मेन्यू देखें और ऑर्डर करें' : 'Explore Full Menu & Order')}</span>
               <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block">
-                ૧૭૭+ વાનગીઓ • આખું મેનૂ જુઓ
+                {currentLang === 'gu' ? '૧૭૭+ વાનગીઓ • આખું મેનૂ જુઓ' : (currentLang === 'hi' ? '१७७+ व्यंजन • पूरा मेन्यू देखें' : '177+ Dishes • View Full Menu')}
               </span>
             </div>
             <div className="w-8 h-8 rounded-xl bg-white/20 text-white flex items-center justify-center shrink-0">
@@ -313,9 +316,9 @@ export default function FoodShowcase3D({
           </button>
 
           <div className="flex items-center justify-center space-x-2 text-[10px] text-slate-500 font-medium">
-            <span className="font-bold text-slate-700">Seated at Table T-{cleanTableNum}</span>
+            <span className="font-bold text-slate-700">{currentLang === 'gu' ? `ટેબલ T-${cleanTableNum} પર બેઠેલા છો` : (currentLang === 'hi' ? `टेबल T-${cleanTableNum} पर बैठे हैं` : `Seated at Table T-${cleanTableNum}`)}</span>
             <span>•</span>
-            <span>Touch any dish to browse & customize</span>
+            <span>{currentLang === 'gu' ? 'જોવા અને ઓર્ડર કરવા માટે કોઈપણ વાનગી પસંદ કરો' : (currentLang === 'hi' ? 'देखने और ऑर्डर करने के लिए किसी भी व्यंजन को चुनें' : 'Touch any dish to browse & customize')}</span>
           </div>
 
         </div>

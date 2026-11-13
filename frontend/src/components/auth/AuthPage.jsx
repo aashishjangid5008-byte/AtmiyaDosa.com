@@ -21,7 +21,8 @@ import {
   Crown,
   Flame,
   Check,
-  ChevronRight
+  ChevronRight,
+  X
 } from 'lucide-react';
 import { getTranslation } from '../../lib/translations';
 import { 
@@ -46,6 +47,7 @@ export default function AuthPage({
   // Flow: 'signin' | 'signup'
   const [authFlow, setAuthFlow] = useState('signin');
   const [selectedRole, setSelectedRole] = useState('admin'); // 'admin' | 'waiter' | 'chef'
+  const [showAuthLangModal, setShowAuthLangModal] = useState(false);
   
   // Custom Credentials for Sign In (Empty by default: Admin and Staff type their own ID & Password)
   const [identifier, setIdentifier] = useState('');
@@ -397,24 +399,16 @@ export default function AuthPage({
               <ArrowRight className="w-3.5 h-3.5 text-orange-600" />
             </button>
 
-            {/* Language Selector */}
-            <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs shadow-2xs">
-              <Globe className="w-3.5 h-3.5 text-slate-400" />
-              <select 
-                value={currentLang} 
-                onChange={(e) => {
-                  const lang = e.target.value;
-                  if (onLanguageChange) onLanguageChange(lang);
-                  try { localStorage.setItem('preferred_language', lang); } catch(err){}
-                }}
-                className="bg-transparent text-xs font-semibold focus:outline-none cursor-pointer"
-                aria-label="Language"
-              >
-                <option value="en">English (US)</option>
-                <option value="gu">ગુજરાતી</option>
-                <option value="hi">हिन्दी</option>
-              </select>
-            </div>
+            {/* Language Selector Button with Pop-up */}
+            <button
+              type="button"
+              onClick={() => setShowAuthLangModal(true)}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-orange-50 border border-slate-200 hover:border-orange-300 text-slate-800 text-xs font-bold shadow-2xs cursor-pointer active:scale-95 transition"
+              title="Change Language / ભાષા પસંદ કરો"
+            >
+              <Globe className="w-3.5 h-3.5 text-orange-600 animate-pulse" />
+              <span>{currentLang === 'gu' ? 'ગુજરાતી' : (currentLang === 'hi' ? 'हिन्दी' : 'English')}</span>
+            </button>
           </div>
 
         </div>
@@ -552,7 +546,7 @@ export default function AuthPage({
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setAuthFlow('signup'); setError(''); }}
+                  onClick={() => { setAuthFlow('signup'); setShowAuthLangModal(true); setError(''); }}
                   className={`py-2.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center space-x-2 ${
                     authFlow === 'signup'
                       ? 'bg-white text-orange-600 shadow-xs'
@@ -997,6 +991,113 @@ export default function AuthPage({
           {' '}• Protected with End-to-End Enterprise RLS Security
         </div>
       </footer>
+
+      {/* SIGNUP / AUTH LANGUAGE POPUP MODAL */}
+      {showAuthLangModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-slate-900 relative">
+            <button
+              type="button"
+              onClick={() => setShowAuthLangModal(false)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 cursor-pointer transition z-10"
+              title="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Header */}
+            <div className="text-center space-y-1.5 pb-2 border-b border-slate-100">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white shadow-md mx-auto mb-1">
+                <Globe className="w-6 h-6 animate-pulse" />
+              </div>
+              <h3 className="text-lg font-black text-slate-900 font-heading">
+                {currentLang === 'gu' ? 'તમારી ભાષા પસંદ કરો' : (currentLang === 'hi' ? 'अपनी भाषा चुनें' : 'Select Your Language')}
+              </h3>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                {t('chooseLangDesc') || 'All menus, terminals, and notifications will display in your selected language.'}
+              </p>
+            </div>
+
+            {/* Language Options Grid */}
+            <div className="space-y-2.5 pt-1">
+              {[
+                {
+                  code: 'en',
+                  title: 'English',
+                  native: 'English (US)',
+                  desc: 'Sign up and operate terminal in English',
+                  tag: 'EN'
+                },
+                {
+                  code: 'gu',
+                  title: 'ગુજરાતી',
+                  native: 'Gujarati',
+                  desc: 'સંપૂર્ણ રેસ્ટોરન્ટ ટર્મિનલ અને સ્ટાફ એકાઉન્ટ ગુજરાતીમાં',
+                  tag: 'GU'
+                },
+                {
+                  code: 'hi',
+                  title: 'हिन्दी',
+                  native: 'Hindi',
+                  desc: 'स्टाफ टर्मिनल और मेन्यू सम्पूर्ण राष्ट्रभाषा हिन्दी में',
+                  tag: 'HI'
+                }
+              ].map((langOption) => {
+                const isSelected = currentLang === langOption.code;
+                return (
+                  <button
+                    key={langOption.code}
+                    type="button"
+                    onClick={() => {
+                      if (onLanguageChange) onLanguageChange(langOption.code);
+                      try { localStorage.setItem('preferred_language', langOption.code); } catch(err){}
+                      setShowAuthLangModal(false);
+                    }}
+                    className={`w-full p-3.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-center justify-between gap-3 group ${
+                      isSelected
+                        ? 'border-orange-500 bg-orange-50/80 shadow-xs ring-2 ring-orange-500/20'
+                        : 'border-slate-200 bg-white hover:border-orange-300 hover:bg-slate-50/80 shadow-2xs'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3 min-w-0">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black shrink-0 transition-colors ${
+                        isSelected 
+                          ? 'bg-orange-500 text-white shadow-xs' 
+                          : 'bg-slate-100 text-slate-700 group-hover:bg-orange-100 group-hover:text-orange-700'
+                      }`}>
+                        {langOption.tag}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-heading font-black text-sm text-slate-900 block">
+                            {langOption.title}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            • {langOption.native}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5 truncate leading-tight">
+                          {langOption.desc}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0">
+                      {isSelected ? (
+                        <div className="w-6 h-6 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-xs">
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        </div>
+                      ) : (
+                        <div className="w-6 h-6 rounded-full border border-slate-300 group-hover:border-orange-400" />
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
