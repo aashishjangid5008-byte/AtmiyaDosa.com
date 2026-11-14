@@ -2643,19 +2643,31 @@ export default function App() {
     }
   };
 
-  const handleCancelOrderWithReason = (orderId, reason, staffName) => {
-    const targetOrder = orders.find(o => o.id === orderId);
+  const handleCancelOrderWithReason = (orderId, reason = 'Customer requested cancellation', staffName = null) => {
+    if (!orderId) return;
+    const targetOrder = orders.find(o => matchesOrderId(o, orderId));
     if (!targetOrder) return;
-    const staff = staffName || authUser?.name || 'Admin';
-    const updated = orders.map(o => o.id === orderId ? {
+    const staff = staffName || authUser?.name || 'Staff';
+    const updated = orders.map(o => matchesOrderId(o, orderId) ? {
       ...o,
       status: 'Cancelled',
       payment_status: 'Void',
       cancel_reason: reason,
-      cancelled_by: staff
+      cancelled_by: staff,
+      cancelled_at: new Date().toISOString()
     } : o);
     setOrders(updated);
     setLocalStore('orders', updated);
+
+    // Dismiss any pending cancel_request calls for this table/order
+    setServiceCalls(prev => {
+      const nextCalls = prev.filter(c => !(
+        (c.type === 'cancel_request' || c.type === 'CANCEL_REQUEST') &&
+        (matchesOrderId(targetOrder, c.orderId) || String(c.tableNumber).replace(/\D/g, '') === String(targetOrder.table_number).replace(/\D/g, ''))
+      ));
+      setLocalStore('service_calls', nextCalls);
+      return nextCalls;
+    });
 
     // If order was cancelled, immediately free table if no other active dining orders remain
     const targetTableNum = targetOrder?.table_number;
@@ -2663,7 +2675,7 @@ export default function App() {
       const normalizeTbl = (val) => String(val || '').replace(/[^0-9]/g, '');
       const tCode = normalizeTbl(targetTableNum);
       const hasOtherActive = updated.some(o => 
-        o.id !== orderId && 
+        !matchesOrderId(o, orderId) && 
         normalizeTbl(o.table_number) === tCode && 
         o.status !== 'Completed' && 
         o.status !== 'Cancelled'
@@ -2688,9 +2700,9 @@ export default function App() {
 
     recordEmployeeActivity({
       employeeName: staff,
-      employeeRole: authUser?.role || 'Admin',
-      tableNumber: targetOrder.table_number || 'Online Queue',
-      actionType: 'ORDER_CANCELLED_OUT_OF_STOCK',
+      employeeRole: authUser?.role || 'Staff',
+      tableNumber: targetOrder.table_number || 'Dine-In',
+      actionType: 'ORDER_CANCELLED',
       amount: targetOrder.total,
       details: `Order #${targetOrder.id} cancelled. Reason: ${reason} (Authorized by ${staff})`,
       type: 'order',
@@ -2698,8 +2710,102 @@ export default function App() {
     });
     playSound('alert');
 
+    // Broadcast Realtime cancellation to customer phones & kitchen KDS
+    try {
+      const channel = supabase.channel('restaurant_alerts');
+      channel.send({
+        type: 'broadcast',
+        event: 'order_status_updated',
+        payload: { orderId: targetOrder.id, status: 'Cancelled', reason }
+      });
+    } catch (e) {}
+
     // Sync Cancellation to Supabase Cloud
     updateOrderStatusInSupabase(targetOrder?.supabase_order_id || targetOrder?.id || orderId, 'Cancelled');
+  };
+
+  // Waiter & Admin Order Ticket Modifier: Add, remove, or modify items within an order
+  const handleUpdateOrderItems = (orderId, newItems, staffName = null, staffRole = null) => {
+    if (!orderId) return;
+    const targetOrder = orders.find(o => matchesOrderId(o, orderId));
+    if (!targetOrder) return;
+    const actorName = staffName || authUser?.name || 'Floor Waiter';
+
+    // If all items removed, automatically cancel the ticket
+    if (!newItems || newItems.length === 0) {
+      handleCancelOrderWithReason(orderId, 'All items removed from ticket by waiter', actorName);
+      return;
+    }
+
+    // Recalculate financial breakdown
+    const subtotal = Number(newItems.reduce((acc, it) => acc + (Number(it.price || it.unit_price || 0) * (Number(it.qty || it.quantity || 1))), 0).toFixed(2));
+    const tax = Number((subtotal * 0.05).toFixed(2)); // 5% GST
+    const discount = Number(targetOrder.discount || 0);
+    const total = Number((subtotal + tax - discount).toFixed(2));
+    const summaryStr = newItems.map(i => `${i.qty || i.quantity || 1}x ${i.name || i.item_name}`).join(', ');
+
+    const allServed = newItems.every(i => i.is_served);
+    const allReady = newItems.every(i => i.kitchen_status === 'ready' || i.is_served);
+    const anyReadyOrCooking = newItems.some(i => i.kitchen_status === 'ready' || i.kitchen_status === 'preparing');
+    const nextStatus = allServed ? 'Served' : (allReady ? 'Ready' : (anyReadyOrCooking ? 'Preparing' : 'Placed'));
+
+    const updated = orders.map(o => {
+      if (!matchesOrderId(o, orderId)) return o;
+      return {
+        ...o,
+        items: newItems,
+        order_items: newItems,
+        subtotal,
+        tax,
+        total,
+        total_amount: total,
+        items_summary: summaryStr,
+        status: nextStatus,
+        last_modified_at: new Date().toISOString(),
+        modified_by: actorName
+      };
+    });
+
+    setOrders(updated);
+    setLocalStore('orders', updated);
+
+    // Sync to Supabase Cloud DB
+    try {
+      const ordUuid = targetOrder.supabase_order_id || targetOrder.id;
+      supabase.from('orders').update({
+        subtotal,
+        tax_amount: tax,
+        total_amount: total,
+        status: nextStatus.toUpperCase()
+      }).eq('id', ordUuid).then(() => {});
+
+      const channel = supabase.channel('restaurant_alerts');
+      channel.send({
+        type: 'broadcast',
+        event: 'order_status_updated',
+        payload: {
+          orderId: targetOrder.id,
+          tableNumber: targetOrder.table_number,
+          items: newItems,
+          total
+        }
+      });
+    } catch (e) {
+      console.warn('Sync order items error:', e);
+    }
+
+    recordEmployeeActivity({
+      employeeName: actorName,
+      employeeRole: staffRole || authUser?.role || 'Waiter',
+      tableNumber: targetOrder.table_number || 'Dine-In',
+      actionType: 'ORDER_ITEMS_MODIFIED',
+      amount: total,
+      details: `Modified ticket for Table ${targetOrder.table_number}: ${newItems.length} items (Total: ₹${total}) by ${actorName}`,
+      type: 'order',
+      color: 'blue'
+    });
+
+    playSound('success');
   };
 
   const handlePlaceCustomerOrder = async (rawOrder) => {
@@ -4405,7 +4511,9 @@ export default function App() {
       WAITER: 'Floor Waiter Assistance',
       WATER: 'Drinking Water Refill',
       BILL: 'Bill Settlement Request',
-      CLEAN: 'Table Cleaning'
+      CLEAN: 'Table Cleaning',
+      CANCEL_REQUEST: 'Order Cancel / Edit Request (5m Window)',
+      cancel_request: 'Order Cancel / Edit Request (5m Window)'
     };
     let cleanTbl = String(tableNumber).replace(/\D/g, '') || tableNumber;
     if (viewMode === 'customer' && !authUser) {
@@ -4418,7 +4526,7 @@ export default function App() {
       id: `srv_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       tableNumber: cleanTbl,
       type,
-      label: labels[type] || 'Assistance',
+      label: labels[type] || 'Floor Assistance',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       timestamp: Date.now(),
       status: 'pending'
@@ -4431,10 +4539,10 @@ export default function App() {
       return updated;
     });
 
-    // 2. Play service chime or cleaning siren
-    if (type === 'CLEAN' || String(type).toLowerCase().includes('clean')) {
+    // 2. Play service chime or cleaning/cancel siren
+    if (type === 'CLEAN' || String(type).toLowerCase().includes('clean') || String(type).toLowerCase().includes('cancel')) {
       playSound('alert');
-      speakTableCleanAlert(cleanTbl);
+      if (type === 'CLEAN') speakTableCleanAlert(cleanTbl);
     } else {
       playSound('waiter');
     }
@@ -5334,6 +5442,8 @@ export default function App() {
                 onToggleItemServed={handleToggleItemServed}
                 onMarkAllTableItemsServed={handleMarkAllTableItemsServed}
                 onUpdateOrderStatus={handleUpdateOrderStatus}
+                onCancelOrder={handleCancelOrderWithReason}
+                onUpdateOrderItems={handleUpdateOrderItems}
                 authUser={authUser}
                 onLogout={handleLogout}
                 onExitWaiterMode={handleLogout}
@@ -5361,6 +5471,8 @@ export default function App() {
               onToggleItemServed={handleToggleItemServed}
               onMarkAllTableItemsServed={handleMarkAllTableItemsServed}
               onUpdateOrderStatus={handleUpdateOrderStatus}
+              onCancelOrder={handleCancelOrderWithReason}
+              onUpdateOrderItems={handleUpdateOrderItems}
               authUser={authUser}
               onLogout={handleLogout}
               onExitWaiterMode={() => {

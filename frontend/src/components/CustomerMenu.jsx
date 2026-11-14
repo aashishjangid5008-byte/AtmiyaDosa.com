@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Search, 
   ShoppingBag, 
@@ -250,7 +250,43 @@ export default function CustomerMenu({
   const [placedOrderId, setPlacedOrderId] = useState('');
   const [paidSuccessOrder, setPaidSuccessOrder] = useState(null);
   const [serviceNotice, setServiceNotice] = useState('');
+  const [nowTick, setNowTick] = useState(Date.now());
+  const [cancelWaitersCalled, setCancelWaitersCalled] = useState({});
 
+  // 1-second interval for live 5-minute countdown and freshness timers
+  useEffect(() => {
+    const timer = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Compute remaining seconds within the 5-minute (300s) grace window for an order
+  const getRemainingGraceSeconds = (targetOrder) => {
+    if (!targetOrder) return 0;
+    const placedTimeStr = targetOrder.placed_at || targetOrder.created_at || targetOrder.timestamp;
+    if (!placedTimeStr) return 0;
+    const placedTime = new Date(placedTimeStr).getTime();
+    if (isNaN(placedTime)) return 0;
+    const elapsedSecs = Math.max(0, Math.floor((nowTick - placedTime) / 1000));
+    return Math.max(0, 300 - elapsedSecs);
+  };
+
+  const formatCountdown = (secs) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const handleRequestOrderCancellation = (targetOrder) => {
+    const ordId = targetOrder?.id || placedOrderId || activeTableOrder?.id;
+    if (onCallService) {
+      onCallService('CANCEL_REQUEST', currentTable);
+    }
+    if (ordId) {
+      setCancelWaitersCalled(prev => ({ ...prev, [ordId]: true }));
+    }
+    setServiceNotice(`Floor waiter notified! Server is arriving at Table ${currentTable} to review your ticket.`);
+    playSound('waiter');
+  };
 
   // Table Concierge Modal State (Water, Waiter, Bill, Clean)
   const [showConciergeModal, setShowConciergeModal] = useState(false);
@@ -2356,6 +2392,75 @@ export default function CustomerMenu({
                 )}
               </div>
 
+              {/* Order Cancelled Notification Banner if cancelled */}
+              {activeTableOrder?.status === 'Cancelled' ? (
+                <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-300 text-rose-900 text-xs space-y-1 animate-fadeIn">
+                  <div className="flex items-center space-x-1.5 font-black">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>Order Ticket Cancelled by Floor Waiter</span>
+                  </div>
+                  <p className="text-[11px] text-rose-700 leading-snug">
+                    Reason: {activeTableOrder.cancel_reason || 'Cancelled per customer request'}. You can call the waiter or place a new order anytime.
+                  </p>
+                </div>
+              ) : (
+                /* 5-MINUTE CANCELLATION & EDIT GRACE WINDOW */
+                (() => {
+                  const remainingSecs = getRemainingGraceSeconds(activeTableOrder);
+                  const isCalled = cancelWaitersCalled[activeTableOrder?.id];
+
+                  return (
+                    <div className={`p-3 rounded-2xl border text-left space-y-2 transition ${
+                      remainingSecs > 0 ? 'bg-amber-50/90 border-amber-300 shadow-2xs' : 'bg-slate-50 border-slate-200'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-1.5">
+                          <Clock className={`w-3.5 h-3.5 ${remainingSecs > 0 ? 'text-amber-600 animate-pulse' : 'text-slate-400'}`} />
+                          <span className="font-heading font-black text-xs text-slate-900">
+                            {remainingSecs > 0 ? '5-Min Cancellation Window · રદ / ફેરફાર' : 'Cancellation Window Closed'}
+                          </span>
+                        </div>
+                        {remainingSecs > 0 ? (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-200/90 text-amber-950 font-mono font-black text-xs">
+                            ⏱️ {formatCountdown(remainingSecs)}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 font-bold uppercase">Expired</span>
+                        )}
+                      </div>
+
+                      <p className="text-[11px] text-slate-600 leading-snug">
+                        {remainingSecs > 0 ? (
+                          <>To avoid kitchen wastage, self-cancellation is restricted. Please call your floor waiter to cancel or modify items before the timer ends.</>
+                        ) : (
+                          <>Food is actively being prepared in the kitchen. Cancellation is no longer available.</>
+                        )}
+                      </p>
+
+                      {remainingSecs > 0 && (
+                        <div className="pt-0.5">
+                          {isCalled ? (
+                            <div className="p-2 rounded-xl bg-emerald-100/90 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center space-x-2">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span>Waiter called! Server is arriving at Table {currentTable} to assist.</span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleRequestOrderCancellation(activeTableOrder)}
+                              className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-98 text-white font-black text-xs shadow-xs transition flex items-center justify-center space-x-2 cursor-pointer"
+                            >
+                              <BellRing className="w-3.5 h-3.5" />
+                              <span>Call Waiter to Cancel / Modify Order · વેઈટર બોલાવો</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
+              )}
+
               {/* ORDERED DISHES INSPECTOR & LIVE STATUS CHECKLIST */}
               <div className="space-y-2 pt-0.5">
                 <div className="flex items-center justify-between">
@@ -2821,6 +2926,68 @@ export default function CustomerMenu({
                 Order <span className="font-mono font-bold text-orange-600">{activeBillOrder?.id || placedOrderId}</span> • Table <span className="font-bold text-slate-900">{currentTable}</span>
               </p>
             </div>
+
+            {/* 5-MINUTE CANCELLATION & EDIT GRACE WINDOW */}
+            {(() => {
+              const targetOrd = activeBillOrder || activeTableOrder;
+              if (!targetOrd || targetOrd.status === 'Cancelled') return null;
+              const remainingSecs = getRemainingGraceSeconds(targetOrd);
+              const isCalled = cancelWaitersCalled[targetOrd.id];
+
+              return (
+                <div className={`p-3.5 rounded-2xl border text-left space-y-2 transition ${
+                  remainingSecs > 0 ? 'bg-amber-50/95 border-amber-300 shadow-xs' : 'bg-slate-50 border-slate-200'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-1.5">
+                      <Clock className={`w-4 h-4 ${remainingSecs > 0 ? 'text-amber-600 animate-pulse' : 'text-slate-400'}`} />
+                      <span className="font-heading font-black text-xs text-slate-900">
+                        {remainingSecs > 0 ? '5-Minute Grace Window · રદ / ફેરફાર સમય' : 'Cancellation Window Closed'}
+                      </span>
+                    </div>
+                    {remainingSecs > 0 ? (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-200/90 text-amber-950 font-mono font-black text-xs">
+                        ⏱️ {formatCountdown(remainingSecs)}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-bold uppercase">Expired</span>
+                    )}
+                  </div>
+
+                  <p className="text-[11px] text-slate-600 leading-snug">
+                    {remainingSecs > 0 ? (
+                      <>
+                        Direct self-cancellation is restricted once received by the kitchen. To cancel or modify dishes, please notify your floor server before this timer expires.
+                      </>
+                    ) : (
+                      <>
+                        The 5-minute window has closed. Food preparation is in active progress and items cannot be cancelled.
+                      </>
+                    )}
+                  </p>
+
+                  {remainingSecs > 0 && (
+                    <div className="pt-0.5">
+                      {isCalled ? (
+                        <div className="p-2 rounded-xl bg-emerald-100/90 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center space-x-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>Floor waiter notified! Server is arriving at Table {currentTable}.</span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleRequestOrderCancellation(targetOrd)}
+                          className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-98 text-white font-black text-xs shadow-xs transition flex items-center justify-center space-x-2 cursor-pointer"
+                        >
+                          <BellRing className="w-3.5 h-3.5" />
+                          <span>Call Waiter to Cancel / Modify Order · વેઈટર બોલાવો</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Detailed Itemized Tax Invoice Bill Box (Printable & Downloadable) */}
             <div id="customer-printable-bill" className="printable-area p-4 bg-slate-50 rounded-2xl border border-slate-200 text-left text-xs space-y-3">

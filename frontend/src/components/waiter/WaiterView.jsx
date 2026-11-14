@@ -37,7 +37,8 @@ import {
   PanelRightOpen,
   PanelRightClose,
   SlidersHorizontal,
-  Layers
+  Layers,
+  Trash2
 } from 'lucide-react';
 import { playSound } from '../../lib/sound';
 import { speakTableCleanAlert, speakServiceAlert } from '../../lib/notifications';
@@ -67,6 +68,8 @@ export default function WaiterView({
   onMarkAllTableItemsServed,
   onDismissTableServiceCalls = null,
   onUpdateOrderStatus,
+  onCancelOrder = null,
+  onUpdateOrderItems = null,
   authUser = null,
   onLogout,
   onExitWaiterMode,
@@ -123,6 +126,35 @@ export default function WaiterView({
   const [orderPadSearch, setOrderPadSearch] = useState('');
   const [orderPadCategory, setOrderPadCategory] = useState('All');
   const [orderPadCart, setOrderPadCart] = useState([]); // [ { id, name, price, qty, customizations, note } ]
+
+  // 5-Minute Grace Window & Order Ticket Manager states
+  const [nowTick, setNowTick] = useState(Date.now());
+  const [showAddDishSection, setShowAddDishSection] = useState(false);
+  const [ticketSearchQuery, setTicketSearchQuery] = useState('');
+  const [ticketCategoryFilter, setTicketCategoryFilter] = useState('All');
+  const [confirmCancelModal, setConfirmCancelModal] = useState(null); // { order, reason }
+  const [cancelReasonChoice, setCancelReasonChoice] = useState('Customer requested cancellation (5m grace window)');
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getRemainingGraceSeconds = (targetOrder) => {
+    if (!targetOrder) return 0;
+    const placedTimeStr = targetOrder.placed_at || targetOrder.created_at || targetOrder.timestamp;
+    if (!placedTimeStr) return 0;
+    const placedTime = new Date(placedTimeStr).getTime();
+    if (isNaN(placedTime)) return 0;
+    const elapsedSecs = Math.max(0, Math.floor((nowTick - placedTime) / 1000));
+    return Math.max(0, 300 - elapsedSecs);
+  };
+
+  const formatCountdown = (secs) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
   const [isJainPreset, setIsJainPreset] = useState(false);
   const [extraButterPreset, setExtraButterPreset] = useState(false);
   const [extraCheesePreset, setExtraCheesePreset] = useState(false);
@@ -202,6 +234,77 @@ export default function WaiterView({
       if (st === 'served' && (paySt === 'paid' || paySt === 'void')) return false;
       return true;
     });
+  };
+
+  // Waiter Order Ticket Item Operations: Adjust quantity, delete dish, add dish, cancel ticket
+  const handleAdjustItemQty = (orderId, itemIndex, delta) => {
+    const targetOrder = orders.find(o => o.id === orderId || o.order_number === orderId);
+    if (!targetOrder || !onUpdateOrderItems) return;
+    const currentItems = targetOrder.items || [];
+    const updated = currentItems.map((it, idx) => {
+      if (idx !== itemIndex) return it;
+      const curQty = Number(it.qty || it.quantity || 1);
+      const nextQty = curQty + delta;
+      return { ...it, qty: nextQty, quantity: nextQty };
+    }).filter(it => Number(it.qty || it.quantity || 1) > 0);
+
+    onUpdateOrderItems(orderId, updated, activeWaiterName, 'Waiter');
+  };
+
+  const handleDeleteTicketItem = (orderId, itemIndex, itemName) => {
+    const targetOrder = orders.find(o => o.id === orderId || o.order_number === orderId);
+    if (!targetOrder || !onUpdateOrderItems) return;
+    const currentItems = targetOrder.items || [];
+    const updated = currentItems.filter((_, idx) => idx !== itemIndex);
+    if (updated.length === 0) {
+      if (window.confirm(`Removing "${itemName}" will leave no items on Order #${targetOrder.order_number || targetOrder.id}. Do you want to CANCEL this order ticket?`)) {
+        if (onCancelOrder) {
+          onCancelOrder(orderId, 'All items removed from ticket by waiter', activeWaiterName);
+          setTableDishesModal(null);
+        }
+      }
+      return;
+    }
+    onUpdateOrderItems(orderId, updated, activeWaiterName, 'Waiter');
+  };
+
+  const handleAddDishToOrder = (orderId, menuItem) => {
+    const targetOrder = orders.find(o => o.id === orderId || o.order_number === orderId);
+    if (!targetOrder || !onUpdateOrderItems) return;
+    const currentItems = targetOrder.items || [];
+    const existingIdx = currentItems.findIndex(i => i.id === menuItem.id || i.name === menuItem.name);
+    let updated;
+    if (existingIdx >= 0) {
+      updated = currentItems.map((it, idx) => {
+        if (idx !== existingIdx) return it;
+        const q = Number(it.qty || it.quantity || 1) + 1;
+        return { ...it, qty: q, quantity: q };
+      });
+    } else {
+      const newItem = {
+        id: menuItem.id || `dish_${Date.now()}`,
+        name: menuItem.name,
+        price: Number(menuItem.price || 0),
+        qty: 1,
+        quantity: 1,
+        category: menuItem.category || 'General',
+        image_url: menuItem.image_url || menuItem.imageUrl || null,
+        kitchen_status: 'placed',
+        is_served: false
+      };
+      updated = [...currentItems, newItem];
+    }
+    onUpdateOrderItems(orderId, updated, activeWaiterName, 'Waiter');
+    if (audioEnabled) playSound('click');
+  };
+
+  const handleConfirmCancelOrder = (orderId, reason) => {
+    if (onCancelOrder) {
+      onCancelOrder(orderId, reason || cancelReasonChoice, activeWaiterName);
+    }
+    setConfirmCancelModal(null);
+    setTableDishesModal(null);
+    if (audioEnabled) playSound('success');
   };
 
   // Kitchen Pickup Shelf: Individual Dishes marked "Ready" by chefs waiting for food runner
@@ -903,26 +1006,39 @@ export default function WaiterView({
 
                 {displayedCalls.map(call => {
                   const isCleanCall = call.type === 'table_clean' || call.type === 'cleaning';
+                  const isCancelRequest = call.type === 'cancel_request' || call.type === 'CANCEL_REQUEST';
+                  const targetTable = (tables || []).find(t => normalizeTbl(t.number) === normalizeTbl(call.tableNumber)) || { number: call.tableNumber };
+
                   return (
                     <div
                       key={call.id}
                       className={`p-3.5 rounded-2xl bg-white border-2 ${
-                        isCleanCall ? 'border-amber-500 ring-2 ring-amber-300/40 shadow-md' : 'border-amber-400 shadow-sm'
+                        isCancelRequest
+                          ? 'border-rose-500 ring-2 ring-rose-300/50 shadow-md bg-rose-50/30'
+                          : isCleanCall 
+                            ? 'border-amber-500 ring-2 ring-amber-300/40 shadow-md' 
+                            : 'border-amber-400 shadow-sm'
                       } space-y-2.5 transition hover:shadow-md animate-in fade-in`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
                           <span className={`w-8 h-8 rounded-xl ${
-                            isCleanCall ? 'bg-amber-600' : 'bg-amber-500'
-                          } text-white font-mono font-black text-xs flex items-center justify-center shadow-2xs`}>
-                            {isCleanCall ? '🧹' : (String(call.tableNumber).replace(/\D/g, '') || 'T')}
+                            isCancelRequest 
+                              ? 'bg-rose-600 text-white' 
+                              : isCleanCall 
+                                ? 'bg-amber-600 text-white' 
+                                : 'bg-amber-500 text-white'
+                          } font-mono font-black text-xs flex items-center justify-center shadow-2xs`}>
+                            {isCancelRequest ? '🚨' : isCleanCall ? '🧹' : (String(call.tableNumber).replace(/\D/g, '') || 'T')}
                           </span>
                           <div>
                             <span className="font-heading font-black text-sm text-slate-900 block leading-tight">
                               Table {call.tableNumber}
                             </span>
-                            <span className={`text-xs font-bold ${isCleanCall ? 'text-amber-900' : 'text-amber-800'} block`}>
-                              {call.label || (isCleanCall ? 'Clean & Reset Table' : 'Assistance Needed')}
+                            <span className={`text-xs font-bold ${
+                              isCancelRequest ? 'text-rose-900' : isCleanCall ? 'text-amber-900' : 'text-amber-800'
+                            } block`}>
+                              {call.label || (isCancelRequest ? 'Order Cancel / Edit Request (5m Window)' : isCleanCall ? 'Clean & Reset Table' : 'Assistance Needed')}
                             </span>
                           </div>
                         </div>
@@ -931,17 +1047,44 @@ export default function WaiterView({
                         </span>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (onDismissServiceCall) onDismissServiceCall(call.id, activeWaiterName, activeWaiterId);
-                          if (audioEnabled) playSound('success');
-                        }}
-                        className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs shadow-xs transition flex items-center justify-center space-x-1.5 cursor-pointer active:scale-98 min-h-[38px]"
-                      >
-                        <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                        <span>{isCleanCall ? '✓ Mark Table Cleaned · સાફ કર્યું' : '✓ Attend Call · પહોંચી ગયા'}</span>
-                      </button>
+                      {isCancelRequest ? (
+                        <div className="grid grid-cols-2 gap-2 pt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTableDishesModal(targetTable);
+                              if (audioEnabled) playSound('click');
+                            }}
+                            className="py-2 px-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs shadow-xs transition flex items-center justify-center space-x-1 cursor-pointer active:scale-98 min-h-[38px]"
+                          >
+                            <Utensils className="w-3.5 h-3.5" />
+                            <span>Open Ticket</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onDismissServiceCall) onDismissServiceCall(call.id, activeWaiterName, activeWaiterId);
+                              if (audioEnabled) playSound('success');
+                            }}
+                            className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition flex items-center justify-center space-x-1 cursor-pointer active:scale-98 min-h-[38px]"
+                          >
+                            <Check className="w-3.5 h-3.5 stroke-[2]" />
+                            <span>Dismiss</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onDismissServiceCall) onDismissServiceCall(call.id, activeWaiterName, activeWaiterId);
+                            if (audioEnabled) playSound('success');
+                          }}
+                          className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs shadow-xs transition flex items-center justify-center space-x-1.5 cursor-pointer active:scale-98 min-h-[38px]"
+                        >
+                          <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>{isCleanCall ? '✓ Mark Table Cleaned · સાફ કર્યું' : '✓ Attend Call · પહોંચી ગયા'}</span>
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -2439,22 +2582,24 @@ export default function WaiterView({
         </div>
       )}
 
-      {/* 6. TABLE DISHES DELIVERED MODAL - GRANULAR ITEM-BY-ITEM TRACKING */}
+      {/* 6. TABLE ORDER TICKET & DISHES MANAGER MODAL */}
       {tableDishesModal && (() => {
         const tOrders = getTableActiveOrders(tableDishesModal.number);
+        const primaryOrder = tOrders[0];
         const allDishes = [];
         tOrders.forEach(ord => {
           (ord.items || []).forEach((it, idx) => {
             const hasExplicitStatuses = (ord.items || []).some(i => i.kitchen_status);
-            const isReady = !isServed && (it.kitchen_status === 'ready' || it.kitchen_status === 'prepared' || (!hasExplicitStatuses && ord.status === 'Ready'));
+            const isItemServed = Boolean(it.is_served);
+            const isItemReady = !isItemServed && (it.kitchen_status === 'ready' || it.kitchen_status === 'prepared' || (!hasExplicitStatuses && ord.status === 'Ready'));
             allDishes.push({
               ...it,
               orderId: ord.id,
               orderNumber: ord.order_number || ord.id,
               itemIndex: idx,
-              isServed,
-              isReady,
-              isCooking: !isServed && !isReady,
+              isServed: isItemServed,
+              isReady: isItemReady,
+              isCooking: !isItemServed && !isItemReady,
               cookingNote: it.cooking_note || it.note || it.customizations || ord.special_note
             });
           });
@@ -2463,224 +2608,423 @@ export default function WaiterView({
         const readyDishes = allDishes.filter(d => d.isReady);
         const cookingDishes = allDishes.filter(d => d.isCooking);
         const deliveredDishes = allDishes.filter(d => d.isServed);
+        const totalTicketPrice = tOrders.reduce((sum, o) => sum + Number(o.total || o.total_amount || 0), 0);
+        const totalSubtotal = tOrders.reduce((sum, o) => sum + Number(o.subtotal || 0), 0);
+        const totalTax = tOrders.reduce((sum, o) => sum + Number(o.tax || 0), 0);
+        const remainingGraceSecs = primaryOrder ? getRemainingGraceSeconds(primaryOrder) : 0;
+
+        // Filter menu items for Add Dish picker
+        const filteredMenuItems = (menuItems || []).filter(item => {
+          if (ticketCategoryFilter !== 'All' && (item.category || '').toLowerCase() !== ticketCategoryFilter.toLowerCase()) {
+            return false;
+          }
+          if (ticketSearchQuery.trim()) {
+            const q = ticketSearchQuery.toLowerCase();
+            return (item.name || '').toLowerCase().includes(q) || (item.category || '').toLowerCase().includes(q);
+          }
+          return true;
+        });
+
+        const uniqueCategories = ['All', ...new Set((menuItems || []).map(m => m.category).filter(Boolean))];
 
         return (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-4 sm:p-5 space-y-3.5 shadow-2xl border border-slate-200 pb-[max(1.5rem,env(safe-area-inset-bottom))] max-h-[90vh] flex flex-col">
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full p-4 sm:p-5 space-y-3.5 shadow-2xl border border-slate-200 pb-[max(1.5rem,env(safe-area-inset-bottom))] max-h-[92vh] flex flex-col">
               
               {/* Header */}
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center space-x-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                    <Utensils className="w-4 h-4" />
+              <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-base shadow-xs shrink-0">
+                    <Utensils className="w-5 h-5" />
                   </div>
-                  <div>
-                    <h3 className="font-heading font-black text-sm text-slate-900 leading-tight">
-                      Table {tableDishesModal.number} — Dish Delivery
+                  <div className="min-w-0">
+                    <h3 className="font-heading font-black text-sm sm:text-base text-slate-900 leading-tight truncate">
+                      Table {tableDishesModal.number} — Order Ticket & Dishes
                     </h3>
-                    <p className="text-[11px] text-slate-500 font-medium">
-                      {deliveredDishes.length}/{allDishes.length} Served • {readyDishes.length} Ready on Pass
+                    <p className="text-[11px] text-slate-500 font-medium truncate">
+                      {tOrders.map(o => `#${o.order_number || o.id}`).join(', ') || 'No Active Ticket'}
+                      {primaryOrder?.customer_name ? ` • ${primaryOrder.customer_name}` : ''}
                     </p>
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setTableDishesModal(null)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+                  onClick={() => {
+                    setTableDishesModal(null);
+                    setShowAddDishSection(false);
+                    setTicketSearchQuery('');
+                  }}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer shrink-0 ml-2"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Scrollable Dish Sections */}
-              <div className="overflow-y-auto space-y-3 pr-1 flex-1">
-                
-                {/* 1. DISHES READY ON KITCHEN COUNTER (Pulsing, Action-Required) */}
-                {readyDishes.length > 0 && (
-                  <div className="p-3 rounded-2xl bg-blue-50/90 border-2 border-blue-400 space-y-2 shadow-xs animate-in fade-in">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-black uppercase tracking-wider text-blue-900 flex items-center space-x-1.5">
-                        <ChefHat className="w-3.5 h-3.5 text-blue-700 animate-pulse" />
-                        <span>Ready on Pass ({readyDishes.length} dishes plated hot):</span>
-                      </span>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-blue-200 text-blue-900">
-                        Pickup Now
-                      </span>
+              {/* 5-Minute Cancellation Grace Window Banner */}
+              {primaryOrder && (
+                <div className={`p-2.5 rounded-2xl border flex items-center justify-between text-xs ${
+                  remainingGraceSecs > 0 
+                    ? 'bg-amber-50/90 border-amber-300 text-amber-950 shadow-2xs' 
+                    : 'bg-slate-50 border-slate-200 text-slate-600'
+                }`}>
+                  <div className="flex items-center space-x-2 font-bold">
+                    <Clock className={`w-4 h-4 ${remainingGraceSecs > 0 ? 'text-amber-600 animate-pulse' : 'text-slate-400'}`} />
+                    <span>
+                      {remainingGraceSecs > 0 ? '5-Minute Grace Window Active' : 'Grace Window Expired (Food Cooking)'}
+                    </span>
+                  </div>
+                  {remainingGraceSecs > 0 ? (
+                    <span className="font-mono font-black text-amber-950 bg-amber-200/90 px-2 py-0.5 rounded-lg text-xs">
+                      ⏱️ {formatCountdown(remainingGraceSecs)} left
+                    </span>
+                  ) : (
+                    <span className="text-[10px] uppercase font-bold text-slate-400">
+                      Closed
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* View Switcher: Ticket Items vs. Add Extra Dish */}
+              <div className="flex items-center space-x-1.5 bg-slate-100 p-1 rounded-xl text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setShowAddDishSection(false)}
+                  className={`flex-1 py-1.5 rounded-lg text-center transition cursor-pointer ${
+                    !showAddDishSection 
+                      ? 'bg-white text-slate-900 shadow-xs' 
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Ticket Dishes ({allDishes.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddDishSection(true)}
+                  className={`flex-1 py-1.5 rounded-lg text-center transition cursor-pointer flex items-center justify-center space-x-1 ${
+                    showAddDishSection 
+                      ? 'bg-orange-600 text-white shadow-xs' 
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Add Dish to Ticket</span>
+                </button>
+              </div>
+
+              {/* Scrollable Body: Add Dish Picker OR Ticket Items Inspector */}
+              <div className="overflow-y-auto space-y-3 pr-1 flex-1 min-h-[220px]">
+                {showAddDishSection ? (
+                  /* 1. ADD DISH TO ACTIVE TICKET PICKER */
+                  <div className="space-y-2.5">
+                    {/* Search and Category Filters */}
+                    <div className="space-y-1.5">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Search menu item to add..."
+                          value={ticketSearchQuery}
+                          onChange={(e) => setTicketSearchQuery(e.target.value)}
+                          className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-orange-500 font-medium"
+                        />
+                      </div>
+
+                      <div className="flex items-center space-x-1 overflow-x-auto no-scrollbar py-0.5">
+                        {uniqueCategories.map(cat => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setTicketCategoryFilter(cat)}
+                            className={`px-2 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap cursor-pointer transition ${
+                              ticketCategoryFilter === cat
+                                ? 'bg-slate-900 text-white'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                      {readyDishes.map((d, i) => {
-                        const dPhoto = d.image_url || d.imageUrl || d.image || d.photo || (menuItems.find(m => m.id === d.id || m.name === d.name)?.image_url);
-                        return (
-                          <div key={`ready_${i}`} className="p-2.5 rounded-xl bg-white border border-blue-200 shadow-2xs flex items-center justify-between gap-2.5">
+                    {/* Menu items list */}
+                    <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                      {filteredMenuItems.length === 0 ? (
+                        <div className="p-4 rounded-xl bg-slate-50 text-center text-xs text-slate-400 font-medium border border-dashed border-slate-200">
+                          No menu items matched your search.
+                        </div>
+                      ) : (
+                        filteredMenuItems.map(item => (
+                          <div
+                            key={item.id}
+                            className="p-2.5 rounded-xl border border-slate-200 hover:border-orange-300 bg-white flex items-center justify-between gap-2 shadow-2xs transition"
+                          >
                             <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                              {dPhoto ? (
-                                <div className="w-10 h-10 rounded-xl overflow-hidden border border-blue-200 shrink-0 bg-slate-100 shadow-2xs">
-                                  <img src={dPhoto} alt={d.name} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                                </div>
+                              {item.image_url ? (
+                                <img src={item.image_url} alt={item.name} className="w-9 h-9 rounded-lg object-cover border border-slate-200 shrink-0" onError={(e)=>{e.currentTarget.style.display='none';}} />
                               ) : (
-                                <div className="w-10 h-10 rounded-xl bg-blue-100/70 border border-blue-200 flex items-center justify-center text-lg shrink-0">
+                                <div className="w-9 h-9 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-xs shrink-0">
                                   🍽️
                                 </div>
                               )}
                               <div className="min-w-0 flex-1">
-                                <span className="font-bold text-xs text-slate-900 block truncate">
-                                  {d.qty || d.quantity || 1}× {d.name}
-                                </span>
-                                {d.cookingNote && (
-                                  <span className="text-[10px] text-amber-900 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 font-medium block truncate mt-0.5">
-                                    📝 {d.cookingNote}
-                                  </span>
-                                )}
+                                <span className="font-bold text-xs text-slate-900 block truncate">{item.name}</span>
+                                <span className="text-[11px] font-mono font-black text-emerald-700">₹{Number(item.price || 0).toFixed(2)}</span>
                               </div>
                             </div>
+
                             <button
                               type="button"
                               onClick={() => {
-                                if (onToggleItemServed) onToggleItemServed(d.orderId, d.itemIndex, activeWaiterName, activeWaiterId);
-                                if (audioEnabled) playSound('success');
+                                if (primaryOrder) {
+                                  handleAddDishToOrder(primaryOrder.id, item);
+                                }
                               }}
-                              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-[11px] shadow-xs cursor-pointer flex items-center space-x-1 shrink-0"
+                              className="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-black text-[11px] shadow-xs cursor-pointer flex items-center space-x-1 shrink-0"
                             >
-                              <Check className="w-3 h-3 stroke-[3]" />
-                              <span>Deliver</span>
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Add</span>
                             </button>
                           </div>
-                        );
-                      })}
+                        ))
+                      )}
                     </div>
+                  </div>
+                ) : (
+                  /* 2. ITEM-BY-ITEM TICKET MANAGER (EDIT QTY, DELETE ITEM, DELIVER) */
+                  <div className="space-y-2">
+                    {allDishes.length === 0 ? (
+                      <div className="p-6 rounded-2xl bg-slate-50 text-center text-xs text-slate-500 font-medium border border-dashed border-slate-200 space-y-1">
+                        <p className="font-bold text-slate-700">No dishes in this ticket</p>
+                        <p className="text-[11px] text-slate-400">Tap "+ Add Dish to Ticket" above to add items.</p>
+                      </div>
+                    ) : (
+                      allDishes.map((d, i) => {
+                        const dPhoto = d.image_url || d.imageUrl || d.image || d.photo || (menuItems.find(m => m.id === d.id || m.name === d.name)?.image_url);
+                        return (
+                          <div
+                            key={`dish_row_${i}`}
+                            className={`p-3 rounded-2xl border transition flex items-center justify-between gap-2.5 shadow-2xs ${
+                              d.isServed 
+                                ? 'bg-slate-50/80 border-slate-200 opacity-80' 
+                                : d.isReady 
+                                  ? 'bg-blue-50/60 border-blue-300 ring-1 ring-blue-300' 
+                                  : 'bg-white border-slate-200'
+                            }`}
+                          >
+                            {/* Dish image */}
+                            {dPhoto ? (
+                              <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 shrink-0 bg-slate-100 shadow-2xs">
+                                <img src={dPhoto} alt={d.name} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                              </div>
+                            ) : (
+                              <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-base shrink-0">
+                                🍽️
+                              </div>
+                            )}
 
-                    {/* Quick Button to Deliver all Ready items */}
-                    {readyDishes.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          readyDishes.forEach(d => {
-                            if (onToggleItemServed) onToggleItemServed(d.orderId, d.itemIndex, activeWaiterName, activeWaiterId);
-                          });
-                          if (audioEnabled) playSound('success');
-                        }}
-                        className="w-full py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs transition flex items-center justify-center space-x-1.5 cursor-pointer shadow-xs"
-                      >
-                        <CheckCheck className="w-3.5 h-3.5" />
-                        <span>Deliver All {readyDishes.length} Ready Dishes to Table</span>
-                      </button>
+                            {/* Dish details */}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center space-x-1.5 flex-wrap">
+                                <span className={`font-bold text-xs text-slate-900 truncate ${d.isServed ? 'line-through text-slate-500' : ''}`}>
+                                  {d.name}
+                                </span>
+                                <span className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded ${
+                                  d.isServed 
+                                    ? 'bg-emerald-100 text-emerald-800' 
+                                    : d.isReady 
+                                      ? 'bg-blue-100 text-blue-800 animate-pulse' 
+                                      : 'bg-amber-100 text-amber-800'
+                                }`}>
+                                  {d.isServed ? 'Served' : d.isReady ? 'Ready' : 'Cooking'}
+                                </span>
+                              </div>
+
+                              <div className="text-[11px] font-mono font-bold text-slate-600 mt-0.5">
+                                ₹{Number(d.price || d.unit_price || 0)} × {d.qty || d.quantity || 1} = <span className="text-slate-900 font-black">₹{(Number(d.price || d.unit_price || 0) * (d.qty || d.quantity || 1)).toFixed(2)}</span>
+                              </div>
+
+                              {d.cookingNote && (
+                                <span className="text-[10px] text-amber-900 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 font-medium block truncate mt-0.5">
+                                  📝 {d.cookingNote}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Dish actions: Qty +/- and Delete Trash button */}
+                            <div className="flex items-center space-x-1.5 shrink-0">
+                              {/* Quantity controls */}
+                              <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                                <button
+                                  type="button"
+                                  onClick={() => handleAdjustItemQty(d.orderId, d.itemIndex, -1)}
+                                  className="w-6 h-6 rounded bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs cursor-pointer shadow-2xs"
+                                  title="Decrease quantity"
+                                >
+                                  -
+                                </button>
+                                <span className="w-5 text-center font-mono font-bold text-xs text-slate-900">
+                                  {d.qty || d.quantity || 1}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAdjustItemQty(d.orderId, d.itemIndex, 1)}
+                                  className="w-6 h-6 rounded bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs cursor-pointer shadow-2xs"
+                                  title="Increase quantity"
+                                >
+                                  +
+                                </button>
+                              </div>
+
+                              {/* 1-Tap Delete Item button */}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTicketItem(d.orderId, d.itemIndex, d.name)}
+                                className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center cursor-pointer transition"
+                                title="Delete dish from ticket"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Deliver status button */}
+                              {!d.isServed && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (onToggleItemServed) onToggleItemServed(d.orderId, d.itemIndex, activeWaiterName, activeWaiterId);
+                                    if (audioEnabled) playSound('success');
+                                  }}
+                                  className={`px-2.5 py-1.5 rounded-lg text-white font-bold text-[10px] cursor-pointer flex items-center space-x-1 ${
+                                    d.isReady ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-700 hover:bg-slate-800'
+                                  }`}
+                                  title="Deliver to table"
+                                >
+                                  <Check className="w-3 h-3 stroke-[2.5]" />
+                                  <span>{d.isReady ? 'Deliver' : 'Served'}</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 )}
-
-                {/* 2. DISHES STILL PREPARING IN KITCHEN */}
-                {cookingDishes.length > 0 && (
-                  <div className="p-3 rounded-2xl bg-amber-50/60 border border-amber-200/90 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-black uppercase tracking-wider text-amber-900 flex items-center space-x-1.5">
-                        <Flame className="w-3.5 h-3.5 text-amber-600" />
-                        <span>Still Cooking in Kitchen ({cookingDishes.length} remaining):</span>
-                      </span>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-900 font-mono">
-                        On Tawa
-                      </span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      {cookingDishes.map((d, i) => {
-                        const dPhoto = d.image_url || d.imageUrl || d.image || d.photo || (menuItems.find(m => m.id === d.id || m.name === d.name)?.image_url);
-                        return (
-                          <div key={`cooking_${i}`} className="p-2.5 rounded-xl bg-white border border-amber-200/60 flex items-center justify-between gap-2.5 text-xs">
-                            <div className="flex items-center space-x-2.5 min-w-0 flex-1">
-                              {dPhoto ? (
-                                <div className="w-10 h-10 rounded-xl overflow-hidden border border-amber-200 shrink-0 bg-slate-100 shadow-2xs">
-                                  <img src={dPhoto} alt={d.name} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                                </div>
-                              ) : (
-                                <div className="w-10 h-10 rounded-xl bg-amber-100/70 border border-amber-200 flex items-center justify-center text-lg shrink-0">
-                                  🍳
-                                </div>
-                              )}
-                              <div className="min-w-0 flex-1">
-                                <span className="font-semibold text-slate-800 block truncate">
-                                  {d.qty || d.quantity || 1}× {d.name}
-                                </span>
-                                {d.cookingNote && (
-                                  <span className="text-[10px] text-amber-900 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 font-medium block truncate mt-0.5">
-                                    📝 {d.cookingNote}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (onToggleItemServed) onToggleItemServed(d.orderId, d.itemIndex, activeWaiterName, activeWaiterId);
-                                if (audioEnabled) playSound('success');
-                              }}
-                              className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 font-semibold text-[10px] cursor-pointer shrink-0"
-                              title="Directly mark served if handed from kitchen"
-                            >
-                              Mark Served
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* 3. DISHES DELIVERED TO TABLE */}
-                {deliveredDishes.length > 0 && (
-                  <div className="p-3 rounded-2xl bg-emerald-50/50 border border-emerald-200/80 space-y-1.5">
-                    <span className="text-[11px] font-black uppercase tracking-wider text-emerald-900 flex items-center space-x-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Delivered & Placed on Table ({deliveredDishes.length}):</span>
-                    </span>
-
-                    <div className="space-y-1">
-                      {deliveredDishes.map((d, i) => {
-                        const dPhoto = d.image_url || d.imageUrl || d.image || d.photo || (menuItems.find(m => m.id === d.id || m.name === d.name)?.image_url);
-                        return (
-                          <div key={`served_${i}`} className="p-2 rounded-xl bg-white/80 border border-emerald-200/60 flex items-center justify-between text-xs gap-2">
-                            <div className="flex items-center space-x-2 min-w-0 flex-1">
-                              {dPhoto && (
-                                <div className="w-7 h-7 rounded-lg overflow-hidden border border-emerald-200 shrink-0 bg-slate-100">
-                                  <img src={dPhoto} alt={d.name} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                                </div>
-                              )}
-                              <span className="font-medium text-emerald-950 line-through opacity-75 truncate">
-                                {d.qty || d.quantity || 1}× {d.name}
-                              </span>
-                            </div>
-                            <span className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 shrink-0">
-                              ✓ On Table
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
               </div>
 
-              {/* Bottom Action: Mark All Table Dishes Delivered */}
-              {(readyDishes.length > 0 || cookingDishes.length > 0) && onMarkAllTableItemsServed && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onMarkAllTableItemsServed(tableDishesModal.number, activeWaiterName, activeWaiterId);
-                    if (audioEnabled) playSound('success');
-                    setTableDishesModal(null);
-                  }}
-                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-xs shadow-md transition flex items-center justify-center space-x-2 cursor-pointer"
-                >
-                  <CheckCheck className="w-4 h-4 stroke-[2.5]" />
-                  <span>Mark All ({allDishes.length}) Items Delivered to Table</span>
-                </button>
+              {/* Order Financial Totals Box */}
+              {!showAddDishSection && allDishes.length > 0 && (
+                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1">
+                  <div className="flex justify-between text-slate-500 font-medium">
+                    <span>Items Subtotal:</span>
+                    <span className="font-mono font-bold text-slate-800">₹{Number(totalSubtotal || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-500 font-medium">
+                    <span>GST Tax (5%):</span>
+                    <span className="font-mono font-bold text-slate-800">₹{Number(totalTax || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm font-black text-slate-900 border-t border-slate-200 pt-1">
+                    <span>Ticket Total:</span>
+                    <span className="font-mono text-emerald-700 text-base">₹{Number(totalTicketPrice || 0).toFixed(2)}</span>
+                  </div>
+                </div>
               )}
+
+              {/* Bottom Actions: Deliver All & Cancel Entire Ticket */}
+              <div className="space-y-2 pt-1">
+                {(readyDishes.length > 0 || cookingDishes.length > 0) && onMarkAllTableItemsServed && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onMarkAllTableItemsServed(tableDishesModal.number, activeWaiterName, activeWaiterId);
+                      if (audioEnabled) playSound('success');
+                      setTableDishesModal(null);
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-xs shadow-md transition flex items-center justify-center space-x-2 cursor-pointer"
+                  >
+                    <CheckCheck className="w-4 h-4 stroke-[2.5]" />
+                    <span>Mark All ({allDishes.length}) Items Delivered to Table</span>
+                  </button>
+                )}
+
+                {primaryOrder && onCancelOrder && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmCancelModal({ order: primaryOrder });
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-700 border border-rose-300 font-black text-xs transition flex items-center justify-center space-x-1.5 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>❌ Cancel Entire Order Ticket · સંપૂર્ણ ઓર્ડર રદ કરો</span>
+                  </button>
+                )}
+              </div>
 
             </div>
           </div>
         );
       })()}
+
+      {/* 6b. CONFIRM ORDER CANCELLATION MODAL */}
+      {confirmCancelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl border border-rose-200 text-slate-900">
+            <div className="flex items-center space-x-2.5 border-b border-slate-100 pb-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center text-lg shrink-0">
+                ⚠️
+              </div>
+              <div>
+                <h3 className="font-heading font-black text-sm text-slate-900">
+                  Cancel Order Ticket #{confirmCancelModal.order.order_number || confirmCancelModal.order.id}
+                </h3>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Table {confirmCancelModal.order.table_number || 'Dine-In'} • Total ₹{confirmCancelModal.order.total || confirmCancelModal.order.total_amount}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700 block">
+                Select Reason for Cancellation:
+              </label>
+              <select
+                value={cancelReasonChoice}
+                onChange={(e) => setCancelReasonChoice(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white font-medium focus:outline-none focus:border-rose-500"
+              >
+                <option value="Customer requested cancellation (5m grace window)">Customer requested cancellation (5m grace window)</option>
+                <option value="Customer changed mind / Left table">Customer changed mind / Left table</option>
+                <option value="Accidental duplicate QR order">Accidental duplicate QR order</option>
+                <option value="Wrong table number scanned">Wrong table number scanned</option>
+                <option value="Kitchen ingredients out of stock">Kitchen ingredients out of stock</option>
+                <option value="Other staff authorization">Other staff authorization</option>
+              </select>
+              <p className="text-[11px] text-slate-500 leading-snug">
+                Cancelling this order will remove it from the kitchen KDS, free the table if no other orders exist, and notify the customer phone screen in real time.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setConfirmCancelModal(null)}
+                className="py-2.5 px-3 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer"
+              >
+                Keep Order
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmCancelOrder(confirmCancelModal.order.id, cancelReasonChoice)}
+                className="py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs shadow-md cursor-pointer transition active:scale-98"
+              >
+                Confirm Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 7. TABLE SHIFT MODAL */}
       {shiftingTable && (
