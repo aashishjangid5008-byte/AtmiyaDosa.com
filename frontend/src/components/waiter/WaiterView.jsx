@@ -1470,13 +1470,14 @@ export default function WaiterView({
           <div className={`grid grid-cols-1 md:grid-cols-2 ${isSidePanelOpen ? 'xl:grid-cols-3' : 'lg:grid-cols-3 xl:grid-cols-4'} gap-3 sm:gap-4`}>
             {filteredTables.map(table => {
               const activeTableOrders = getTableActiveOrders(table.number);
-              const isOccupied = table.status === 'occupied' && activeTableOrders.length > 0;
+              const hasActiveOrders = activeTableOrders.length > 0;
+              const isOccupied = hasActiveOrders || table.status === 'occupied';
               const tableCalls = guestCalls.filter(c => normalizeTbl(c.tableNumber) === normalizeTbl(table.number));
               const tableCleanCall = tableCalls.find(c => 
                 (c.type || '').toLowerCase().includes('clean') || 
                 (c.label || '').toLowerCase().includes('clean')
               );
-              const tableReadyDishes = isOccupied ? allReadyDishes.filter(d => normalizeTbl(d.tableNumber) === normalizeTbl(table.number)) : [];
+              const tableReadyDishes = allReadyDishes.filter(d => normalizeTbl(d.tableNumber) === normalizeTbl(table.number));
               // Aggregate items across orders for this table
               const allDishes = [];
               activeTableOrders.forEach(o => {
@@ -1884,7 +1885,7 @@ export default function WaiterView({
                             {readyDishes.length > 0 || tableReadyDishes.length > 0 ? (
                               <>
                                 <CheckCheck className="w-4 h-4 text-white stroke-[3] shrink-0" />
-                                <span className="truncate">🍽️ Deliver ({readyDishes.length || tableReadyDishes.length} Ready)</span>
+                                <span className="truncate">🍽️ Deliver ({Math.max(readyDishes.length, tableReadyDishes.length)} Ready)</span>
                               </>
                             ) : (
                               <>

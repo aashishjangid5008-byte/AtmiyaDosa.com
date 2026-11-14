@@ -180,27 +180,22 @@ export default function KitchenPanelView({
     }
 
     const items = resolveTicketItems(o);
-    const allItemsServed = items.length > 0 && items.every(it => it.is_served);
-    const hasUnservedAddon = items.some(it => !it.is_served && (it.is_addon || (o.round > 1 && it.round === o.round)));
+    const hasUnservedFood = items.some(it => !it.is_served);
 
-    // 4. If all items are served or order status is 'served', hide unless a fresh continuous round add-on was placed
-    if (allItemsServed || s === 'served') {
-      if (!hasUnservedAddon) {
-        return true;
-      }
+    // 4. If all items on this ticket are already served, hide it from live kitchen
+    if (!hasUnservedFood) {
+      return true;
     }
 
-    // 5. If ticket was dismissed/cleared by chef, hide unless a fresh continuous round add-on was placed
-    const idKey = String(o?.id || o?.order_number || o?.supabase_order_id || '');
-    const orderNumKey = String(o?.order_number || '');
-    const dbIdKey = String(o?.supabase_order_id || '');
-    const clearedSet = new Set(clearedOrderIds.map(String));
+    // 5. If ticket was dismissed/cleared by chef, hide ONLY if there is NO unserved food left
+    const idKey = String(o?.id || o?.order_number || o?.supabase_order_id || '').replace(/^#+/, '');
+    const orderNumKey = String(o?.order_number || '').replace(/^#+/, '');
+    const dbIdKey = String(o?.supabase_order_id || '').replace(/^#+/, '');
+    const clearedSet = new Set(clearedOrderIds.map(x => String(x).replace(/^#+/, '')));
     const isCleared = o?.kds_cleared || clearedSet.has(idKey) || (orderNumKey && clearedSet.has(orderNumKey)) || (dbIdKey && clearedSet.has(dbIdKey));
 
-    if (isCleared) {
-      if (!hasUnservedAddon) {
-        return true;
-      }
+    if (isCleared && !hasUnservedFood) {
+      return true;
     }
 
     return false;
@@ -1132,13 +1127,15 @@ export default function KitchenPanelView({
       <div 
         key={`${order.id}-${cardIdx}`}
         className={`bg-white rounded-2xl border shadow-xs p-4 space-y-3 transition-all ${
-          isPlaced
-            ? 'border-amber-300 ring-1 ring-amber-300/50'
-            : isCooking 
-              ? 'border-blue-300' 
-              : (isReady || allChecked)
-                ? 'border-emerald-300 bg-emerald-50/10'
-                : 'border-slate-200 opacity-90'
+          (order.round > 1 || order.is_addon) && !allChecked
+            ? 'border-purple-400 ring-2 ring-purple-300/50 bg-purple-50/10'
+            : isPlaced
+              ? 'border-amber-300 ring-1 ring-amber-300/50'
+              : isCooking 
+                ? 'border-blue-300' 
+                : (isReady || allChecked)
+                  ? 'border-emerald-300 bg-emerald-50/10'
+                  : 'border-slate-200 opacity-90'
         }`}
       >
         {/* Card Header: Table Identification & Status */}

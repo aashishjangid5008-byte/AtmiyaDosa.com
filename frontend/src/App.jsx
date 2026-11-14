@@ -1107,20 +1107,24 @@ export default function App() {
           const dbItems = (mo.items && mo.items.length > 0) ? mo.items : (localMatch.items || []);
           const mergedItems = dbItems.map((dbItem, idx) => {
             const localItem = localMatch.items?.[idx] || (localMatch.items || []).find(it => it.name === dbItem.name && it.round === dbItem.round);
+            const isLocalPreparing = Boolean(localItem && (localItem.kitchen_status === 'preparing' || localItem.status === 'PREPARING'));
+            const isDbPreparing = Boolean(dbItem.kitchen_status === 'preparing' || String(dbItem.status || '').toLowerCase() === 'preparing');
+            const isExplicitlyPreparing = isLocalPreparing || isDbPreparing;
+
             const isLocalServed = Boolean(localItem?.is_served);
             const isDbServed = Boolean(dbItem.is_served || dbItem.kitchen_status === 'served');
-            const finalServed = isLocalServed || isDbServed;
+            const finalServed = !isExplicitlyPreparing && (isLocalServed || isDbServed);
 
             const isDbReady = Boolean(dbItem.kitchen_status === 'ready' || String(dbItem.status || '').toLowerCase() === 'ready');
-            const isLocalReady = Boolean(localItem && (localItem.kitchen_status === 'ready' || localItem.is_served));
-            const finalReady = finalServed || isDbReady || isLocalReady;
+            const isLocalReady = Boolean(localItem && (localItem.kitchen_status === 'ready'));
+            const finalReady = !isExplicitlyPreparing && (finalServed || isDbReady || isLocalReady);
 
             return {
               ...dbItem,
-              kitchen_status: finalServed ? 'served' : (finalReady ? 'ready' : (localItem?.kitchen_status || dbItem.kitchen_status || 'placed')),
+              kitchen_status: finalServed ? 'served' : (finalReady ? 'ready' : (isExplicitlyPreparing ? 'preparing' : (localItem?.kitchen_status || dbItem.kitchen_status || 'placed'))),
               is_served: finalServed,
-              ready_at: localItem?.ready_at || dbItem.ready_at,
-              served_at: localItem?.served_at || dbItem.served_at
+              ready_at: isExplicitlyPreparing ? null : (localItem?.ready_at || dbItem.ready_at),
+              served_at: isExplicitlyPreparing ? null : (localItem?.served_at || dbItem.served_at)
             };
           });
 
@@ -1921,25 +1925,36 @@ export default function App() {
             console.log('[SUPABASE REALTIME] Incoming order_item_rollback broadcast:', payload);
             if (!payload) return;
 
+            const cleanTbl = payload.tableNumber ? String(payload.tableNumber).replace(/\D/g, '') : null;
+
             // 1. Update local orders: set item to preparing
             setOrders(prev => {
               const updated = prev.map(o => {
-                if (!matchesOrderId(o, payload.orderId) && !matchesOrderId(o, payload.orderNumber)) return o;
+                const oTbl = o.table_number ? String(o.table_number).replace(/\D/g, '') : null;
+                const matchesTbl = cleanTbl && oTbl === cleanTbl;
+                const matchesId = matchesOrderId(o, payload.orderId) || matchesOrderId(o, payload.orderNumber);
+                if (!matchesId && !matchesTbl) return o;
+
                 const items = (o.items || []).map((it, idx) => {
                   const isMatch = (payload.itemIndex !== undefined && idx === payload.itemIndex) ||
-                                  (payload.itemName && it.name === payload.itemName);
+                                  (payload.itemName && (
+                                    (it.name && it.name.toLowerCase() === payload.itemName.toLowerCase()) ||
+                                    (it.item_name && it.item_name.toLowerCase() === payload.itemName.toLowerCase())
+                                  ));
                   if (!isMatch) return it;
                   return {
                     ...it,
                     kitchen_status: 'preparing',
-                    ready_at: null
+                    ready_at: null,
+                    is_served: false
                   };
                 });
                 const anyReady = items.some(i => i.kitchen_status === 'ready');
                 return {
                   ...o,
                   items,
-                  status: anyReady ? 'Ready' : (o.status === 'Ready' ? 'Preparing' : o.status)
+                  order_items: items,
+                  status: anyReady ? 'Ready' : (o.status === 'Ready' || o.status === 'Food Ready' ? 'Preparing' : o.status)
                 };
               });
               setLocalStore('orders', updated);
@@ -1950,10 +1965,17 @@ export default function App() {
             setServiceCalls(prev => {
               const updated = prev.filter(c => {
                 if (c.type !== 'food_ready') return true;
+                const cTbl = c.tableNumber ? String(c.tableNumber).replace(/\D/g, '') : null;
+                const matchesTbl = cleanTbl && cTbl === cleanTbl;
                 const matchesOrder = matchesOrderId(payload.orderId, c.orderId) || matchesOrderId(payload.orderNumber, c.orderId);
                 const matchesItem = (payload.itemIndex !== undefined && c.itemIndex === payload.itemIndex) ||
-                                    (payload.itemName && (c.itemName === payload.itemName || c.dishName === payload.itemName || c.itemsSummary?.includes(payload.itemName)));
-                const matchesTbl = payload.tableNumber && String(c.tableNumber).replace(/[^0-9]/g, '') === String(payload.tableNumber).replace(/[^0-9]/g, '');
+                                    !payload.itemName ||
+                                    (payload.itemName && (
+                                      c.itemName === payload.itemName || 
+                                      c.dishName === payload.itemName || 
+                                      (c.itemsSummary && c.itemsSummary.toLowerCase().includes(payload.itemName.toLowerCase())) ||
+                                      (c.label && c.label.toLowerCase().includes(payload.itemName.toLowerCase()))
+                                    ));
                 if (matchesOrder && (matchesItem || payload.itemIndex === undefined)) return false;
                 if (matchesTbl && matchesItem) return false;
                 return true;
@@ -1961,6 +1983,36 @@ export default function App() {
               setLocalStore('service_calls', updated);
               return updated;
             });
+
+            // 3. Announce rollback to Waiter and Admin staff with audio & toast!
+            const isCustomerScreen = viewModeRef.current === 'customer' || Boolean(scannedTable);
+            const isStaffLoggedIn = Boolean(authUserRef.current) && !isCustomerScreen;
+            const currentRole = isStaffLoggedIn ? (authUserRef.current?.role || 'admin') : 'customer';
+
+            if (isStaffLoggedIn && (currentRole === 'waiter' || currentRole === 'admin')) {
+              const dishSummary = payload.itemName || 'Dish';
+              const tblLabel = payload.tableNumber ? `Table ${payload.tableNumber}` : 'Table';
+              playSound('alert');
+
+              if ('speechSynthesis' in window) {
+                try {
+                  window.speechSynthesis.cancel();
+                  const utterance = new SpeechSynthesisUtterance(`Attention waiter: ${tblLabel}, ${dishSummary} rolled back to cooking in kitchen!`);
+                  utterance.rate = 1.05;
+                  utterance.pitch = 1.0;
+                  window.speechSynthesis.speak(utterance);
+                } catch (e) {}
+              }
+
+              setActiveToast({
+                id: `rollback_${Date.now()}`,
+                title: `⚠️ ${tblLabel}: ${dishSummary} Rolled Back!`,
+                message: `Chef pulled item back to Preparing/Cooking. Please hold delivery.`,
+                type: 'warning',
+                time: 'Just now',
+                tableNumber: payload.tableNumber
+              });
+            }
           })
           .on('broadcast', { event: 'service_call' }, ({ payload }) => {
             console.log('[SUPABASE REALTIME] Incoming service call broadcast:', payload);
