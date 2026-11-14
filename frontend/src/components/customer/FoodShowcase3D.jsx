@@ -3,6 +3,7 @@ import {
   Sparkles, 
   Utensils, 
   ArrowRight, 
+  ArrowLeft,
   Search, 
   Globe, 
   BellRing, 
@@ -65,6 +66,7 @@ const MASTER_CUISINES = [
 export default function FoodShowcase3D({
   restaurantName = 'Atmiya Dosa Hub',
   tableNumber = '01',
+  onBackToAdmin,
   onExploreCuisines,
   onViewAllDishes,
   onSelectCuisine,
@@ -96,6 +98,17 @@ export default function FoodShowcase3D({
         
         {/* Verified Dining Table Badge (Non-clickable, table securely locked) */}
         <div className="flex items-center space-x-2">
+          {onBackToAdmin && (
+            <button
+              type="button"
+              onClick={onBackToAdmin}
+              className="p-1.5 rounded-xl bg-orange-100 hover:bg-orange-200 text-orange-800 transition shrink-0 cursor-pointer flex items-center space-x-1"
+              title="Return to Staff POS"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-black hidden sm:inline">Exit Preview</span>
+            </button>
+          )}
           <div className="px-3 py-1.5 rounded-full bg-slate-100 border border-slate-200 text-xs font-mono font-bold text-slate-800 flex items-center space-x-1.5 shadow-2xs">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span>📍 Table T-{cleanTableNum}</span>

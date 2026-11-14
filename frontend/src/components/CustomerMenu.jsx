@@ -511,59 +511,209 @@ export default function CustomerMenu({
     }
   }, [placedOrderId, activeTableOrder, settledSessionReceipt, orders, currentTable]);
 
-  // If table already has an active order running in the kitchen or menu is empty, default to dishes view
+  // If table already has an active order running in the kitchen on initial load, default to dishes view
+  const initialMountStageRef = React.useRef(false);
   React.useEffect(() => {
-    if ((activeTableOrder || !menuItems || menuItems.length === 0) && menuStage === 'landing') {
-      setMenuStage('dishes');
+    if (!initialMountStageRef.current) {
+      initialMountStageRef.current = true;
+      if ((activeTableOrder || !menuItems || menuItems.length === 0) && menuStage === 'landing') {
+        setMenuStage('dishes');
+      }
     }
   }, [activeTableOrder, menuItems, menuStage]);
 
-  // Handle mobile hardware back button and browser back navigation inside customer menu
-  // Prevents jumping out to the staff login screen when customer hits back
+  // ---------------------------------------------------------------------------
+  // SEAMLESS HARDWARE & IN-APP BACK BUTTON INTEGRATION (VICE-VERSA SYNCHRONIZATION)
+  // ---------------------------------------------------------------------------
+  // Live state reference so handlePopState always reads current open modals/stages without stale closures
+  const stateRef = React.useRef({
+    showUpiPaymentModal,
+    showConciergeModal,
+    customizingItem,
+    showCartDrawer,
+    showOrderTracker,
+    showLanguageModal,
+    orderSuccess,
+    searchQuery,
+    selectedCategory,
+    menuStage,
+    onBackToAdmin
+  });
+
   React.useEffect(() => {
+    stateRef.current = {
+      showUpiPaymentModal,
+      showConciergeModal,
+      customizingItem,
+      showCartDrawer,
+      showOrderTracker,
+      showLanguageModal,
+      orderSuccess,
+      searchQuery,
+      selectedCategory,
+      menuStage,
+      onBackToAdmin
+    };
+  });
+
+  const isPoppingRef = React.useRef(false);
+  const skipNextPopRef = React.useRef(false);
+  const pushedDepthRef = React.useRef(0);
+  const prevLayerKeyRef = React.useRef('root_landing');
+
+  // Core back action handler - closes or reverts the topmost active UI layer
+  const performBackAction = React.useCallback(() => {
+    const s = stateRef.current;
+
+    // 1. Topmost modals & dialogs
+    if (s.showUpiPaymentModal) {
+      setShowUpiPaymentModal(false);
+      return true;
+    }
+    if (s.showLanguageModal) {
+      setShowLanguageModal(false);
+      return true;
+    }
+    if (s.orderSuccess) {
+      setOrderSuccess(false);
+      return true;
+    }
+    if (s.customizingItem) {
+      setCustomizingItem(null);
+      return true;
+    }
+    if (s.showCartDrawer) {
+      setShowCartDrawer(false);
+      return true;
+    }
+    if (s.showOrderTracker) {
+      setShowOrderTracker(false);
+      return true;
+    }
+    if (s.showConciergeModal) {
+      setShowConciergeModal(false);
+      return true;
+    }
+
+    // 2. Active search query
+    if (s.searchQuery && s.searchQuery.trim().length > 0) {
+      setSearchQuery('');
+      return true;
+    }
+
+    // 3. Category filter inside dishes view
+    if (s.menuStage === 'dishes' && s.selectedCategory && s.selectedCategory !== 'All') {
+      setSelectedCategory('All');
+      return true;
+    }
+
+    // 4. In dishes view -> go back to Cuisines view
+    if (s.menuStage === 'dishes') {
+      setSelectedCuisine('all');
+      setSelectedCategory('All');
+      setMenuStage('cuisines');
+      return true;
+    }
+
+    // 5. In cuisines view -> go back to Landing showcase
+    if (s.menuStage === 'cuisines') {
+      setMenuStage('landing');
+      return true;
+    }
+
+    // 6. In landing view with staff preview mode
+    if (s.menuStage === 'landing' && typeof s.onBackToAdmin === 'function') {
+      s.onBackToAdmin();
+      return true;
+    }
+
+    return false; // Already at base screen
+  }, [onBackToAdmin]);
+
+  // Universal back handler called by all in-app frontend buttons (ArrowLeft, X, etc.)
+  const handleAppBack = React.useCallback(() => {
+    playSound('click');
+    if (pushedDepthRef.current > 0) {
+      window.history.back();
+    } else {
+      performBackAction();
+    }
+  }, [performBackAction]);
+
+  // Unique signature of the currently active layer
+  const currentLayerKey = React.useMemo(() => {
+    if (showUpiPaymentModal) return 'modal_upi';
+    if (showLanguageModal) return 'modal_language';
+    if (orderSuccess) return 'modal_success';
+    if (customizingItem) return 'modal_customization';
+    if (showCartDrawer) return 'drawer_cart';
+    if (showOrderTracker) return 'modal_tracker';
+    if (showConciergeModal) return 'modal_concierge';
+    if (searchQuery && searchQuery.trim().length > 0) return 'search_active';
+    if (menuStage === 'dishes' && selectedCategory !== 'All') return 'dishes_category_filtered';
+    if (menuStage === 'dishes') return 'stage_dishes';
+    if (menuStage === 'cuisines') return 'stage_cuisines';
+    return 'root_landing';
+  }, [
+    showUpiPaymentModal,
+    showLanguageModal,
+    orderSuccess,
+    customizingItem,
+    showCartDrawer,
+    showOrderTracker,
+    showConciergeModal,
+    searchQuery,
+    selectedCategory,
+    menuStage
+  ]);
+
+  // Push history state whenever user moves FORWARD into a new layer/modal/stage
+  React.useEffect(() => {
+    if (isPoppingRef.current) {
+      // Transition was caused by a back button (hardware or software pop) - do not push state!
+      isPoppingRef.current = false;
+      prevLayerKeyRef.current = currentLayerKey;
+      return;
+    }
+
+    if (currentLayerKey !== prevLayerKeyRef.current && currentLayerKey !== 'root_landing') {
+      try {
+        window.history.pushState({ atmiyaApp: true, layer: currentLayerKey }, '');
+        pushedDepthRef.current += 1;
+      } catch (err) {}
+    }
+    prevLayerKeyRef.current = currentLayerKey;
+  }, [currentLayerKey]);
+
+  // Popstate listener to intercept phone hardware back button / swipe back gesture
+  React.useEffect(() => {
+    try {
+      // Seed root anchor in browser history so the first back button click stays inside the app
+      window.history.replaceState({ atmiyaApp: true, layer: 'root_landing', root: true }, '');
+    } catch (e) {}
+
     const handlePopState = () => {
-      if (showUpiPaymentModal) {
-        setShowUpiPaymentModal(false);
+      isPoppingRef.current = true;
+      if (pushedDepthRef.current > 0) {
+        pushedDepthRef.current -= 1;
+      }
+      if (skipNextPopRef.current) {
+        skipNextPopRef.current = false;
         return;
       }
-      if (showConciergeModal) {
-        setShowConciergeModal(false);
-        return;
-      }
-      if (customizingItem) {
-        setCustomizingItem(null);
-        return;
-      }
-      if (showCartDrawer) {
-        setShowCartDrawer(false);
-        return;
-      }
-      if (showOrderTracker) {
-        setShowOrderTracker(false);
-        return;
-      }
-      if (menuStage === 'dishes') {
-        setSelectedCuisine('all');
-        setSelectedCategory('All');
-        setMenuStage('cuisines');
-        return;
-      }
-      if (menuStage === 'cuisines') {
-        setMenuStage('landing');
-        return;
+      const handled = performBackAction();
+      if (!handled) {
+        // Prevent accidental tab closure if user hits back on root landing
+        try {
+          window.history.pushState({ atmiyaApp: true, layer: 'root_landing' }, '');
+          pushedDepthRef.current = 1;
+        } catch (e) {}
       }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [
-    showUpiPaymentModal, 
-    showConciergeModal, 
-    customizingItem, 
-    showCartDrawer, 
-    showOrderTracker, 
-    menuStage
-  ]);
+  }, [performBackAction]);
 
   // Helper: Packaged mineral water is strictly managed via waiter add-ons (disappears from customer menu)
   const isWaterItem = (item) => {
@@ -665,6 +815,12 @@ export default function CustomerMenu({
     }
     playSound('click');
     setCustomizingItem(null);
+    if (pushedDepthRef.current > 0) {
+      skipNextPopRef.current = true;
+      try {
+        window.history.back();
+      } catch (e) {}
+    }
   };
 
   const handleQuickAdd = (item) => {
@@ -1022,12 +1178,15 @@ export default function CustomerMenu({
   const renderLanguageModal = () => {
     if (!showLanguageModal) return null;
     return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-3.5 sm:p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+      <div 
+        onClick={(e) => { if (e.target === e.currentTarget) handleAppBack(); }}
+        className="fixed inset-0 z-[100] flex items-center justify-center p-3.5 sm:p-4 bg-black/60 backdrop-blur-sm animate-fadeIn"
+      >
         <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-slate-900 animate-scaleUp relative">
           
           <button
             type="button"
-            onClick={() => setShowLanguageModal(false)}
+            onClick={handleAppBack}
             className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 cursor-pointer transition z-10"
             title="Close"
           >
@@ -1157,6 +1316,7 @@ export default function CustomerMenu({
         <FoodShowcase3D
           restaurantName={restaurantSettings?.restaurantName || 'Atmiya Dosa Hub'}
           tableNumber={currentTable}
+          onBackToAdmin={onBackToAdmin ? handleAppBack : null}
           onOpenTableSelect={() => setShowTableSelectModal(true)}
           onExploreCuisines={() => {
             try { sessionStorage.setItem('atmiya_seen_landing', 'true'); } catch {}
@@ -1204,7 +1364,7 @@ export default function CustomerMenu({
             setSelectedCategory('All');
             setMenuStage('dishes');
           }}
-          onBackToLanding={() => setMenuStage('landing')}
+          onBackToLanding={handleAppBack}
           onViewAll={() => {
             setSelectedCuisine('all');
             setSelectedCategory('All');
@@ -1230,12 +1390,7 @@ export default function CustomerMenu({
             <div className="flex items-center space-x-2.5 min-w-0">
               {menuStage === 'dishes' ? (
                 <button 
-                  onClick={() => {
-                    setSelectedCuisine('all');
-                    setSelectedCategory('All');
-                    setMenuStage('cuisines');
-                    playSound('click');
-                  }}
+                  onClick={handleAppBack}
                   className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition shrink-0 cursor-pointer flex items-center justify-center"
                   title="Back to Cuisines"
                 >
@@ -1243,10 +1398,7 @@ export default function CustomerMenu({
                 </button>
               ) : menuStage === 'cuisines' ? (
                 <button 
-                  onClick={() => {
-                    setMenuStage('landing');
-                    playSound('click');
-                  }}
+                  onClick={handleAppBack}
                   className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition shrink-0 cursor-pointer flex items-center justify-center"
                   title="Back to Food Showcase"
                 >
@@ -1254,7 +1406,7 @@ export default function CustomerMenu({
                 </button>
               ) : onBackToAdmin ? (
                 <button 
-                  onClick={onBackToAdmin}
+                  onClick={handleAppBack}
                   className="p-1.5 rounded-xl bg-orange-100 hover:bg-orange-200 text-orange-800 transition shrink-0 cursor-pointer flex items-center space-x-1"
                   title={authUser ? "Return to Staff POS" : "Staff Login"}
                 >
@@ -1325,7 +1477,7 @@ export default function CustomerMenu({
               />
               {searchQuery && (
                 <button 
-                  onClick={() => setSearchQuery('')}
+                  onClick={handleAppBack}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -1780,7 +1932,10 @@ export default function CustomerMenu({
 
       {/* 3. DISH CUSTOMIZATION MODAL */}
       {customizingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
+        <div 
+          onClick={(e) => { if (e.target === e.currentTarget) handleAppBack(); }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
+        >
           <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-sm w-full border border-slate-200 shadow-2xl space-y-4">
             
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -1793,7 +1948,7 @@ export default function CustomerMenu({
                 </span>
               </div>
               <button 
-                onClick={() => setCustomizingItem(null)}
+                onClick={handleAppBack}
                 className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -1994,7 +2149,10 @@ export default function CustomerMenu({
 
       {/* 6. CART CHECKOUT DRAWER */}
       {showCartDrawer && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-xs">
+        <div 
+          onClick={(e) => { if (e.target === e.currentTarget) handleAppBack(); }}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-xs"
+        >
           <div className="bg-white rounded-t-3xl sm:rounded-3xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto space-y-4 shadow-2xl border border-slate-200">
             
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -2005,7 +2163,7 @@ export default function CustomerMenu({
                 </h3>
               </div>
               <button 
-                onClick={() => setShowCartDrawer(false)}
+                onClick={handleAppBack}
                 className="p-1.5 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200"
               >
                 <X className="w-4 h-4" />
@@ -2316,7 +2474,10 @@ export default function CustomerMenu({
         });
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
+          <div 
+            onClick={(e) => { if (e.target === e.currentTarget) handleAppBack(); }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-xs animate-fadeIn"
+          >
             <div className="bg-white rounded-3xl p-4 sm:p-6 max-w-sm w-full border border-slate-200 shadow-2xl space-y-3.5 max-h-[92vh] overflow-y-auto">
               
               {/* Header */}
@@ -2345,7 +2506,7 @@ export default function CustomerMenu({
                   </span>
                 </div>
                 <button 
-                  onClick={() => setShowOrderTracker(false)}
+                  onClick={handleAppBack}
                   className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 cursor-pointer shrink-0 ml-2"
                   title="Close Tracker"
                 >
@@ -2757,7 +2918,7 @@ export default function CustomerMenu({
               )}
 
               <button
-                onClick={() => setShowOrderTracker(false)}
+                onClick={handleAppBack}
                 className="w-full py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs cursor-pointer transition shadow-xs"
               >
                 {t('closeTracker')}
@@ -2769,7 +2930,10 @@ export default function CustomerMenu({
 
       {/* 7. TABLE CONCIERGE SERVICE BOTTOM SHEET / MODAL */}
       {showConciergeModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
+        <div 
+          onClick={(e) => { if (e.target === e.currentTarget) handleAppBack(); }}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 backdrop-blur-xs animate-fadeIn"
+        >
           <div className="bg-white rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4 text-slate-900 animate-slideUp">
             
             {/* Header */}
@@ -2789,7 +2953,7 @@ export default function CustomerMenu({
               </div>
               <button 
                 type="button"
-                onClick={() => setShowConciergeModal(false)}
+                onClick={handleAppBack}
                 className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 cursor-pointer transition"
               >
                 <X className="w-4 h-4" />
@@ -2804,6 +2968,10 @@ export default function CustomerMenu({
                 type="button"
                 onClick={() => {
                   setShowConciergeModal(false);
+                  if (pushedDepthRef.current > 0) {
+                    skipNextPopRef.current = true;
+                    try { window.history.back(); } catch (e) {}
+                  }
                   handleServiceButton('WAITER', 'Floor Waiter');
                 }}
                 className="p-3.5 rounded-2xl bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/90 text-left transition active:scale-98 flex items-start space-x-3 cursor-pointer group"
@@ -2824,6 +2992,10 @@ export default function CustomerMenu({
                 type="button"
                 onClick={() => {
                   setShowConciergeModal(false);
+                  if (pushedDepthRef.current > 0) {
+                    skipNextPopRef.current = true;
+                    try { window.history.back(); } catch (e) {}
+                  }
                   handleServiceButton('BILL', 'Final Bill');
                 }}
                 className="p-3.5 rounded-2xl bg-emerald-50/70 hover:bg-emerald-100/80 border border-emerald-200/90 text-left transition active:scale-98 flex items-start space-x-3 cursor-pointer group"
@@ -2844,6 +3016,10 @@ export default function CustomerMenu({
                 type="button"
                 onClick={() => {
                   setShowConciergeModal(false);
+                  if (pushedDepthRef.current > 0) {
+                    skipNextPopRef.current = true;
+                    try { window.history.back(); } catch (e) {}
+                  }
                   handleServiceButton('CLEAN', 'Table Clean & Napkins');
                 }}
                 className="p-3.5 rounded-2xl bg-blue-50/70 hover:bg-blue-100/80 border border-blue-200/90 text-left transition active:scale-98 flex items-start space-x-3 cursor-pointer group"
@@ -2864,7 +3040,7 @@ export default function CustomerMenu({
             <div className="pt-2">
               <button
                 type="button"
-                onClick={() => setShowConciergeModal(false)}
+                onClick={handleAppBack}
                 className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
               >
                 {t('closeService')}
@@ -3191,9 +3367,7 @@ export default function CustomerMenu({
 
                 <button
                   type="button"
-                  onClick={() => {
-                    setOrderSuccess(false);
-                  }}
+                  onClick={handleAppBack}
                   className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition flex items-center justify-center space-x-1.5 cursor-pointer"
                 >
                   <Utensils className="w-3.5 h-3.5 text-slate-500" />
