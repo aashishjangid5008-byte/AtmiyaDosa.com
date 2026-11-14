@@ -711,10 +711,10 @@ export const updateOrderItemStatusInSupabase = async (orderIdOrNumber, itemIndex
       // 4. Also attempt updating individual order_items for direct relation compatibility
       if (dbItems && dbItems.length > 0) {
         let targetItem = null;
-        if (typeof itemIndexOrName === 'number') {
-          targetItem = dbItems[itemIndexOrName] || dbItems[0];
+        if (typeof itemIndexOrName === 'number' && dbItems[itemIndexOrName]) {
+          targetItem = dbItems[itemIndexOrName];
         } else if (typeof itemIndexOrName === 'string') {
-          targetItem = dbItems.find(i => i.id === itemIndexOrName || i.item_name?.toLowerCase() === itemIndexOrName?.toLowerCase()) || dbItems[0];
+          targetItem = dbItems.find(i => i.id === itemIndexOrName || i.item_name?.toLowerCase() === itemIndexOrName?.toLowerCase());
         }
 
         if (targetItem) {
@@ -931,6 +931,13 @@ export const fetchLiveOrdersFromSupabase = async () => {
     if (error) {
       console.warn('[SUPABASE] Fetch live orders notice:', error.message);
       return null;
+    }
+    if (data && Array.isArray(data)) {
+      data.forEach(ord => {
+        if (Array.isArray(ord.order_items)) {
+          ord.order_items.sort((a, b) => String(a.id || '').localeCompare(String(b.id || '')));
+        }
+      });
     }
     return data;
   } catch (err) {

@@ -114,22 +114,12 @@ export default function KitchenPanelView({
   const [activeTab, setActiveTab] = useState('new'); // 'new' | 'cooking' | 'ready' | 'history'
   const [selectedTableFilter, setSelectedTableFilter] = useState('all');
 
-  // Persistent KDS item checklist state (survives browser refresh)
-  const [checkedItems, setCheckedItems] = useState(() => {
+  // Clean up any legacy checked items cache on mount
+  useEffect(() => {
     try {
-      const saved = localStorage.getItem('kds_checked_items');
-      const parsed = saved ? JSON.parse(saved) : {};
-      const sanitized = {};
-      Object.keys(parsed).forEach(k => {
-        if (!k.startsWith('undefined_') && !k.startsWith('null_') && !k.startsWith('_')) {
-          sanitized[k] = parsed[k];
-        }
-      });
-      return sanitized;
-    } catch {
-      return {};
-    }
-  });
+      localStorage.removeItem('kds_checked_items');
+    } catch (e) {}
+  }, []);
 
   // Persistent KDS cleared tickets state (survives refresh and eliminates cleared orders from Done tab)
   const [clearedOrderIds, setClearedOrderIds] = useState(() => {
@@ -203,20 +193,14 @@ export default function KitchenPanelView({
     return orders.filter(o => {
       if (isOrderCompletedOrCleared(o)) return false;
       const items = resolveTicketItems(o);
-      const oId = o.id && o.id !== 'undefined' ? o.id : null;
-      const oNum = o.order_number && o.order_number !== 'undefined' ? o.order_number : null;
-      const oDbId = o.supabase_order_id && o.supabase_order_id !== 'undefined' ? o.supabase_order_id : null;
-
-      return items.some((it, idx) => 
+      return items.some((it) => 
         !it.is_served && (
           (it.kitchen_status || '').toLowerCase() === 'ready' || 
-          (oId && checkedItems[`${oId}_${idx}`]) ||
-          (oNum && checkedItems[`${oNum}_${idx}`]) ||
-          (oDbId && checkedItems[`${oDbId}_${idx}`])
+          (it.kitchen_status || '').toLowerCase() === 'prepared'
         )
       );
     });
-  }, [orders, checkedItems, clearedOrderIds]);
+  }, [orders, clearedOrderIds]);
 
   const activeOrders = useMemo(() => {
     return activeKitchenOrders;
@@ -388,14 +372,6 @@ export default function KitchenPanelView({
   const toggleItemCheck = (orderId, idx) => {
     if (!orderId || orderId === 'undefined' || orderId === 'null') return;
     const cleanId = String(orderId).trim();
-    const key = `${cleanId}_${idx}`;
-    setCheckedItems(prev => {
-      const next = { ...prev, [key]: !prev[key] };
-      try {
-        localStorage.setItem('kds_checked_items', JSON.stringify(next));
-      } catch (e) {}
-      return next;
-    });
     if (audioEnabled) playSound('click');
     if (onToggleItemReady) {
       onToggleItemReady(cleanId, idx);
@@ -407,16 +383,11 @@ export default function KitchenPanelView({
   const areAllItemsChecked = (order) => {
     const items = resolveTicketItems(order);
     if (!items || items.length === 0) return false;
-    const oId = order.id && order.id !== 'undefined' ? order.id : null;
-    const oNum = order.order_number && order.order_number !== 'undefined' ? order.order_number : null;
-    const oDbId = order.supabase_order_id && order.supabase_order_id !== 'undefined' ? order.supabase_order_id : null;
 
-    return items.every((item, idx) => 
+    return items.every((item) => 
       item.is_served || 
-      item.kitchen_status === 'ready' || 
-      (oId && checkedItems[`${oId}_${idx}`]) ||
-      (oNum && checkedItems[`${oNum}_${idx}`]) ||
-      (oDbId && checkedItems[`${oDbId}_${idx}`])
+      (item.kitchen_status || '').toLowerCase() === 'ready' ||
+      (item.kitchen_status || '').toLowerCase() === 'prepared'
     );
   };
 
@@ -429,24 +400,20 @@ export default function KitchenPanelView({
   const handleMarkReady = (order) => {
     playSound('success');
     const items = resolveTicketItems(order);
-    const oId = order.id && order.id !== 'undefined' ? order.id : null;
-    const oNum = order.order_number && order.order_number !== 'undefined' ? order.order_number : null;
-    const oDbId = order.supabase_order_id && order.supabase_order_id !== 'undefined' ? order.supabase_order_id : null;
+    const targetId = order.id || order.supabase_order_id || order.order_number;
 
-    setCheckedItems(prev => {
-      const next = { ...prev };
+    if (onToggleItemReady) {
       items.forEach((item, idx) => {
-        if (oId) next[`${oId}_${idx}`] = true;
-        if (oNum) next[`${oNum}_${idx}`] = true;
-        if (oDbId) next[`${oDbId}_${idx}`] = true;
+        const isReady = (item.kitchen_status || '').toLowerCase() === 'ready' || (item.kitchen_status || '').toLowerCase() === 'prepared';
+        if (!item.is_served && !isReady) {
+          onToggleItemReady(targetId, idx);
+        }
       });
-      try {
-        localStorage.setItem('kds_checked_items', JSON.stringify(next));
-      } catch (e) {}
-      return next;
-    });
+    }
 
-    onUpdateStatus(order.id || order.supabase_order_id || order.order_number, 'Ready');
+    if (onUpdateStatus) {
+      onUpdateStatus(targetId, 'Ready');
+    }
   };
 
   const handleMarkServed = (orderId, orderObj = null) => {
@@ -459,19 +426,6 @@ export default function KitchenPanelView({
     );
 
     const items = resolveTicketItems(target || { id: orderId });
-    setCheckedItems(prev => {
-      const next = { ...prev };
-      items.forEach((item, idx) => {
-        next[`${orderId}_${idx}`] = true;
-        if (target?.id) next[`${target.id}_${idx}`] = true;
-        if (target?.order_number) next[`${target.order_number}_${idx}`] = true;
-        if (target?.supabase_order_id) next[`${target.supabase_order_id}_${idx}`] = true;
-      });
-      try {
-        localStorage.setItem('kds_checked_items', JSON.stringify(next));
-      } catch (e) {}
-      return next;
-    });
 
     const effectiveId = target?.id || target?.order_number || target?.supabase_order_id || orderId;
     if (onUpdateStatus) {
@@ -1076,12 +1030,10 @@ export default function KitchenPanelView({
     const safeOrderId = oId || oDbId || oNum || `order_${cardIdx}`;
 
     const totalItemsCount = displayItems.length;
-    const checkedCount = displayItems.filter((item, idx) => {
+    const checkedCount = displayItems.filter((item) => {
       return item.is_served || 
-        item.kitchen_status === 'ready' || 
-        (oId && checkedItems[`${oId}_${idx}`]) ||
-        (oNum && checkedItems[`${oNum}_${idx}`]) ||
-        (oDbId && checkedItems[`${oDbId}_${idx}`]);
+        (item.kitchen_status || '').toLowerCase() === 'ready' || 
+        (item.kitchen_status || '').toLowerCase() === 'prepared';
     }).length;
     const progressPercent = totalItemsCount > 0 ? Math.round((checkedCount / totalItemsCount) * 100) : 0;
     const allChecked = totalItemsCount > 0 && checkedCount === totalItemsCount;
@@ -1254,10 +1206,8 @@ export default function KitchenPanelView({
               const isItemServed = Boolean(item.is_served || (isServed && allItemsServed));
               const isItemReady = Boolean(
                 !isItemServed && (
-                  item.kitchen_status === 'ready' || 
-                  (oId && checkedItems[`${oId}_${idx}`]) || 
-                  (oNum && checkedItems[`${oNum}_${idx}`]) ||
-                  (oDbId && checkedItems[`${oDbId}_${idx}`])
+                  (item.kitchen_status || '').toLowerCase() === 'ready' || 
+                  (item.kitchen_status || '').toLowerCase() === 'prepared'
                 )
               );
               const isItemAddon = Boolean(item.is_addon || (order.round > 1 && item.round === order.round));

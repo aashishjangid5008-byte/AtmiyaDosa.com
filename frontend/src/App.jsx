@@ -1108,11 +1108,12 @@ export default function App() {
           const mergedItems = dbItems.map((dbItem, idx) => {
             const localItem = localMatch.items?.[idx] || (localMatch.items || []).find(it => it.name === dbItem.name);
             const isLocalServed = Boolean(localItem?.is_served);
-            const isLocalReady = Boolean(localItem && (localItem.kitchen_status === 'ready' || isLocalServed));
             const isDbServed = Boolean(dbItem.is_served || dbItem.kitchen_status === 'served');
-            const isDbReady = Boolean(dbItem.kitchen_status === 'ready');
             const finalServed = isLocalServed || isDbServed;
-            const finalReady = finalServed || isLocalReady || isDbReady;
+            const isLocalRollback = Boolean(localItem && (localItem.kitchen_status === 'preparing' || localItem.kitchen_status === 'placed'));
+            const isLocalReady = Boolean(localItem && (localItem.kitchen_status === 'ready' || isLocalServed));
+            const isDbReady = Boolean(dbItem.kitchen_status === 'ready');
+            const finalReady = !isLocalRollback && (finalServed || isLocalReady || isDbReady);
 
             return {
               ...dbItem,
@@ -1865,6 +1866,51 @@ export default function App() {
               });
             }
           })
+          .on('broadcast', { event: 'order_item_rollback' }, ({ payload }) => {
+            console.log('[SUPABASE REALTIME] Incoming order_item_rollback broadcast:', payload);
+            if (!payload) return;
+
+            // 1. Update local orders: set item to preparing
+            setOrders(prev => {
+              const updated = prev.map(o => {
+                if (!matchesOrderId(o, payload.orderId) && !matchesOrderId(o, payload.orderNumber)) return o;
+                const items = (o.items || []).map((it, idx) => {
+                  const isMatch = (payload.itemIndex !== undefined && idx === payload.itemIndex) ||
+                                  (payload.itemName && it.name === payload.itemName);
+                  if (!isMatch) return it;
+                  return {
+                    ...it,
+                    kitchen_status: 'preparing',
+                    ready_at: null
+                  };
+                });
+                const anyReady = items.some(i => i.kitchen_status === 'ready');
+                return {
+                  ...o,
+                  items,
+                  status: anyReady ? 'Ready' : (o.status === 'Ready' ? 'Preparing' : o.status)
+                };
+              });
+              setLocalStore('orders', updated);
+              return updated;
+            });
+
+            // 2. Dismiss any ready call for this item / order
+            setServiceCalls(prev => {
+              const updated = prev.filter(c => {
+                if (c.type !== 'food_ready') return true;
+                const matchesOrder = matchesOrderId(payload.orderId, c.orderId) || matchesOrderId(payload.orderNumber, c.orderId);
+                const matchesItem = (payload.itemIndex !== undefined && c.itemIndex === payload.itemIndex) ||
+                                    (payload.itemName && (c.itemName === payload.itemName || c.dishName === payload.itemName || c.itemsSummary?.includes(payload.itemName)));
+                const matchesTbl = payload.tableNumber && String(c.tableNumber).replace(/[^0-9]/g, '') === String(payload.tableNumber).replace(/[^0-9]/g, '');
+                if (matchesOrder && (matchesItem || payload.itemIndex === undefined)) return false;
+                if (matchesTbl && matchesItem) return false;
+                return true;
+              });
+              setLocalStore('service_calls', updated);
+              return updated;
+            });
+          })
           .on('broadcast', { event: 'service_call' }, ({ payload }) => {
             console.log('[SUPABASE REALTIME] Incoming service call broadcast:', payload);
             if (!payload || !payload.id) return;
@@ -2427,7 +2473,12 @@ export default function App() {
         timestamp: Date.now()
       };
       setServiceCalls(prev => {
-        const nextCalls = [foodReadyCall, ...prev.filter(c => !(c.type === 'food_ready' && c.orderId === orderId && c.itemIndex === itemIndex))];
+        const nextCalls = [foodReadyCall, ...prev.filter(c => {
+          if (c.type !== 'food_ready') return true;
+          const matchesOrder = matchesOrderId(targetOrder, c.orderId);
+          const matchesItem = (c.itemIndex === itemIndex) || (itemName && (c.itemName === itemName || c.dishName === itemName || c.itemsSummary?.includes(itemName)));
+          return !(matchesOrder && matchesItem);
+        })];
         setLocalStore('service_calls', nextCalls);
         return nextCalls;
       });
@@ -2462,12 +2513,35 @@ export default function App() {
         console.warn('Realtime item ready broadcast notice:', e);
       }
     } else {
-      // Dish unticked back to preparing - remove ready call
+      // Dish unticked back to preparing - remove ready call locally & broadcast rollback to waiters
       setServiceCalls(prev => {
-        const nextCalls = prev.filter(c => !(c.type === 'food_ready' && c.orderId === orderId && c.itemIndex === itemIndex));
+        const nextCalls = prev.filter(c => {
+          if (c.type !== 'food_ready') return true;
+          const matchesOrder = matchesOrderId(targetOrder, c.orderId);
+          const matchesItem = (c.itemIndex === itemIndex) || (itemName && (c.itemName === itemName || c.dishName === itemName || c.itemsSummary?.includes(itemName)));
+          return !(matchesOrder && matchesItem);
+        });
         setLocalStore('service_calls', nextCalls);
         return nextCalls;
       });
+
+      // Broadcast rollback over Supabase Realtime channel
+      try {
+        const channel = supabase.channel('restaurant_alerts');
+        channel.send({
+          type: 'broadcast',
+          event: 'order_item_rollback',
+          payload: {
+            orderId: targetOrder.id,
+            orderNumber: targetOrder.order_number || targetOrder.id,
+            itemIndex,
+            itemName,
+            tableNumber: cleanTbl
+          }
+        });
+      } catch (e) {
+        console.warn('Realtime item rollback broadcast notice:', e);
+      }
     }
 
     // Persist item ready state to Supabase Cloud & Local Backend

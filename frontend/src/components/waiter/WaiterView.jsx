@@ -358,19 +358,31 @@ export default function WaiterView({
     }
 
     // 3. If matching order exists and is finished or item is already served, skip
-    const matchingOrder = orders.find(o => o.id === call.orderId || o.order_number === call.orderId);
+    const matchingOrder = orders.find(o => 
+      o.id === call.orderId || 
+      o.order_number === call.orderId ||
+      String(o.id || '').replace(/^#+/, '') === String(call.orderId || '').replace(/^#+/, '')
+    );
     if (matchingOrder) {
       const ordSt = String(matchingOrder.status || '').toLowerCase().trim();
       const ordPaySt = String(matchingOrder.payment_status || '').toLowerCase().trim();
       if (ordSt === 'completed' || ordSt === 'cancelled' || ordSt === 'settled' || (ordSt === 'served' && (ordPaySt === 'paid' || ordPaySt === 'void'))) {
         return;
       }
-      if (call.itemIndex !== undefined && matchingOrder.items?.[call.itemIndex]) {
-        const itemObj = matchingOrder.items[call.itemIndex];
+      // Check specific item if index or name provided
+      const itemObj = (call.itemIndex !== undefined && matchingOrder.items?.[call.itemIndex]) ||
+                      (matchingOrder.items || []).find(it => it.name === call.dishName || it.name === call.itemName);
+      if (itemObj) {
         if (itemObj.is_served) return;
-        if (itemObj.kitchen_status && itemObj.kitchen_status !== 'ready' && itemObj.kitchen_status !== 'prepared') {
-          return;
+        const ks = String(itemObj.kitchen_status || '').toLowerCase();
+        if (ks && ks !== 'ready' && ks !== 'prepared') {
+          return; // Item was rolled back in kitchen to preparing or placed!
         }
+      }
+      // If the order has items and NONE of them are ready, skip this ready call entirely
+      const hasAnyReadyItem = (matchingOrder.items || []).some(it => !it.is_served && ((it.kitchen_status || '').toLowerCase() === 'ready' || (it.kitchen_status || '').toLowerCase() === 'prepared'));
+      if (matchingOrder.items && matchingOrder.items.length > 0 && !hasAnyReadyItem && ordSt !== 'ready') {
+        return;
       }
     }
 
@@ -970,23 +982,12 @@ export default function WaiterView({
                       <button
                         type="button"
                         onClick={() => handleDeliverReadyDish(dish)}
-                        className="flex-1 py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs shadow-xs transition flex items-center justify-center space-x-1.5 cursor-pointer active:scale-98 min-h-[38px]"
+                        className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs shadow-xs transition flex items-center justify-center space-x-1.5 cursor-pointer active:scale-98 min-h-[38px]"
                         title="Mark dish delivered to table and start dining timer"
                       >
                         <CheckCheck className="w-3.5 h-3.5 stroke-[2.5]" />
                         <span>✓ Deliver · ટેબલ પર આપ્યું</span>
                       </button>
-
-                      {readyByTable[normalizeTbl(dish.tableNumber)]?.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeliverAllTableReady(dish.tableNumber)}
-                          className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] transition cursor-pointer shrink-0 min-h-[38px]"
-                          title="Deliver all ready items for this table at once"
-                        >
-                          All ({readyByTable[normalizeTbl(dish.tableNumber)].length})
-                        </button>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -1735,18 +1736,6 @@ export default function WaiterView({
                             </div>
                           ))}
                         </div>
-
-                        {/* If multiple ready dishes, provide 1-tap Deliver All */}
-                        {(readyDishes.length > 1 || tableReadyDishes.length > 1) && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeliverAllTableReady(table.number)}
-                            className="w-full py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] cursor-pointer shadow-xs transition flex items-center justify-center space-x-1"
-                          >
-                            <CheckCheck className="w-3.5 h-3.5" />
-                            <span>Deliver All Ready ({(readyDishes.length > 0 ? readyDishes : tableReadyDishes).length})</span>
-                          </button>
-                        )}
                       </div>
                     )}
 
@@ -2931,22 +2920,8 @@ export default function WaiterView({
                 </div>
               )}
 
-              {/* Bottom Actions: Deliver All & Cancel Entire Ticket */}
+              {/* Bottom Actions: Cancel Entire Ticket */}
               <div className="space-y-2 pt-1">
-                {(readyDishes.length > 0 || cookingDishes.length > 0) && onMarkAllTableItemsServed && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onMarkAllTableItemsServed(tableDishesModal.number, activeWaiterName, activeWaiterId);
-                      if (audioEnabled) playSound('success');
-                      setTableDishesModal(null);
-                    }}
-                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-xs shadow-md transition flex items-center justify-center space-x-2 cursor-pointer"
-                  >
-                    <CheckCheck className="w-4 h-4 stroke-[2.5]" />
-                    <span>Mark All ({allDishes.length}) Items Delivered to Table</span>
-                  </button>
-                )}
 
                 {primaryOrder && onCancelOrder && (
                   <button
