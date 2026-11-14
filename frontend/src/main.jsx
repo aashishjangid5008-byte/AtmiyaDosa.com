@@ -84,7 +84,10 @@ class RootErrorBoundary extends React.Component {
               <button
                 onClick={() => {
                   try {
+                    localStorage.removeItem('atmiya_orders');
+                    localStorage.removeItem('restaurant_orders');
                     localStorage.removeItem('seen_order_ids');
+                    localStorage.removeItem('kds_cleared_order_ids');
                     localStorage.removeItem('preferred_language');
                   } catch (e) {}
                   window.location.reload();

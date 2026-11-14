@@ -1159,8 +1159,15 @@ export default function App() {
           };
         });
 
-        // Retain active orders that haven't synced into DB yet so they are NEVER wiped until completed & delivered!
+        // Retain fresh offline/local orders that haven't synced to DB yet (never resurrect DB-deleted or stale orders)
         (prev || []).forEach(po => {
+          // If this order previously existed in Supabase, and is now gone from DB, it was deleted/reset in DB!
+          if (po.supabase_order_id) return;
+
+          const orderTime = po.placed_at || po.created_at;
+          const isStale = orderTime && (syncNow - new Date(orderTime).getTime() > 2 * 3600 * 1000);
+          if (isStale) return;
+
           const isAlreadyInDb = merged.some(mo => 
             matchesOrderId(mo, po.id) || 
             matchesOrderId(mo, po.order_number) || 
