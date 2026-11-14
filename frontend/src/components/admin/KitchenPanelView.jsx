@@ -151,36 +151,69 @@ export default function KitchenPanelView({
 
   const t = (key) => getTranslation(currentLang, key);
 
-  // Helper to determine if an order is completed, served, settled, or cleared
-  const isOrderCompletedOrCleared = (o) => {
-    if (!o) return true;
-    const items = resolveTicketItems(o);
-    const hasUnservedItems = items.length > 0 && items.some(it => !it.is_served);
+  // Timer calculation
+  const getElapsedSeconds = useCallback((order) => {
+    if (!order) return 60;
+    const timeVal = order.last_addon_at || order.placed_at || order.created_at;
+    if (timeVal) {
+      const diffMs = now - new Date(timeVal).getTime();
+      return Math.max(0, Math.floor(diffMs / 1000));
+    }
+    return 60;
+  }, [now]);
 
-    // CRITICAL: If an order has unserved items (e.g. from an add-on or fresh continuous round), it MUST be displayed in KDS!
-    if (hasUnservedItems) {
-      return false;
+  // Helper to determine if an order is completed, served, settled, or cleared
+  const isOrderCompletedOrCleared = useCallback((o) => {
+    if (!o) return true;
+
+    // 1. Cancelled orders must NEVER appear in active KDS
+    const s = String(o?.status || '').toLowerCase().trim();
+    if (s === 'cancelled') return true;
+
+    // 2. Completed / Settled orders (guest has paid and vacated) must NEVER appear in active Live KOTs
+    if (s === 'completed' || s === 'settled') return true;
+
+    // 3. Stale orders older than 4 hours (from previous shifts/days) must NEVER clutter the live kitchen
+    const totalSecs = getElapsedSeconds(o);
+    if (totalSecs > 4 * 60 * 60) {
+      return true;
     }
 
-    const s = String(o?.status || '').toLowerCase().trim();
-    if (s === 'cancelled' || s === 'served' || s === 'completed' || s === 'settled') return true;
+    const items = resolveTicketItems(o);
+    const allItemsServed = items.length > 0 && items.every(it => it.is_served);
+    const hasUnservedAddon = items.some(it => !it.is_served && (it.is_addon || (o.round > 1 && it.round === o.round)));
+
+    // 4. If all items are served or order status is 'served', hide unless a fresh continuous round add-on was placed
+    if (allItemsServed || s === 'served') {
+      if (!hasUnservedAddon) {
+        return true;
+      }
+    }
+
+    // 5. If ticket was dismissed/cleared by chef, hide unless a fresh continuous round add-on was placed
     const idKey = String(o?.id || o?.order_number || o?.supabase_order_id || '');
     const orderNumKey = String(o?.order_number || '');
     const dbIdKey = String(o?.supabase_order_id || '');
     const clearedSet = new Set(clearedOrderIds.map(String));
-    if (o?.kds_cleared || clearedSet.has(idKey) || (orderNumKey && clearedSet.has(orderNumKey)) || (dbIdKey && clearedSet.has(dbIdKey))) {
-      return true;
+    const isCleared = o?.kds_cleared || clearedSet.has(idKey) || (orderNumKey && clearedSet.has(orderNumKey)) || (dbIdKey && clearedSet.has(dbIdKey));
+
+    if (isCleared) {
+      if (!hasUnservedAddon) {
+        return true;
+      }
     }
-    const allItemsServed = items.length > 0 && items.every(it => it.is_served);
-    if (allItemsServed) return true;
+
     return false;
-  };
+  }, [clearedOrderIds, getElapsedSeconds]);
 
   // Automatically restore tickets from cleared state when a new unserved add-on arrives
   useEffect(() => {
     if (!clearedOrderIds || clearedOrderIds.length === 0) return;
     const unservedOrderIds = orders
       .filter(o => {
+        const s = String(o?.status || '').toLowerCase().trim();
+        if (s === 'cancelled' || s === 'completed' || s === 'settled') return false;
+        if (getElapsedSeconds(o) > 4 * 60 * 60) return false;
         const items = resolveTicketItems(o);
         return items.length > 0 && items.some(it => !it.is_served);
       })
@@ -197,12 +230,30 @@ export default function KitchenPanelView({
         } catch (e) {}
       }
     }
-  }, [orders, clearedOrderIds]);
+  }, [orders, clearedOrderIds, getElapsedSeconds]);
 
   // 1. All Active Live KOTs (Default View): All uncompleted tickets (Placed, Cooking, Food Ready)
   const activeKitchenOrders = useMemo(() => {
-    return orders.filter(o => !isOrderCompletedOrCleared(o));
-  }, [orders, clearedOrderIds]);
+    const rawActive = orders.filter(o => !isOrderCompletedOrCleared(o));
+
+    // Deduplicate by clean order number / ID so duplicate tickets NEVER appear twice on KDS screen
+    const seen = new Map();
+    rawActive.forEach(ord => {
+      const cleanNum = String(ord.order_number || ord.id || '').replace(/^#+/, '').trim();
+      const existing = seen.get(cleanNum);
+      if (!existing) {
+        seen.set(cleanNum, ord);
+      } else {
+        const existingItems = resolveTicketItems(existing).length;
+        const newItems = resolveTicketItems(ord).length;
+        if (newItems >= existingItems) {
+          seen.set(cleanNum, ord);
+        }
+      }
+    });
+
+    return Array.from(seen.values());
+  }, [orders, isOrderCompletedOrCleared]);
 
   // Placed orders (Used for new-order chimes)
   const placedOrders = useMemo(() => {
@@ -380,15 +431,7 @@ export default function KitchenPanelView({
     setTimeout(() => setSoundTestSuccess(false), 2000);
   };
 
-  // Timer calculation
-  const getElapsedSeconds = (order) => {
-    const timeVal = order.placed_at || order.created_at;
-    if (timeVal) {
-      const diffMs = now - new Date(timeVal).getTime();
-      return Math.max(0, Math.floor(diffMs / 1000));
-    }
-    return 60;
-  };
+
 
   const formatTimer = (totalSeconds) => {
     const mins = Math.floor(totalSeconds / 60);
@@ -501,9 +544,22 @@ export default function KitchenPanelView({
   }, [activeOrders, now]);
 
   const handleSweepStaleOrders = () => {
+    const idsToClear = staleActiveOrders.flatMap(o => [
+      String(o.id || ''),
+      String(o.order_number || ''),
+      String(o.supabase_order_id || '')
+    ]).filter(Boolean);
+
+    const updated = Array.from(new Set([...clearedOrderIds, ...idsToClear]));
+    setClearedOrderIds(updated);
+    try {
+      localStorage.setItem('kds_cleared_order_ids', JSON.stringify(updated));
+    } catch (e) {}
+
     staleActiveOrders.forEach(o => {
+      const effectiveId = o.id || o.order_number || o.supabase_order_id;
       if (onUpdateStatus) {
-        onUpdateStatus(o.id, 'Served');
+        onUpdateStatus(effectiveId, 'Served');
       }
     });
     if (audioEnabled) playSound('success');

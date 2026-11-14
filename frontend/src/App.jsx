@@ -1162,10 +1162,9 @@ export default function App() {
         // Retain active orders that haven't synced into DB yet so they are NEVER wiped until completed & delivered!
         (prev || []).forEach(po => {
           const isAlreadyInDb = merged.some(mo => 
-            mo.id === po.id || 
-            (po.supabase_order_id && mo.supabase_order_id === po.supabase_order_id) ||
-            (po.order_number && mo.order_number === po.order_number) ||
-            (po.id && String(po.id).replace('#', '') === String(mo.order_number || mo.id).replace('#', ''))
+            matchesOrderId(mo, po.id) || 
+            matchesOrderId(mo, po.order_number) || 
+            matchesOrderId(mo, po.supabase_order_id)
           );
           const isTestDummy = String(po.id || '').includes('TEST') || DEMO_ORDER_IDS.has(po.id) || !po.table_number;
           const st = String(po.status || '').toLowerCase();
