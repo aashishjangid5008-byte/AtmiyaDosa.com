@@ -154,6 +154,14 @@ export default function KitchenPanelView({
   // Helper to determine if an order is completed, served, settled, or cleared
   const isOrderCompletedOrCleared = (o) => {
     if (!o) return true;
+    const items = resolveTicketItems(o);
+    const hasUnservedItems = items.length > 0 && items.some(it => !it.is_served);
+
+    // CRITICAL: If an order has unserved items (e.g. from an add-on or fresh continuous round), it MUST be displayed in KDS!
+    if (hasUnservedItems) {
+      return false;
+    }
+
     const s = String(o?.status || '').toLowerCase().trim();
     if (s === 'cancelled' || s === 'served' || s === 'completed' || s === 'settled') return true;
     const idKey = String(o?.id || o?.order_number || o?.supabase_order_id || '');
@@ -163,11 +171,33 @@ export default function KitchenPanelView({
     if (o?.kds_cleared || clearedSet.has(idKey) || (orderNumKey && clearedSet.has(orderNumKey)) || (dbIdKey && clearedSet.has(dbIdKey))) {
       return true;
     }
-    const items = resolveTicketItems(o);
     const allItemsServed = items.length > 0 && items.every(it => it.is_served);
     if (allItemsServed) return true;
     return false;
   };
+
+  // Automatically restore tickets from cleared state when a new unserved add-on arrives
+  useEffect(() => {
+    if (!clearedOrderIds || clearedOrderIds.length === 0) return;
+    const unservedOrderIds = orders
+      .filter(o => {
+        const items = resolveTicketItems(o);
+        return items.length > 0 && items.some(it => !it.is_served);
+      })
+      .map(o => String(o?.id || o?.order_number || o?.supabase_order_id || ''))
+      .filter(Boolean);
+
+    if (unservedOrderIds.length > 0) {
+      const unservedSet = new Set(unservedOrderIds);
+      const filtered = clearedOrderIds.filter(id => !unservedSet.has(id));
+      if (filtered.length !== clearedOrderIds.length) {
+        setClearedOrderIds(filtered);
+        try {
+          localStorage.setItem('kds_cleared_order_ids', JSON.stringify(filtered));
+        } catch (e) {}
+      }
+    }
+  }, [orders, clearedOrderIds]);
 
   // 1. All Active Live KOTs (Default View): All uncompleted tickets (Placed, Cooking, Food Ready)
   const activeKitchenOrders = useMemo(() => {
@@ -271,25 +301,29 @@ export default function KitchenPanelView({
   const knownOrderIdsRef = useRef(new Set());
   const isFirstRunRef = useRef(true);
 
+  const getOrderArrivalKey = (o) => {
+    const id = o.id || o.order_number || o.supabase_order_id || '';
+    const items = resolveTicketItems(o);
+    const unservedCount = items.filter(it => !it.is_served).length;
+    return `${id}_r${o.round || 1}_u${unservedCount}_${o.last_addon_at || ''}`;
+  };
+
   useEffect(() => {
     if (isFirstRunRef.current) {
       placedOrders.forEach(o => {
-        const id = o.id || o.order_number;
-        if (id) knownOrderIdsRef.current.add(id);
+        knownOrderIdsRef.current.add(getOrderArrivalKey(o));
       });
       isFirstRunRef.current = false;
       return;
     }
 
     const newlyArrived = placedOrders.filter(o => {
-      const id = o.id || o.order_number;
-      return id && !knownOrderIdsRef.current.has(id);
+      return !knownOrderIdsRef.current.has(getOrderArrivalKey(o));
     });
 
     if (newlyArrived.length > 0) {
       newlyArrived.forEach(ord => {
-        const id = ord.id || ord.order_number;
-        if (id) knownOrderIdsRef.current.add(id);
+        knownOrderIdsRef.current.add(getOrderArrivalKey(ord));
       });
 
       const latest = newlyArrived[0];

@@ -1106,14 +1106,16 @@ export default function App() {
           // Merge item ready/served states so locally updated dishes NEVER revert to 'placed'
           const dbItems = (mo.items && mo.items.length > 0) ? mo.items : (localMatch.items || []);
           const mergedItems = dbItems.map((dbItem, idx) => {
-            const localItem = localMatch.items?.[idx] || (localMatch.items || []).find(it => it.name === dbItem.name);
+            const localItem = localMatch.items?.[idx] || (localMatch.items || []).find(it => it.name === dbItem.name && it.round === dbItem.round);
             const isLocalServed = Boolean(localItem?.is_served);
             const isDbServed = Boolean(dbItem.is_served || dbItem.kitchen_status === 'served');
-            const finalServed = isLocalServed || isDbServed;
+            // If item in DB is explicitly a newly placed dish, never treat it as already served!
+            const isNewDbItem = (dbItem.kitchen_status === 'placed' || !dbItem.kitchen_status) && !dbItem.is_served;
+            const finalServed = isNewDbItem ? false : (isLocalServed || isDbServed);
             const isLocalRollback = Boolean(localItem && (localItem.kitchen_status === 'preparing' || localItem.kitchen_status === 'placed'));
             const isLocalReady = Boolean(localItem && (localItem.kitchen_status === 'ready' || isLocalServed));
             const isDbReady = Boolean(dbItem.kitchen_status === 'ready');
-            const finalReady = !isLocalRollback && (finalServed || isLocalReady || isDbReady);
+            const finalReady = !isNewDbItem && !isLocalRollback && (finalServed || isLocalReady || isDbReady);
 
             return {
               ...dbItem,
@@ -1124,12 +1126,16 @@ export default function App() {
             };
           });
 
+          const hasUnserved = mergedItems.some(i => !i.is_served);
           const allMergedReady = mergedItems.length > 0 && mergedItems.every(i => i.kitchen_status === 'ready' || i.is_served);
           let preservedStatus = mo.status;
           if (localMatch.status === 'Completed' || mo.status === 'Completed') {
-            preservedStatus = 'Completed';
+            preservedStatus = hasUnserved ? 'Placed' : 'Completed';
           } else if (localMatch.status === 'Cancelled' || mo.status === 'Cancelled') {
             preservedStatus = 'Cancelled';
+          } else if (hasUnserved) {
+            // CRITICAL: If there are unserved items (e.g. from an add-on or fresh round), status CANNOT be 'Served'!
+            preservedStatus = (String(mo.status || '').toLowerCase() === 'placed') ? 'Placed' : (allMergedReady ? 'Ready' : (localMatch.status === 'Preparing' ? 'Preparing' : 'Placed'));
           } else if (localMatch.status === 'Served' || mo.status === 'Served') {
             preservedStatus = 'Served';
           } else if (allMergedReady) {
@@ -1144,6 +1150,9 @@ export default function App() {
             ...mo,
             items: mergedItems,
             status: preservedStatus,
+            kds_cleared: hasUnserved ? false : (mo.kds_cleared || localMatch.kds_cleared),
+            newly_added_items: hasUnserved ? (localMatch.newly_added_items || mo.newly_added_items) : null,
+            newly_added_summary: hasUnserved ? (localMatch.newly_added_summary || mo.newly_added_summary) : null,
             payment_status: preservedStatus === 'Completed' ? 'Paid' : (mo.payment_status || localMatch.payment_status),
             settled_at: orderSettledAt,
             completed_at: orderSettledAt
@@ -1631,7 +1640,12 @@ export default function App() {
             const currentRole = isStaffLoggedIn ? (authUserRef.current?.role || 'admin') : 'customer';
 
             // If a new order is placed from ANY phone/device, trigger alerts ONLY to relevant staff roles
-            if (payload?.eventType === 'INSERT' && payload?.new && isStaffLoggedIn) {
+            const isInsert = payload?.eventType === 'INSERT';
+            const isAddonUpdate = payload?.eventType === 'UPDATE' && 
+              (String(payload?.new?.status || '').toUpperCase() === 'PLACED') &&
+              (String(payload?.old?.status || '').toUpperCase() !== 'PLACED');
+
+            if ((isInsert || isAddonUpdate) && payload?.new && isStaffLoggedIn) {
               const newOrd = payload.new;
               const tbl = (newOrd.table_number || '01').replace(/\D/g, '');
               const ordNum = newOrd.order_number || '';
@@ -1642,11 +1656,12 @@ export default function App() {
                   tableNumber: tbl,
                   orderNumber: ordNum,
                   customerName: cust,
-                  paymentMode: newOrd.payment_method || 'Cash'
+                  paymentMode: newOrd.payment_method || 'Cash',
+                  isAddon: isAddonUpdate
                 });
                 setActiveToast({
                   id: `ord_${Date.now()}`,
-                  title: `🚨 Table ${tbl} — New KOT Placed!`,
+                  title: isAddonUpdate ? `🚨 Table ${tbl} — Add-On Order Placed!` : `🚨 Table ${tbl} — New KOT Placed!`,
                   message: `Order #${ordNum} (${newOrd.payment_method || 'Cash'}) from ${cust}. Start prep now!`,
                   type: 'order',
                   time: 'Just now',
@@ -1655,7 +1670,7 @@ export default function App() {
               } else if (currentRole === 'waiter') {
                 setActiveToast({
                   id: `ord_${Date.now()}`,
-                  title: `📝 Table ${tbl}: New Order Placed`,
+                  title: isAddonUpdate ? `📝 Table ${tbl}: Add-On Items Placed` : `📝 Table ${tbl}: New Order Placed`,
                   message: `Order #${ordNum} placed for Table ${tbl}. Ticket queued in kitchen.`,
                   type: 'order',
                   time: 'Just now',
@@ -1739,7 +1754,7 @@ export default function App() {
                 });
                 setActiveToast({
                   id: `ord_${Date.now()}`,
-                  title: `🚨 Table ${tbl} — New KOT Placed!`,
+                  title: payload.is_addon ? `🚨 Table ${tbl} — Add-On Order Placed!` : `🚨 Table ${tbl} — New KOT Placed!`,
                   message: `Order #${ordNum} (${payload.payment_mode || 'Cash'}) from ${cust}. Start prep now!`,
                   type: 'order',
                   time: 'Just now',
@@ -1748,7 +1763,7 @@ export default function App() {
               } else if (currentRole === 'waiter') {
                 setActiveToast({
                   id: `ord_${Date.now()}`,
-                  title: `📝 Table ${tbl}: New Order Placed`,
+                  title: payload.is_addon ? `📝 Table ${tbl}: Add-On Items Placed` : `📝 Table ${tbl}: New Order Placed`,
                   message: `Order #${ordNum} placed for Table ${tbl}. Ticket queued in kitchen.`,
                   type: 'order',
                   time: 'Just now',
@@ -1757,6 +1772,7 @@ export default function App() {
               }
             }
 
+            await refreshOrdersFromSupabase();
             loadFreshState();
             await refreshOrdersFromSupabase();
           })
@@ -2951,9 +2967,12 @@ export default function App() {
       const mergedItems = [...(activeParent.items || [])];
 
       (newOrder.items || []).forEach(newItem => {
+        // Only merge with an unserved existing item; if previous round item was already served, keep it served and add new item as fresh round
         const existingIdx = mergedItems.findIndex(i => 
-          (i.id && newItem.id && i.id === newItem.id) || 
-          (i.name && newItem.name && i.name.toLowerCase().trim() === newItem.name.toLowerCase().trim())
+          !i.is_served && (
+            (i.id && newItem.id && i.id === newItem.id) || 
+            (i.name && newItem.name && i.name.toLowerCase().trim() === newItem.name.toLowerCase().trim())
+          )
         );
 
         const addedQty = Number(newItem.quantity || newItem.qty || 1);
@@ -2975,7 +2994,8 @@ export default function App() {
             kitchen_status: isDeliveredByWaiter ? cur.kitchen_status : targetKitchenStatus,
             is_served: isDeliveredByWaiter ? cur.is_served : false,
             served_at: isDeliveredByWaiter ? (newItem.served_at || Date.now()) : cur.served_at,
-            round: roundNumber
+            round: roundNumber,
+            is_addon: true
           };
         } else {
           mergedItems.push({
@@ -2992,7 +3012,7 @@ export default function App() {
       });
 
       const addedSubtotal = parseFloat(newOrder.subtotal || 0);
-      const addedTax = parseFloat(newOrder.tax || 0);
+      const addedTax = 0;
       const addedDiscount = parseFloat(newOrder.discount || 0);
       const addedTotal = parseFloat(newOrder.total || newOrder.total_amount || 0);
 
@@ -3019,6 +3039,9 @@ export default function App() {
         round: roundNumber,
         status: nextOrderStatus,
         payment_status: 'Pending Cash', // Continuous bill remains pending until final table checkout
+        kds_cleared: false, // CRITICAL: Reset kds_cleared so fresh add-on appears in KDS!
+        newly_added_items: newOrder.items || [],
+        newly_added_summary: newOrder.items_summary || (newOrder.items || []).map(i => `${i.qty || i.quantity || 1}x ${i.name}`).join(', '),
         last_addon_at: new Date().toISOString(),
         special_note: [activeParent.special_note, newOrder.special_note].filter(Boolean).join(' • ')
       };
@@ -3168,15 +3191,16 @@ export default function App() {
         type: 'broadcast',
         event: 'new_order_placed',
         payload: {
-          order_id: newOrder.id,
-          order_number: newOrder.order_number || newOrder.id,
-          table_number: newOrder.table_number,
-          customer_name: newOrder.customer_name,
-          items_summary: newOrder.items_summary,
-          total: newOrder.total || newOrder.total_amount || 0,
-          payment_mode: newOrder.payment_mode || 'Cash',
+          order_id: finalOrder.id,
+          order_number: finalOrder.order_number || finalOrder.id,
+          table_number: finalOrder.table_number,
+          customer_name: finalOrder.customer_name,
+          items_summary: newOrder.items_summary || (newOrder.items || []).map(i => `${i.qty || i.quantity || 1}x ${i.name}`).join(', '),
+          total: finalOrder.total || finalOrder.total_amount || 0,
+          payment_mode: finalOrder.payment_mode || 'Cash',
           is_addon: isAddonOrder,
-          placed_at: newOrder.placed_at || new Date().toISOString()
+          round: roundNumber,
+          placed_at: new Date().toISOString()
         }
       });
     } catch (bcErr) {
