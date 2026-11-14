@@ -1477,8 +1477,6 @@ export default function WaiterView({
                 (c.label || '').toLowerCase().includes('clean')
               );
               const tableReadyDishes = isOccupied ? allReadyDishes.filter(d => normalizeTbl(d.tableNumber) === normalizeTbl(table.number)) : [];
-              const hasReadyFood = isOccupied && (activeTableOrders.some(o => (o.status || '').toLowerCase() === 'ready') || tableReadyDishes.length > 0);
-              
               // Aggregate items across orders for this table
               const allDishes = [];
               activeTableOrders.forEach(o => {
@@ -1495,7 +1493,12 @@ export default function WaiterView({
               const totalItems = allDishes.length;
               const deliveredItems = allDishes.filter(it => it.is_served).length;
               const readyDishes = allDishes.filter(it => !it.is_served && ((it.kitchen_status || '').toLowerCase() === 'ready' || (it.kitchen_status || '').toLowerCase() === 'prepared'));
-              const cookingDishes = allDishes.filter(it => !it.is_served && ((it.kitchen_status || '').toLowerCase() !== 'ready' && (it.kitchen_status || '').toLowerCase() !== 'prepared'));
+              const cookingDishes = allDishes.filter(it => !it.is_served && ((it.kitchen_status || '').toLowerCase() !== 'ready' && ((it.kitchen_status || '').toLowerCase() !== 'prepared')));
+              const hasReadyFood = isOccupied && (
+                activeTableOrders.some(o => (o.status || '').toLowerCase() === 'ready') || 
+                tableReadyDishes.length > 0 || 
+                readyDishes.length > 0
+              );
               const percent = totalItems > 0 ? Math.round((deliveredItems / totalItems) * 100) : 0;
               const totalBillAmount = activeTableOrders
                 .filter(o => (o.payment_status || '').toLowerCase() !== 'paid')
@@ -1871,11 +1874,24 @@ export default function WaiterView({
                           <button
                             type="button"
                             onClick={() => setTableDishesModal(table)}
-                            className="py-2 px-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-950 border border-blue-200 font-bold text-xs flex items-center justify-center space-x-1 transition cursor-pointer min-h-[40px]"
-                            title="View dish delivery checklist"
+                            className={`py-2 px-2 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer min-h-[40px] ${
+                              readyDishes.length > 0 || tableReadyDishes.length > 0
+                                ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm ring-2 ring-emerald-400/60 animate-pulse font-black'
+                                : 'bg-blue-50 hover:bg-blue-100 text-blue-950 border border-blue-200'
+                            }`}
+                            title={readyDishes.length > 0 ? "Deliver ready dishes to table" : "View dish delivery checklist"}
                           >
-                            <Utensils className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                            <span className="truncate">Dishes ({deliveredItems}/{totalItems}{readyDishes.length > 0 ? ` • 🔥${readyDishes.length}` : ''})</span>
+                            {readyDishes.length > 0 || tableReadyDishes.length > 0 ? (
+                              <>
+                                <CheckCheck className="w-4 h-4 text-white stroke-[3] shrink-0" />
+                                <span className="truncate">🍽️ Deliver ({readyDishes.length || tableReadyDishes.length} Ready)</span>
+                              </>
+                            ) : (
+                              <>
+                                <Utensils className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                <span className="truncate">Dishes ({deliveredItems}/{totalItems})</span>
+                              </>
+                            )}
                           </button>
                         </div>
 

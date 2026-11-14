@@ -989,6 +989,7 @@ export default function CustomerMenu({
 
     const isOnline = false;
     const isAddon = Boolean(activeTableOrder);
+    const roundNum = isAddon ? ((activeTableOrder.round || 1) + 1) : 1;
 
     const orderItems = [
       ...cart.map(i => ({
@@ -999,11 +1000,14 @@ export default function CustomerMenu({
         hindi: i.hindi || i.hindi_name || null,
         price: i.price,
         qty: i.qty,
+        quantity: i.qty,
         image_url: i.image_url || i.imageUrl || i.image || i.photo || null,
         customizations: i.customizations || null,
         cooking_note: i.cooking_note || i.note || null,
         kitchen_status: 'placed',
-        is_served: false
+        is_served: false,
+        is_addon: isAddon,
+        round: roundNum
       }))
     ];
 
@@ -1015,7 +1019,6 @@ export default function CustomerMenu({
       // NEW ADD-ON / ROUND 2+ ORDER: Creates a distinct ticket for kitchen and billing!
       // NEVER overwrites or wipes previous dishes already cooking or served!
       const newAddonId = `#ORD${Math.floor(1000 + Math.random() * 9000)}`;
-      const roundNum = (activeTableOrder.round || 1) + 1;
 
       finalOrderObj = {
         id: newAddonId,
@@ -1044,9 +1047,7 @@ export default function CustomerMenu({
         payment_status: 'Pending Cash',
         payment_verified_online: false,
         paid_collected_by: 'Cashier Desk / Floor Waiter',
-        special_note: specialNote 
-          ? `[Round ${roundNum}] ${specialNote}`.trim() 
-          : `[Round ${roundNum} Add-On]`,
+        special_note: specialNote ? specialNote.trim() : null,
         is_addon: true,
         round: roundNum,
         parent_order_id: activeTableOrder.id

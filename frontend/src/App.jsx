@@ -1109,17 +1109,15 @@ export default function App() {
             const localItem = localMatch.items?.[idx] || (localMatch.items || []).find(it => it.name === dbItem.name && it.round === dbItem.round);
             const isLocalServed = Boolean(localItem?.is_served);
             const isDbServed = Boolean(dbItem.is_served || dbItem.kitchen_status === 'served');
-            // If item in DB is explicitly a newly placed dish, never treat it as already served!
-            const isNewDbItem = (dbItem.kitchen_status === 'placed' || !dbItem.kitchen_status) && !dbItem.is_served;
-            const finalServed = isNewDbItem ? false : (isLocalServed || isDbServed);
-            const isLocalRollback = Boolean(localItem && (localItem.kitchen_status === 'preparing' || localItem.kitchen_status === 'placed'));
-            const isLocalReady = Boolean(localItem && (localItem.kitchen_status === 'ready' || isLocalServed));
-            const isDbReady = Boolean(dbItem.kitchen_status === 'ready');
-            const finalReady = !isNewDbItem && !isLocalRollback && (finalServed || isLocalReady || isDbReady);
+            const finalServed = isLocalServed || isDbServed;
+
+            const isDbReady = Boolean(dbItem.kitchen_status === 'ready' || String(dbItem.status || '').toLowerCase() === 'ready');
+            const isLocalReady = Boolean(localItem && (localItem.kitchen_status === 'ready' || localItem.is_served));
+            const finalReady = finalServed || isDbReady || isLocalReady;
 
             return {
               ...dbItem,
-              kitchen_status: finalServed ? 'served' : (finalReady ? 'ready' : (dbItem.kitchen_status || 'placed')),
+              kitchen_status: finalServed ? 'served' : (finalReady ? 'ready' : (localItem?.kitchen_status || dbItem.kitchen_status || 'placed')),
               is_served: finalServed,
               ready_at: localItem?.ready_at || dbItem.ready_at,
               served_at: localItem?.served_at || dbItem.served_at
@@ -1845,6 +1843,37 @@ export default function App() {
           .on('broadcast', { event: 'order_item_ready' }, ({ payload }) => {
             console.log('[SUPABASE REALTIME] Incoming order_item_ready broadcast:', payload);
             if (!payload || !payload.tableNumber) return;
+
+            // 1. Immediately update local orders state in memory so Waiter Panel switches to Ready instantly
+            setOrders(prev => {
+              const updated = (prev || []).map(o => {
+                const isMatch = matchesOrderId(o, payload.orderId) || 
+                                matchesOrderId(o, payload.orderNumber) || 
+                                (normalizeTableNumber(o.table_number) === normalizeTableNumber(payload.tableNumber) && String(o.status || '').toLowerCase() !== 'completed' && String(o.status || '').toLowerCase() !== 'settled');
+                if (!isMatch) return o;
+                const items = (o.items || []).map((it, idx) => {
+                  const isItemMatch = (payload.itemIndex !== undefined && idx === payload.itemIndex) ||
+                                      (payload.itemName && (it.name === payload.itemName || it.item_name === payload.itemName));
+                  if (!isItemMatch) return it;
+                  return {
+                    ...it,
+                    kitchen_status: 'ready',
+                    ready_at: payload.readyAt || Date.now()
+                  };
+                });
+                const allReady = items.length > 0 && items.every(i => i.kitchen_status === 'ready' || i.is_served);
+                const hasReady = items.some(i => i.kitchen_status === 'ready');
+                const nextStatus = allReady ? 'Ready' : (hasReady ? 'Ready' : o.status);
+                return {
+                  ...o,
+                  items,
+                  order_items: items,
+                  status: nextStatus
+                };
+              });
+              setLocalStore('orders', updated);
+              return updated;
+            });
 
             loadFreshState();
             refreshOrdersFromSupabase();
@@ -3049,7 +3078,11 @@ export default function App() {
         newly_added_items: newOrder.items || [],
         newly_added_summary: newOrder.items_summary || (newOrder.items || []).map(i => `${i.qty || i.quantity || 1}x ${i.name}`).join(', '),
         last_addon_at: new Date().toISOString(),
-        special_note: [activeParent.special_note, newOrder.special_note].filter(Boolean).join(' • ')
+        special_note: [activeParent.special_note, newOrder.special_note]
+          .filter(Boolean)
+          .map(s => String(s).replace(/\[Round\s*\d+(\s*Add-On)?\]/gi, '').trim())
+          .filter(Boolean)
+          .join(' • ') || null
       };
 
       updated = orders.map(o => o.id === activeParent.id ? finalOrder : o);

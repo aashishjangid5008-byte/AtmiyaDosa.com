@@ -1248,24 +1248,32 @@ export default function KitchenPanelView({
         )}
 
         {/* Special Instructions Box - Ultra-Prominent Kitchen Instruction Card */}
-        {order.special_note && (
-          <div className="p-3.5 rounded-2xl bg-amber-400 text-slate-950 border-2 border-amber-500 shadow-sm flex items-start space-x-2.5">
-            <AlertCircle className="w-5 h-5 text-slate-950 shrink-0 mt-0.5" />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-1">
-                <span className="text-[11px] uppercase font-black tracking-wider text-slate-950 block">
-                  ⚠️ CUSTOMER SPECIAL INSTRUCTIONS / ખાસ સૂચના:
-                </span>
-                <span className="px-1.5 py-0.5 rounded bg-black text-amber-300 text-[9px] font-black uppercase tracking-wider shrink-0">
-                  Chef Attention
-                </span>
+        {/* Special Instructions Box - Only shown if customer gave real custom instructions (never for internal add-on tags) */}
+        {(() => {
+          const rawNote = String(order.special_note || '')
+            .replace(/\[Round\s*\d+(\s*Add-On)?\]/gi, '')
+            .replace(/\[KDS_ITEM_STATES:\{.*?\}\]/g, '')
+            .trim();
+          if (!rawNote) return null;
+          return (
+            <div className="p-3.5 rounded-2xl bg-amber-400 text-slate-950 border-2 border-amber-500 shadow-sm flex items-start space-x-2.5">
+              <AlertCircle className="w-5 h-5 text-slate-950 shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[11px] uppercase font-black tracking-wider text-slate-950 block">
+                    ⚠️ CUSTOMER SPECIAL INSTRUCTIONS / ખાસ સૂચના:
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-black text-amber-300 text-[9px] font-black uppercase tracking-wider shrink-0">
+                    Chef Attention
+                  </span>
+                </div>
+                <p className="font-black text-sm text-slate-950 mt-1 leading-snug break-words">
+                  "{rawNote}"
+                </p>
               </div>
-              <p className="font-black text-sm text-slate-950 mt-1 leading-snug break-words">
-                "{order.special_note}"
-              </p>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Minimal Progress Line */}
         {totalItemsCount > 1 && (
@@ -1300,7 +1308,11 @@ export default function KitchenPanelView({
                   (item.kitchen_status || '').toLowerCase() === 'prepared'
                 )
               );
-              const isItemAddon = Boolean(item.is_addon || (order.round > 1 && item.round === order.round));
+              const isItemAddon = Boolean(
+                item.is_addon || 
+                (order.round > 1 && (item.round === order.round || item.round > 1 || !item.is_served)) || 
+                (order.is_addon && !item.is_served)
+              );
               const dishPhoto = item.image_url || item.imageUrl || item.image || item.photo || (menuItems.find(m => m.id === item.id || m.name === item.name)?.image_url);
               const gujaratiTitle = getDishDisplayName({ name: item.name }, 'gu');
               const cuisineKey = getDishCuisine({ name: item.name, category: item.category });
