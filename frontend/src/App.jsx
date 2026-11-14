@@ -1104,11 +1104,14 @@ export default function App() {
           if (!localMatch) return mo;
 
           // Merge item ready/served states so locally updated dishes NEVER revert to 'placed'
-          // If items were recently modified locally (e.g. item deleted by waiter), protect against stale sync
-          const isRecentlyModified = localMatch.last_modified_at && (syncNow - new Date(localMatch.last_modified_at).getTime() < 15000);
-          const dbItems = (isRecentlyModified && Array.isArray(localMatch.items)) ? localMatch.items : ((mo.items && mo.items.length > 0) ? mo.items : (localMatch.items || []));
+          // If items were recently modified locally (e.g. add-on placed or item deleted by waiter), protect against stale sync
+          const isRecentlyModified = localMatch.last_modified_at && (syncNow - new Date(localMatch.last_modified_at).getTime() < 30000);
+          const hasMoreLocalItems = Array.isArray(localMatch.items) && localMatch.items.length > (mo.items?.length || 0);
+          const dbItems = ((isRecentlyModified || hasMoreLocalItems) && Array.isArray(localMatch.items) && localMatch.items.length > 0)
+            ? localMatch.items 
+            : ((mo.items && mo.items.length > 0) ? mo.items : (localMatch.items || []));
           const mergedItems = dbItems.map((dbItem, idx) => {
-            const localItem = localMatch.items?.[idx] || (localMatch.items || []).find(it => it.name === dbItem.name && it.round === dbItem.round);
+            const localItem = localMatch.items?.[idx] || (localMatch.items || []).find(it => it.name === dbItem.name && (it.round === dbItem.round || !dbItem.round));
             const isLocalPreparing = Boolean(localItem && (localItem.kitchen_status === 'preparing' || localItem.status === 'PREPARING'));
             const isDbPreparing = Boolean(dbItem.kitchen_status === 'preparing' || String(dbItem.status || '').toLowerCase() === 'preparing');
             const isExplicitlyPreparing = isLocalPreparing || isDbPreparing;
@@ -1123,6 +1126,8 @@ export default function App() {
 
             return {
               ...dbItem,
+              round: localItem?.round || dbItem.round || 1,
+              is_addon: Boolean(localItem?.is_addon || dbItem.is_addon),
               kitchen_status: finalServed ? 'served' : (finalReady ? 'ready' : (isExplicitlyPreparing ? 'preparing' : (localItem?.kitchen_status || dbItem.kitchen_status || 'placed'))),
               is_served: finalServed,
               ready_at: isExplicitlyPreparing ? null : (localItem?.ready_at || dbItem.ready_at),
@@ -1153,10 +1158,19 @@ export default function App() {
           return {
             ...mo,
             items: mergedItems,
+            order_items: mergedItems,
+            round: localMatch.round || mo.round || 1,
+            is_addon: Boolean(localMatch.is_addon || mo.is_addon),
             status: preservedStatus,
             kds_cleared: hasUnserved ? false : (mo.kds_cleared || localMatch.kds_cleared),
             newly_added_items: hasUnserved ? (localMatch.newly_added_items || mo.newly_added_items) : null,
             newly_added_summary: hasUnserved ? (localMatch.newly_added_summary || mo.newly_added_summary) : null,
+            last_addon_at: localMatch.last_addon_at || mo.last_addon_at || null,
+            last_modified_at: localMatch.last_modified_at || mo.last_modified_at || null,
+            subtotal: (isRecentlyModified || hasMoreLocalItems) ? (localMatch.subtotal || mo.subtotal) : mo.subtotal,
+            total: (isRecentlyModified || hasMoreLocalItems) ? (localMatch.total || mo.total) : mo.total,
+            total_amount: (isRecentlyModified || hasMoreLocalItems) ? (localMatch.total_amount || mo.total_amount) : mo.total_amount,
+            items_summary: (isRecentlyModified || hasMoreLocalItems) ? (localMatch.items_summary || mo.items_summary) : mo.items_summary,
             payment_status: preservedStatus === 'Completed' ? 'Paid' : (mo.payment_status || localMatch.payment_status),
             settled_at: orderSettledAt,
             completed_at: orderSettledAt
@@ -3101,7 +3115,34 @@ export default function App() {
     if (isAddonOrder) {
       // MERGE INTO CONTINUOUS TABLE BILL: Do not generate a separate bill for water or add-ons!
       const activeParent = existingActiveOrders[0];
-      const mergedItems = [...(activeParent.items || [])];
+      const parentBaseItems = (Array.isArray(activeParent.items) && activeParent.items.length > 0)
+        ? activeParent.items
+        : (Array.isArray(activeParent.order_items) && activeParent.order_items.length > 0
+            ? activeParent.order_items.map(oi => ({
+                id: oi.id,
+                name: oi.item_name || oi.name,
+                qty: oi.quantity || oi.qty || 1,
+                quantity: oi.quantity || oi.qty || 1,
+                price: Number(oi.unit_price || oi.price) || 0,
+                kitchen_status: String(oi.status || '').toLowerCase() === 'ready' ? 'ready' : (String(oi.status || '').toLowerCase() === 'served' ? 'served' : 'placed'),
+                is_served: String(oi.status || '').toLowerCase() === 'served',
+                round: 1
+              }))
+            : (activeParent.items_summary
+                ? String(activeParent.items_summary).split(',').map((p, idx) => {
+                    const m = p.trim().match(/^(\d+)x?\s*(.+)$/i);
+                    return {
+                      id: `parent_dish_${activeParent.id}_${idx}`,
+                      name: m ? m[2].trim() : p.trim(),
+                      qty: m ? parseInt(m[1], 10) : 1,
+                      price: 0,
+                      kitchen_status: 'placed',
+                      is_served: false,
+                      round: 1
+                    };
+                  })
+                : []));
+      const mergedItems = [...parentBaseItems];
 
       (newOrder.items || []).forEach(newItem => {
         // Only merge with an unserved existing item; if previous round item was already served, keep it served and add new item as fresh round
@@ -3174,12 +3215,14 @@ export default function App() {
         total_amount: cumulativeTotal,
         items_summary: summaryStr,
         round: roundNumber,
+        is_addon: true,
         status: nextOrderStatus,
         payment_status: 'Pending Cash', // Continuous bill remains pending until final table checkout
         kds_cleared: false, // CRITICAL: Reset kds_cleared so fresh add-on appears in KDS!
         newly_added_items: newOrder.items || [],
         newly_added_summary: newOrder.items_summary || (newOrder.items || []).map(i => `${i.qty || i.quantity || 1}x ${i.name}`).join(', '),
         last_addon_at: new Date().toISOString(),
+        last_modified_at: new Date().toISOString(),
         special_note: [activeParent.special_note, newOrder.special_note]
           .filter(Boolean)
           .map(s => String(s).replace(/\[Round\s*\d+(\s*Add-On)?\]/gi, '').trim())

@@ -395,11 +395,11 @@ export default function WaiterView({
       return;
     }
 
-    // 2. If table is available/vacant or has no active dining session, skip orphaned calls!
+    // 2. If table has no active dining session and no matching order, skip orphaned calls
     const callTbl = normalizeTbl(call.tableNumber);
     const tableObj = (tables || []).find(t => normalizeTbl(t.number) === callTbl);
     const activeOrdersForTable = getTableActiveOrders(call.tableNumber);
-    if ((tableObj && tableObj.status === 'available') || activeOrdersForTable.length === 0) {
+    if (activeOrdersForTable.length === 0 && (!tableObj || tableObj.status === 'available' || tableObj.status === 'vacant')) {
       return; // Skip stale ready calls for unoccupied/available tables
     }
 
@@ -421,7 +421,7 @@ export default function WaiterView({
       if (itemObj) {
         if (itemObj.is_served) return;
         const ks = String(itemObj.kitchen_status || '').toLowerCase();
-        if (ks && ks !== 'ready' && ks !== 'prepared') {
+        if (ks && ks !== 'ready' && ks !== 'prepared' && ordSt !== 'ready') {
           return; // Item was rolled back in kitchen to preparing or placed!
         }
       }
@@ -1539,10 +1539,15 @@ export default function WaiterView({
               });
               const totalItems = allDishes.length;
               const deliveredItems = allDishes.filter(it => it.is_served).length;
-              const readyDishes = allDishes.filter(it => !it.is_served && ((it.kitchen_status || '').toLowerCase() === 'ready' || (it.kitchen_status || '').toLowerCase() === 'prepared'));
-              const cookingDishes = allDishes.filter(it => !it.is_served && ((it.kitchen_status || '').toLowerCase() !== 'ready' && ((it.kitchen_status || '').toLowerCase() !== 'prepared')));
+              const isTableOrderReady = activeTableOrders.some(o => (o.status || '').toLowerCase() === 'ready');
+              const readyDishes = allDishes.filter(it => !it.is_served && (
+                (it.kitchen_status || '').toLowerCase() === 'ready' || 
+                (it.kitchen_status || '').toLowerCase() === 'prepared' ||
+                isTableOrderReady
+              ));
+              const cookingDishes = allDishes.filter(it => !it.is_served && !readyDishes.includes(it));
               const hasReadyFood = isOccupied && (
-                activeTableOrders.some(o => (o.status || '').toLowerCase() === 'ready') || 
+                isTableOrderReady || 
                 tableReadyDishes.length > 0 || 
                 readyDishes.length > 0
               );
@@ -1918,28 +1923,27 @@ export default function WaiterView({
                             <span className="truncate">See Bill: ₹{totalBillAmount}</span>
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={() => setTableDishesModal(table)}
-                            className={`py-2 px-2 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer min-h-[40px] ${
-                              readyDishes.length > 0 || tableReadyDishes.length > 0
-                                ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm ring-2 ring-emerald-400/60 animate-pulse font-black'
-                                : 'bg-blue-50 hover:bg-blue-100 text-blue-950 border border-blue-200'
-                            }`}
-                            title={readyDishes.length > 0 ? "Deliver ready dishes to table" : "View dish delivery checklist"}
-                          >
-                            {readyDishes.length > 0 || tableReadyDishes.length > 0 ? (
-                              <>
-                                <CheckCheck className="w-4 h-4 text-white stroke-[3] shrink-0" />
-                                <span className="truncate">🍽️ Deliver ({Math.max(readyDishes.length, tableReadyDishes.length)} Ready)</span>
-                              </>
-                            ) : (
-                              <>
-                                <Utensils className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                                <span className="truncate">Dishes ({deliveredItems}/{totalItems})</span>
-                              </>
-                            )}
-                          </button>
+                          {hasReadyFood || readyDishes.length > 0 || tableReadyDishes.length > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDeliverAllTableReady(table.number)}
+                              className="py-2 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white shadow-sm ring-2 ring-emerald-400/60 animate-pulse font-black text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer min-h-[40px]"
+                              title="Deliver all ready food directly to table"
+                            >
+                              <CheckCheck className="w-4 h-4 text-white stroke-[3] shrink-0" />
+                              <span className="truncate">🍽️ Deliver ({Math.max(readyDishes.length, tableReadyDishes.length, 1)} Ready)</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setTableDishesModal(table)}
+                              className="py-2 px-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-950 border border-blue-200 font-bold text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer min-h-[40px]"
+                              title="View dish delivery checklist"
+                            >
+                              <Utensils className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                              <span className="truncate">Dishes ({deliveredItems}/{totalItems})</span>
+                            </button>
+                          )}
                         </div>
 
                         {/* Table Actions Row: Shift Table & Vacate Table */}

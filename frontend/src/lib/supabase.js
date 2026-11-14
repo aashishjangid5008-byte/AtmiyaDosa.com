@@ -348,15 +348,23 @@ export const dispatchOrderToSupabase = async ({
 
     // Merge/Update continuous bill order ticket
     if (existingDbOrder) {
+      let mergedSpecialNotes = special_note || '';
+      if (existingDbOrder.special_notes && existingDbOrder.special_notes.includes('[KDS_ITEM_STATES:') && !mergedSpecialNotes.includes('[KDS_ITEM_STATES:')) {
+        const kdsStatesMatch = existingDbOrder.special_notes.match(/\[KDS_ITEM_STATES:\{.*?\}\]/);
+        if (kdsStatesMatch) {
+          mergedSpecialNotes = `${mergedSpecialNotes ? mergedSpecialNotes + ' ' : ''}${kdsStatesMatch[0]}`.trim();
+        }
+      }
+
       const { data: orderUpdateData, error: orderUpdateErr } = await supabase
         .from('orders')
         .update({
           status: 'PLACED',
-          subtotal: parseFloat(subtotal || 0),
-          tax_amount: parseFloat(tax || 0),
-          discount_amount: parseFloat(discount || 0),
-          total_amount: parseFloat(total || 0),
-          special_notes: special_note || ''
+          subtotal: Number(parseFloat(subtotal || 0).toFixed(2)),
+          tax_amount: Number(parseFloat(tax || 0).toFixed(2)),
+          discount_amount: Number(parseFloat(discount || 0).toFixed(2)),
+          total_amount: Number(parseFloat(total || 0).toFixed(2)),
+          special_notes: mergedSpecialNotes
         })
         .eq('id', existingDbOrder.id)
         .select()
@@ -378,10 +386,10 @@ export const dispatchOrderToSupabase = async ({
           customer_name: guestName,
           customer_phone: cleanPhone,
           status: 'PLACED',
-          subtotal: parseFloat(subtotal || 0),
-          tax_amount: parseFloat(tax || 0),
-          discount_amount: parseFloat(discount || 0),
-          total_amount: parseFloat(total || 0),
+          subtotal: Number(parseFloat(subtotal || 0).toFixed(2)),
+          tax_amount: Number(parseFloat(tax || 0).toFixed(2)),
+          discount_amount: Number(parseFloat(discount || 0).toFixed(2)),
+          total_amount: Number(parseFloat(total || 0).toFixed(2)),
           payment_method: paymentMethod,
           payment_status: paymentStatus,
           special_notes: special_note || '',
@@ -413,8 +421,8 @@ export const dispatchOrderToSupabase = async ({
 
       const orderItemRows = items.map((item) => {
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id);
-        const qty = parseInt(item.qty || item.quantity, 10) || 1;
-        const unitPrice = parseFloat(item.price || item.finalPrice || item.unit_price) || 0;
+        const qty = Math.max(1, parseInt(item.qty || item.quantity, 10) || 1);
+        const unitPrice = Number(item.price || item.finalPrice || item.unit_price) || 0;
         const rawStatus = String(item.kitchen_status || item.status || 'PLACED').toUpperCase();
         // Database check constraint allows only 'PLACED', 'PREPARING', 'READY' in order_items
         const safeItemStatus = (rawStatus === 'PREPARING' || rawStatus === 'COOKING') 
@@ -427,7 +435,7 @@ export const dispatchOrderToSupabase = async ({
           item_name: item.name || item.item_name || 'Dish Item',
           quantity: qty,
           unit_price: unitPrice,
-          total_price: parseFloat((unitPrice * qty).toFixed(2)),
+          total_price: Number((unitPrice * qty).toFixed(2)),
           cooking_note: item.cooking_note || item.note || item.customizations || null,
           status: safeItemStatus
         };

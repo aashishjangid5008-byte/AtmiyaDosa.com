@@ -34,29 +34,29 @@ const OWNER_PIN = '2026';
 const resolveTicketItems = (order) => {
   if (!order) return [];
 
+  let base = [];
+
   // 1. Direct items array
   if (Array.isArray(order.items) && order.items.length > 0) {
-    return order.items;
-  }
-
-  // 2. Fallback to order_items from Supabase relation
-  if (Array.isArray(order.order_items) && order.order_items.length > 0) {
-    return order.order_items.map((oi, idx) => ({
+    base = [...order.items];
+  } else if (Array.isArray(order.order_items) && order.order_items.length > 0) {
+    // 2. Fallback to order_items from Supabase relation
+    base = order.order_items.map((oi, idx) => ({
       id: oi.id || `oi_${idx}`,
       name: oi.item_name || oi.name || 'Dish Item',
       qty: oi.quantity || oi.qty || 1,
+      quantity: oi.quantity || oi.qty || 1,
       price: oi.unit_price || oi.price || 0,
-      kitchen_status: String(oi.status || '').toLowerCase() === 'ready' ? 'ready' : 'placed',
+      kitchen_status: String(oi.status || '').toLowerCase() === 'ready' ? 'ready' : (String(oi.status || '').toLowerCase() === 'served' ? 'served' : 'placed'),
       is_served: String(oi.status || '').toLowerCase() === 'served',
       cooking_note: oi.cooking_note || null,
-      note: oi.cooking_note || null
+      note: oi.cooking_note || null,
+      round: 1
     }));
-  }
-
-  // 3. Fallback: Parse structured items_summary string
-  if (order.items_summary) {
+  } else if (order.items_summary) {
+    // 3. Fallback: Parse structured items_summary string
     const parts = String(order.items_summary).split(',').map(s => s.trim()).filter(Boolean);
-    const parsed = parts.map((part, pIdx) => {
+    base = parts.map((part, pIdx) => {
       const m = part.match(/^(\d+)x?\s*(.+)$/i);
       const qty = m ? parseInt(m[1], 10) : 1;
       const name = m ? m[2].trim() : part;
@@ -64,34 +64,61 @@ const resolveTicketItems = (order) => {
         id: `summary_dish_${order.id}_${pIdx}`,
         name: name,
         qty: qty,
+        quantity: qty,
         price: 0,
         kitchen_status: (order.status || '').toLowerCase() === 'ready' ? 'ready' : 'placed',
         is_served: (order.status || '').toLowerCase() === 'served',
-        cooking_note: null
+        cooking_note: null,
+        round: 1
       };
     });
-    if (parsed.length > 0) return parsed;
   }
 
-  // 4. Fallback: Parse from special_note if add-on (e.g. Mineral Water) was recorded
+  // 4. Ensure newly added items are never dropped if they exist
+  if (Array.isArray(order.newly_added_items) && order.newly_added_items.length > 0) {
+    order.newly_added_items.forEach(newItem => {
+      const alreadyInBase = base.some(b => 
+        (b.id && newItem.id && b.id === newItem.id) ||
+        (b.name && newItem.name && b.name.toLowerCase().trim() === newItem.name.toLowerCase().trim() && (b.round === (newItem.round || order.round || 2)))
+      );
+      if (!alreadyInBase) {
+        base.push({
+          ...newItem,
+          qty: newItem.qty || newItem.quantity || 1,
+          quantity: newItem.qty || newItem.quantity || 1,
+          round: newItem.round || order.round || 2,
+          is_addon: true,
+          kitchen_status: newItem.kitchen_status || 'placed',
+          is_served: Boolean(newItem.is_served)
+        });
+      }
+    });
+  }
+
+  // 5. Fallback: Parse from special_note if add-on (e.g. Mineral Water) was recorded
   if (order.special_note) {
     const waterMatch = order.special_note.match(/(?:\+|💧)?\s*(\d+)x?\s*Mineral\s*Water/i);
     if (waterMatch) {
-      const waterQty = parseInt(waterMatch[1], 10) || 1;
-      return [{
-        id: `addon_water_${order.id}`,
-        name: 'Packaged Mineral Water (1 Litre Bottle)',
-        qty: waterQty,
-        price: 20,
-        kitchen_status: (order.status || '').toLowerCase() === 'ready' ? 'ready' : 'placed',
-        is_addon: true,
-        is_served: (order.status || '').toLowerCase() === 'served',
-        cooking_note: 'Chilled bottle'
-      }];
+      const alreadyHasWater = base.some(it => (it.name || '').toLowerCase().includes('water'));
+      if (!alreadyHasWater) {
+        const waterQty = parseInt(waterMatch[1], 10) || 1;
+        base.push({
+          id: `addon_water_${order.id}`,
+          name: 'Packaged Mineral Water (1 Litre Bottle)',
+          qty: waterQty,
+          quantity: waterQty,
+          price: 20,
+          kitchen_status: (order.status || '').toLowerCase() === 'ready' ? 'ready' : 'placed',
+          is_addon: true,
+          round: order.round || 2,
+          is_served: (order.status || '').toLowerCase() === 'served',
+          cooking_note: 'Chilled bottle'
+        });
+      }
     }
   }
 
-  return [];
+  return base;
 };
 
 export default function KitchenPanelView({ 
@@ -1291,151 +1318,229 @@ export default function KitchenPanelView({
         )}
 
         {/* Dish Items Checklist (Never Blank, Full Bilingual English + Gujarati Display) */}
-        <div className="space-y-2 py-1">
+        <div className="space-y-3 py-1">
           {displayItems.length === 0 ? (
             <div className="p-3 rounded-xl bg-slate-100 text-center text-xs text-slate-500 font-medium">
               No dishes recorded for this ticket.
             </div>
           ) : (
-            displayItems.map((item, idx) => {
-              const isItemServed = Boolean(item.is_served || (isServed && allItemsServed));
-              const isItemReady = Boolean(
-                !isItemServed && (
-                  (item.kitchen_status || '').toLowerCase() === 'ready' || 
-                  (item.kitchen_status || '').toLowerCase() === 'prepared'
-                )
-              );
-              const isItemAddon = Boolean(
-                item.is_addon || 
-                (order.round > 1 && (item.round === order.round || item.round > 1 || !item.is_served)) || 
-                (order.is_addon && !item.is_served)
-              );
-              const dishPhoto = item.image_url || item.imageUrl || item.image || item.photo || (menuItems.find(m => m.id === item.id || m.name === item.name)?.image_url);
-              const gujaratiTitle = getDishDisplayName({ name: item.name }, 'gu');
-              const cuisineKey = getDishCuisine({ name: item.name, category: item.category });
-              const cuisineInfo = CUISINE_CONFIG[cuisineKey] || { label: 'Kitchen Station', gujaratiLabel: 'રસોઈ', icon: '🍳' };
+            <>
+              {(() => {
+                const renderDishRow = (item, originalIdx) => {
+                  const isItemServed = Boolean(item.is_served || (isServed && allItemsServed));
+                  const isItemReady = Boolean(
+                    !isItemServed && (
+                      (item.kitchen_status || '').toLowerCase() === 'ready' || 
+                      (item.kitchen_status || '').toLowerCase() === 'prepared'
+                    )
+                  );
+                  const isItemAddon = Boolean(
+                    item.is_addon || 
+                    (item.round && item.round > 1) ||
+                    (order.round > 1 && (item.round === order.round || item.round > 1 || !item.is_served)) || 
+                    (order.is_addon && !item.is_served)
+                  );
+                  const dishPhoto = item.image_url || item.imageUrl || item.image || item.photo || (menuItems.find(m => m.id === item.id || m.name === item.name)?.image_url);
+                  const gujaratiTitle = getDishDisplayName({ name: item.name }, 'gu');
+                  const cuisineKey = getDishCuisine({ name: item.name, category: item.category });
+                  const cuisineInfo = CUISINE_CONFIG[cuisineKey] || { label: 'Kitchen Station', gujaratiLabel: 'રસોઈ', icon: '🍳' };
 
-              return (
-                <div
-                  key={idx}
-                  onClick={() => !isItemServed && toggleItemCheck(safeOrderId, idx)}
-                  className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 active:scale-[0.99] ${
-                    isItemServed 
-                      ? 'bg-slate-50 border-slate-200 text-slate-400 opacity-75' 
-                      : isItemReady
-                        ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950 shadow-xs'
-                        : isItemAddon
-                          ? 'bg-purple-50/60 hover:bg-purple-50/90 border-purple-200 text-slate-900 ring-1 ring-purple-300/40'
-                          : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-900 shadow-2xs'
-                  }`}
-                >
-                  <div className="flex items-center space-x-3 min-w-0 flex-1">
-                    {/* Left Quantity / Right Tick Badge */}
-                    {isItemServed ? (
-                      <div className="flex items-center space-x-1.5 shrink-0">
-                        <span className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-xs" title="Delivered to table">
-                          <Check className="w-4 h-4 stroke-[3]" />
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 font-mono text-xs font-black">
-                          {item.qty || item.quantity || 1}×
-                        </span>
-                      </div>
-                    ) : (
-                      <span className={`w-7 h-7 rounded-lg font-mono text-xs font-black flex items-center justify-center shrink-0 shadow-xs ${
-                        isItemReady
-                          ? 'bg-emerald-600 text-white'
-                          : isItemAddon 
-                            ? 'bg-purple-700 text-white' 
-                            : 'bg-slate-900 text-white'
-                      }`}>
-                        {item.qty || item.quantity || 1}×
-                      </span>
-                    )}
-
-                    {dishPhoto && (
-                      <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 shrink-0 bg-slate-100 shadow-2xs">
-                        <img src={dishPhoto} alt={item.name} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                      </div>
-                    )}
-                    
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className={`text-xs font-bold block truncate ${
-                          isItemServed ? 'line-through text-slate-400' : isItemReady ? 'font-black text-emerald-950' : 'text-slate-900'
-                        }`}>
-                          {item.name}
-                        </span>
-                        {gujaratiTitle && gujaratiTitle !== item.name && (
-                          <span className={`text-[11px] font-bold ${isItemServed ? 'text-slate-400 line-through' : 'text-slate-600'}`}>
-                            ({gujaratiTitle})
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Station and metadata badges */}
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                          <span>{cuisineInfo.icon}</span>
-                          <span>{cuisineInfo.gujaratiLabel || cuisineInfo.label}</span>
-                        </span>
-
-                        {isItemAddon && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-purple-100 text-purple-900 border border-purple-200">
-                            ⚡ Fresh Add-on
+                  return (
+                    <div
+                      key={originalIdx}
+                      onClick={() => !isItemServed && toggleItemCheck(safeOrderId, originalIdx)}
+                      className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 active:scale-[0.99] ${
+                        isItemServed 
+                          ? 'bg-slate-50 border-slate-200 text-slate-400 opacity-75' 
+                          : isItemReady
+                            ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950 shadow-xs'
+                            : isItemAddon
+                              ? 'bg-purple-50/90 hover:bg-purple-100/90 border-purple-300 text-purple-950 ring-2 ring-purple-300/60 shadow-xs'
+                              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-900 shadow-2xs'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3 min-w-0 flex-1">
+                        {/* Left Quantity / Right Tick Badge */}
+                        {isItemServed ? (
+                          <div className="flex items-center space-x-1.5 shrink-0">
+                            <span className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-xs" title="Delivered to table">
+                              <Check className="w-4 h-4 stroke-[3]" />
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 font-mono text-xs font-black">
+                              {item.qty || item.quantity || 1}×
+                            </span>
+                          </div>
+                        ) : (
+                          <span className={`w-7 h-7 rounded-lg font-mono text-xs font-black flex items-center justify-center shrink-0 shadow-xs ${
+                            isItemReady
+                              ? 'bg-emerald-600 text-white'
+                              : isItemAddon 
+                                ? 'bg-purple-700 text-white ring-2 ring-purple-400/50' 
+                                : 'bg-slate-900 text-white'
+                          }`}>
+                            {item.qty || item.quantity || 1}×
                           </span>
                         )}
 
-                        {isItemReady && !isItemServed && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
-                            ✔ Plated & Ready · તૈયાર છે
-                          </span>
+                        {dishPhoto && (
+                          <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 shrink-0 bg-slate-100 shadow-2xs">
+                            <img src={dishPhoto} alt={item.name} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                          </div>
                         )}
+                        
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`text-xs font-bold block truncate ${
+                              isItemServed ? 'line-through text-slate-400' : isItemReady ? 'font-black text-emerald-950' : (isItemAddon ? 'font-black text-purple-950' : 'text-slate-900')
+                            }`}>
+                              {item.name}
+                            </span>
+                            {gujaratiTitle && gujaratiTitle !== item.name && (
+                              <span className={`text-[11px] font-bold ${isItemServed ? 'text-slate-400 line-through' : (isItemAddon ? 'text-purple-700' : 'text-slate-600')}`}>
+                                ({gujaratiTitle})
+                              </span>
+                            )}
+                          </div>
 
-                        {isItemServed && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
-                            <Check className="w-2.5 h-2.5 stroke-[3]" />
-                            <span>Served at Table · ગ્રાહકને આપ્યું</span>
-                          </span>
-                        )}
+                          {/* Station and metadata badges */}
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                              <span>{cuisineInfo.icon}</span>
+                              <span>{cuisineInfo.gujaratiLabel || cuisineInfo.label}</span>
+                            </span>
 
-                        {!isItemReady && !isItemServed && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-amber-50 text-amber-800 border border-amber-200">
-                            ⏳ In Prep / રસોઈ ચાલુ
-                          </span>
-                        )}
-                      </div>
+                            {isItemAddon && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-purple-200 text-purple-950 border border-purple-400 shadow-2xs">
+                                ⚡ Round {item.round || order.round || 2} Add-on
+                              </span>
+                            )}
 
-                      {(item.cooking_note || item.note || item.customNote || item.customizations) && (
-                        <div className="mt-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-950 border border-amber-300 font-bold text-[11px] flex items-center space-x-1 max-w-full">
-                          <span className="text-amber-800 font-black shrink-0">📝 Note:</span>
-                          <span className="break-words font-extrabold">{item.cooking_note || item.note || item.customNote || item.customizations}</span>
+                            {isItemReady && !isItemServed && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                ✔ Plated & Ready · તૈયાર છે
+                              </span>
+                            )}
+
+                            {isItemServed && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                <span>Served at Table · ગ્રાહકને આપ્યું</span>
+                              </span>
+                            )}
+
+                            {!isItemReady && !isItemServed && (
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${
+                                isItemAddon ? 'bg-purple-100 text-purple-900 border-purple-300' : 'bg-amber-50 text-amber-800 border-amber-200'
+                              }`}>
+                                ⏳ In Prep / રસોઈ ચાલુ
+                              </span>
+                            )}
+                          </div>
+
+                          {(item.cooking_note || item.note || item.customNote || item.customizations) && (
+                            <div className="mt-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-950 border border-amber-300 font-bold text-[11px] flex items-center space-x-1 max-w-full">
+                              <span className="text-amber-800 font-black shrink-0">📝 Note:</span>
+                              <span className="break-words font-extrabold">{item.cooking_note || item.note || item.customNote || item.customizations}</span>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </div>
+                      </div>
 
-                  {/* Right Status Action Button */}
-                  <div className="shrink-0">
-                    {isItemServed ? (
-                      <div className="px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center space-x-1 text-[11px] font-bold shadow-2xs">
-                        <Check className="w-3.5 h-3.5 stroke-[3] text-emerald-600" />
-                        <span>Delivered</span>
+                      {/* Right Status Action Button */}
+                      <div className="shrink-0">
+                        {isItemServed ? (
+                          <div className="px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center space-x-1 text-[11px] font-bold shadow-2xs">
+                            <Check className="w-3.5 h-3.5 stroke-[3] text-emerald-600" />
+                            <span>Delivered</span>
+                          </div>
+                        ) : isItemReady ? (
+                          <div className="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white flex items-center space-x-1 text-[11px] font-black shadow-xs">
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            <span>Ready</span>
+                          </div>
+                        ) : isItemAddon ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleItemCheck(safeOrderId, originalIdx);
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 active:bg-purple-900 text-white text-[11px] font-black shadow-xs transition flex items-center space-x-1 cursor-pointer"
+                            title="Mark add-on dish ready"
+                          >
+                            <Check className="w-3 h-3 stroke-[3]" />
+                            <span>Tap Ready</span>
+                          </button>
+                        ) : (
+                          <div className="px-2.5 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-[11px] font-bold hover:bg-amber-100 flex items-center space-x-1">
+                            <Clock className="w-3 h-3 text-amber-700" />
+                            <span>Tap Ready</span>
+                          </div>
+                        )}
                       </div>
-                    ) : isItemReady ? (
-                      <div className="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white flex items-center space-x-1 text-[11px] font-black shadow-xs">
-                        <Check className="w-3.5 h-3.5 stroke-[3]" />
-                        <span>Ready</span>
+                    </div>
+                  );
+                };
+
+                const mainItemsWithIdx = [];
+                const addonItemsWithIdx = [];
+
+                displayItems.forEach((item, idx) => {
+                  const isItemAddon = Boolean(
+                    item.is_addon || 
+                    (item.round && item.round > 1) ||
+                    (order.round > 1 && (item.round === order.round || item.round > 1 || !item.is_served)) || 
+                    (order.is_addon && !item.is_served)
+                  );
+                  if (isItemAddon) {
+                    addonItemsWithIdx.push({ item, idx });
+                  } else {
+                    mainItemsWithIdx.push({ item, idx });
+                  }
+                });
+
+                if (addonItemsWithIdx.length === 0) {
+                  return displayItems.map((item, idx) => renderDishRow(item, idx));
+                }
+
+                return (
+                  <div className="space-y-3">
+                    {/* Main Order Items */}
+                    {mainItemsWithIdx.length > 0 && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center space-x-1.5 text-[11px] font-black text-slate-600 uppercase tracking-wider px-1">
+                          <span>📋 Main Order (મુખ્ય ઓર્ડર)</span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {mainItemsWithIdx.map(({ item, idx }) => renderDishRow(item, idx))}
+                        </div>
                       </div>
-                    ) : (
-                      <div className="px-2.5 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-[11px] font-bold hover:bg-amber-100 flex items-center space-x-1">
-                        <Clock className="w-3 h-3 text-amber-700" />
-                        <span>Tap Ready</span>
+                    )}
+
+                    {/* Distinct Add-On Order Block in Same Ticket Card */}
+                    {addonItemsWithIdx.length > 0 && (
+                      <div className="p-3 rounded-2xl bg-gradient-to-br from-purple-50 via-purple-100/70 to-indigo-50 border-2 border-purple-400 shadow-xs space-y-2">
+                        <div className="flex items-center justify-between border-b border-purple-200 pb-1.5">
+                          <div className="flex items-center space-x-1.5">
+                            <span className="text-sm">⚡</span>
+                            <span className="font-heading font-black text-xs text-purple-950 uppercase tracking-wide">
+                              Round {order.round || 2} Add-On (નવો ઓર્ડર / તાજો ઉમેરો)
+                            </span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full bg-purple-700 text-white font-black text-[9px] uppercase tracking-wider shadow-2xs">
+                            {addonItemsWithIdx.length} Fresh Add-on {addonItemsWithIdx.length === 1 ? 'Dish' : 'Dishes'}
+                          </span>
+                        </div>
+
+                        <div className="space-y-1.5 pt-0.5">
+                          {addonItemsWithIdx.map(({ item, idx }) => renderDishRow(item, idx))}
+                        </div>
                       </div>
                     )}
                   </div>
-                </div>
-              );
-            })
+                );
+              })()}
+            </>
           )}
         </div>
 
