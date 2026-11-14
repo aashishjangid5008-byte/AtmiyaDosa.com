@@ -3086,7 +3086,11 @@ export default function WaiterView({
         const activeOrder = tOrders[0] || null;
         const allItems = [];
         tOrders.forEach(o => {
-          (o.items || []).forEach(it => allItems.push(it));
+          (o.items || []).forEach((it, idx) => allItems.push({
+            ...it,
+            orderId: o.id || o.order_number,
+            itemIndex: idx
+          }));
         });
 
         const subtotal = tOrders.reduce((acc, o) => acc + Number(o.subtotal || o.total || 0), 0);
@@ -3130,7 +3134,7 @@ export default function WaiterView({
                 </button>
               </div>
 
-              {/* Bill Details & Itemized Breakdown */}
+              {/* Bill Details & Itemized Breakdown with Item Removal & Qty Controls */}
               <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
                 {allItems.length === 0 ? (
                   <div className="py-8 text-center text-slate-400 text-xs">
@@ -3149,11 +3153,20 @@ export default function WaiterView({
                         </div>
                         <div className="divide-y divide-slate-100">
                           {round1Items.map((item, idx) => (
-                            <div key={`r1_${idx}`} className="py-2 flex items-center justify-between gap-2 text-xs">
+                            <div key={`r1_${idx}`} className="py-2.5 flex items-center justify-between gap-2 text-xs">
                               <div className="min-w-0 flex-1">
-                                <div className="flex items-center space-x-1.5">
+                                <div className="flex items-center space-x-1.5 flex-wrap">
                                   <span className="font-bold text-slate-900">{item.qty || item.quantity || 1}×</span>
-                                  <span className="font-medium text-slate-800 truncate">{item.name}</span>
+                                  <span className={`font-medium truncate ${item.is_served ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                                    {item.name}
+                                  </span>
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                                    item.is_served 
+                                      ? 'bg-emerald-100 text-emerald-800' 
+                                      : ((item.kitchen_status || '').toLowerCase() === 'ready' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800')
+                                  }`}>
+                                    {item.is_served ? '✓ Served' : ((item.kitchen_status || '').toLowerCase() === 'ready' ? '🍽️ Ready' : '🍳 In Kitchen')}
+                                  </span>
                                 </div>
                                 {item.customizations && (
                                   <span className="text-[10px] text-amber-800 font-medium block truncate">
@@ -3161,13 +3174,48 @@ export default function WaiterView({
                                   </span>
                                 )}
                               </div>
-                              <div className="text-right shrink-0">
+
+                              <div className="flex items-center space-x-2 shrink-0">
                                 <span className="font-mono font-bold text-slate-900">
                                   ₹{Number(item.price || 0) * Number(item.qty || item.quantity || 1)}
                                 </span>
-                                <span className={`text-[10px] block font-medium ${item.is_served ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                  {item.is_served ? '✓ Served' : '🍳 In Kitchen'}
-                                </span>
+
+                                {/* Waiter Item Controls: Qty -/+ and Remove Trash button */}
+                                <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAdjustItemQty(item.orderId, item.itemIndex, -1)}
+                                    className="w-5 h-5 rounded bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs cursor-pointer shadow-2xs"
+                                    title="Decrease quantity"
+                                  >
+                                    -
+                                  </button>
+                                  <span className="w-4 text-center font-mono font-bold text-[11px] text-slate-900">
+                                    {item.qty || item.quantity || 1}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAdjustItemQty(item.orderId, item.itemIndex, 1)}
+                                    className="w-5 h-5 rounded bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs cursor-pointer shadow-2xs"
+                                    title="Increase quantity"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (window.confirm(`Remove "${item.name}" from Table ${viewingBillTable.number} bill?`)) {
+                                      handleDeleteTicketItem(item.orderId, item.itemIndex, item.name);
+                                      if (audioEnabled) playSound('success');
+                                    }
+                                  }}
+                                  className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-600 border border-rose-200 flex items-center justify-center cursor-pointer transition shadow-2xs"
+                                  title={`Remove ${item.name} from bill`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
                               </div>
                             </div>
                           ))}
@@ -3189,16 +3237,25 @@ export default function WaiterView({
                         </div>
                         <div className="divide-y divide-amber-100">
                           {addOnItems.map((item, idx) => (
-                            <div key={`addon_${idx}`} className="py-2 flex items-center justify-between gap-2 text-xs">
+                            <div key={`addon_${idx}`} className="py-2.5 flex items-center justify-between gap-2 text-xs">
                               <div className="min-w-0 flex-1">
-                                <div className="flex items-center space-x-1.5">
+                                <div className="flex items-center space-x-1.5 flex-wrap">
                                   <span className="font-bold text-amber-950">{item.qty || item.quantity || 1}×</span>
-                                  <span className="font-semibold text-amber-950 truncate">{item.name}</span>
+                                  <span className={`font-semibold truncate ${item.is_served ? 'line-through text-amber-700/60' : 'text-amber-950'}`}>
+                                    {item.name}
+                                  </span>
                                   {item.name?.toLowerCase().includes('water') && (
                                     <span className="px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 text-[9px] font-bold">
                                       💧 Water
                                     </span>
                                   )}
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                                    item.is_served 
+                                      ? 'bg-emerald-100 text-emerald-800' 
+                                      : ((item.kitchen_status || '').toLowerCase() === 'ready' ? 'bg-blue-100 text-blue-800' : 'bg-amber-200 text-amber-900')
+                                  }`}>
+                                    {item.is_served ? '✓ Served' : ((item.kitchen_status || '').toLowerCase() === 'ready' ? '🍽️ Ready' : '🍳 Preparing')}
+                                  </span>
                                 </div>
                                 {item.customizations && (
                                   <span className="text-[10px] text-amber-800 font-medium block truncate">
@@ -3206,13 +3263,48 @@ export default function WaiterView({
                                   </span>
                                 )}
                               </div>
-                              <div className="text-right shrink-0">
+
+                              <div className="flex items-center space-x-2 shrink-0">
                                 <span className="font-mono font-bold text-slate-900">
                                   ₹{Number(item.price || 0) * Number(item.qty || item.quantity || 1)}
                                 </span>
-                                <span className={`text-[10px] block font-medium ${item.is_served ? 'text-emerald-700' : 'text-amber-700 font-bold'}`}>
-                                  {item.is_served ? '✓ Served' : '🍳 Preparing'}
-                                </span>
+
+                                {/* Waiter Item Controls: Qty -/+ and Remove Trash button */}
+                                <div className="flex items-center space-x-1 bg-white/90 p-0.5 rounded-lg border border-amber-300">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAdjustItemQty(item.orderId, item.itemIndex, -1)}
+                                    className="w-5 h-5 rounded bg-amber-50 hover:bg-amber-100 text-amber-900 flex items-center justify-center font-bold text-xs cursor-pointer shadow-2xs"
+                                    title="Decrease quantity"
+                                  >
+                                    -
+                                  </button>
+                                  <span className="w-4 text-center font-mono font-bold text-[11px] text-amber-950">
+                                    {item.qty || item.quantity || 1}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAdjustItemQty(item.orderId, item.itemIndex, 1)}
+                                    className="w-5 h-5 rounded bg-amber-50 hover:bg-amber-100 text-amber-900 flex items-center justify-center font-bold text-xs cursor-pointer shadow-2xs"
+                                    title="Increase quantity"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (window.confirm(`Remove "${item.name}" from Table ${viewingBillTable.number} bill?`)) {
+                                      handleDeleteTicketItem(item.orderId, item.itemIndex, item.name);
+                                      if (audioEnabled) playSound('success');
+                                    }
+                                  }}
+                                  className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-600 border border-rose-200 flex items-center justify-center cursor-pointer transition shadow-2xs"
+                                  title={`Remove ${item.name} from bill`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
                               </div>
                             </div>
                           ))}
@@ -3247,11 +3339,11 @@ export default function WaiterView({
                 </div>
               </div>
 
-              {/* Notice: Bill Collection at Cashier Counter Only */}
+              {/* Notice: Bill Collection & Modification */}
               <div className="px-4 py-2.5 bg-amber-50 border-t border-amber-200 text-center">
                 <span className="text-[11px] font-bold text-amber-900 flex items-center justify-center gap-1.5">
                   <span>🏛️</span>
-                  <span>Payment is collected at Cashier Counter. Floor staff can only view and add items.</span>
+                  <span>Payment at Cashier Counter • Waiters can modify items, adjust quantities, or remove dishes</span>
                 </span>
               </div>
 
