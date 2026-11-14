@@ -642,9 +642,18 @@ export const updateOrderItemStatusInSupabase = async (orderIdOrNumber, itemIndex
         .eq('order_id', orderUuid)
         .order('id', { ascending: true });
 
-      const totalItemsCount = (dbItems && dbItems.length > 0) 
-        ? dbItems.length 
-        : (existingOrderObj?.items?.length || existingOrderObj?.order_items?.length || Math.max(Object.keys(itemStates).length, 1));
+      let fallbackCount = 1;
+      if (existingOrderObj?.items && Array.isArray(existingOrderObj.items) && existingOrderObj.items.length > 0) {
+        fallbackCount = existingOrderObj.items.length;
+      } else if (existingOrderObj?.order_items && Array.isArray(existingOrderObj.order_items) && existingOrderObj.order_items.length > 0) {
+        fallbackCount = existingOrderObj.order_items.length;
+      } else if (existingOrderObj?.items_summary) {
+        fallbackCount = Math.max(String(existingOrderObj.items_summary).split(',').length, 1);
+      } else {
+        fallbackCount = Math.max(Object.keys(itemStates).length, 1);
+      }
+
+      const totalItemsCount = (dbItems && dbItems.length > 0) ? dbItems.length : fallbackCount;
 
       // Calculate how many items are served vs ready across the whole ticket
       let servedCount = 0;

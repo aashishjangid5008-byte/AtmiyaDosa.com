@@ -209,9 +209,10 @@ export default function WaiterView({
     const st = String(order.status || '').toLowerCase().trim();
     if (st === 'completed' || st === 'cancelled' || st === 'settled') return acc;
     const isOrderReady = st === 'ready';
+    const hasExplicitItemStatuses = (order.items || []).some(it => it.kitchen_status);
 
     (order.items || []).forEach((item, itemIdx) => {
-      const isItemReady = item.kitchen_status === 'ready' || item.kitchen_status === 'prepared' || isOrderReady;
+      const isItemReady = (item.kitchen_status === 'ready' || item.kitchen_status === 'prepared') || (!hasExplicitItemStatuses && isOrderReady);
       if (isItemReady && !item.is_served) {
         acc.push({
           orderId: order.id,
@@ -261,8 +262,12 @@ export default function WaiterView({
       if (ordSt === 'completed' || ordSt === 'cancelled' || ordSt === 'settled' || (ordSt === 'served' && (ordPaySt === 'paid' || ordPaySt === 'void'))) {
         return;
       }
-      if (call.itemIndex !== undefined && matchingOrder.items?.[call.itemIndex]?.is_served) {
-        return;
+      if (call.itemIndex !== undefined && matchingOrder.items?.[call.itemIndex]) {
+        const itemObj = matchingOrder.items[call.itemIndex];
+        if (itemObj.is_served) return;
+        if (itemObj.kitchen_status && itemObj.kitchen_status !== 'ready' && itemObj.kitchen_status !== 'prepared') {
+          return;
+        }
       }
     }
 
@@ -1345,8 +1350,8 @@ export default function WaiterView({
               });
               const totalItems = allDishes.length;
               const deliveredItems = allDishes.filter(it => it.is_served).length;
-              const readyDishes = allDishes.filter(it => !it.is_served && ((it.kitchen_status || '').toLowerCase() === 'ready' || (it.kitchen_status || '').toLowerCase() === 'prepared' || (it.status || '').toLowerCase() === 'ready'));
-              const cookingDishes = allDishes.filter(it => !it.is_served && ((it.kitchen_status || '').toLowerCase() !== 'ready' && (it.kitchen_status || '').toLowerCase() !== 'prepared' && (it.status || '').toLowerCase() !== 'ready'));
+              const readyDishes = allDishes.filter(it => !it.is_served && ((it.kitchen_status || '').toLowerCase() === 'ready' || (it.kitchen_status || '').toLowerCase() === 'prepared'));
+              const cookingDishes = allDishes.filter(it => !it.is_served && ((it.kitchen_status || '').toLowerCase() !== 'ready' && (it.kitchen_status || '').toLowerCase() !== 'prepared'));
               const percent = totalItems > 0 ? Math.round((deliveredItems / totalItems) * 100) : 0;
               const totalBillAmount = activeTableOrders
                 .filter(o => (o.payment_status || '').toLowerCase() !== 'paid')
@@ -2440,8 +2445,8 @@ export default function WaiterView({
         const allDishes = [];
         tOrders.forEach(ord => {
           (ord.items || []).forEach((it, idx) => {
-            const isServed = Boolean(it.is_served);
-            const isReady = !isServed && (it.kitchen_status === 'ready' || it.kitchen_status === 'prepared' || ord.status === 'Ready');
+            const hasExplicitStatuses = (ord.items || []).some(i => i.kitchen_status);
+            const isReady = !isServed && (it.kitchen_status === 'ready' || it.kitchen_status === 'prepared' || (!hasExplicitStatuses && ord.status === 'Ready'));
             allDishes.push({
               ...it,
               orderId: ord.id,

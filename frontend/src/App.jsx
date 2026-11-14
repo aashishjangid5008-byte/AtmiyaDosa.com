@@ -119,6 +119,23 @@ const DEMO_ORDER_IDS = new Set([
   'ORD-T04-1001', '#ORD3908', '#ORD3451', '#ORD2842', 'ORD3908', 'ORD3451', 'ORD2842'
 ]);
 
+export const matchesOrderId = (o, targetId) => {
+  if (!o || !targetId) return false;
+  const cleanTarget = String(targetId).replace(/^#+/, '').trim();
+  if (!cleanTarget || cleanTarget === 'undefined' || cleanTarget === 'null') return false;
+
+  const oId = String(o.id || '').replace(/^#+/, '').trim();
+  const oNum = String(o.order_number || '').replace(/^#+/, '').trim();
+  const oDbId = String(o.supabase_order_id || '').trim();
+
+  if (o.id === targetId || o.order_number === targetId || o.supabase_order_id === targetId) return true;
+  if (oId && oId !== 'undefined' && oId !== 'null' && oId === cleanTarget) return true;
+  if (oNum && oNum !== 'undefined' && oNum !== 'null' && oNum === cleanTarget) return true;
+  if (oDbId && oDbId !== 'undefined' && oDbId !== 'null' && oDbId === String(targetId).trim()) return true;
+
+  return false;
+};
+
 const mapDbOrderToFrontend = (dbOrd) => {
   const isOnline = dbOrd.payment_method === 'UPI_COUNTER' || dbOrd.payment_method === 'ONLINE_RAZORPAY';
   const statusDisplayMap = {
@@ -244,9 +261,13 @@ const mapDbOrderToFrontend = (dbOrd) => {
   const isCompletedOrder = mappedStatus === 'Completed' || rawStatusUpper === 'COMPLETED' || rawStatusUpper === 'SETTLED';
   const orderSettledAt = dbOrd.settled_at || dbOrd.completed_at || (isCompletedOrder ? (dbOrd.served_at || dbOrd.placed_at || new Date().toISOString()) : null);
 
+  const rawNum = dbOrd.order_number || (dbOrd.id ? String(dbOrd.id).replace(/-/g, '').slice(-4).toUpperCase() : `ORD${Date.now().toString().slice(-4)}`);
+  const cleanOrderNum = String(rawNum).replace(/^#+/, '').trim();
+  const formattedOrderId = `#${cleanOrderNum}`;
+
   return {
-    id: dbOrd.order_number?.startsWith('#') ? dbOrd.order_number : `#${dbOrd.order_number}`,
-    order_number: dbOrd.order_number,
+    id: formattedOrderId,
+    order_number: cleanOrderNum,
     supabase_order_id: dbOrd.id,
     session_id: dbOrd.session_id,
     table_number: dbOrd.table_number,
@@ -1076,10 +1097,9 @@ export default function App() {
       setOrders(prev => {
         const merged = mappedDbOrders.map(mo => {
           const localMatch = (prev || []).find(po => 
-            po.id === mo.id || 
-            (po.supabase_order_id && mo.supabase_order_id === po.supabase_order_id) ||
-            (po.order_number && mo.order_number === po.order_number) ||
-            (po.id && String(po.id).replace('#', '') === String(mo.order_number || mo.id).replace('#', ''))
+            matchesOrderId(po, mo.id) || 
+            matchesOrderId(po, mo.order_number) || 
+            matchesOrderId(po, mo.supabase_order_id)
           );
           if (!localMatch) return mo;
 
@@ -1113,9 +1133,7 @@ export default function App() {
             preservedStatus = 'Served';
           } else if (allMergedReady) {
             preservedStatus = 'Ready';
-          } else if (localMatch.status === 'Ready' && mo.status === 'Placed') {
-            preservedStatus = 'Ready';
-          } else if (localMatch.status === 'Preparing' && mo.status === 'Placed') {
+          } else if (mergedItems.some(i => i.kitchen_status === 'ready' || i.is_served || i.kitchen_status === 'preparing') || localMatch.status === 'Preparing') {
             preservedStatus = 'Preparing';
           }
 
@@ -2065,21 +2083,15 @@ export default function App() {
 
   // State Mutation Handlers
   const handleUpdateOrderStatus = (orderId, newStatus, staffName = null, staffRole = null) => {
-    const isOrderMatch = (o) => (
-      o.id === orderId || 
-      o.order_number === orderId || 
-      String(o.id || '').replace(/^#+/, '') === String(orderId || '').replace(/^#+/, '') ||
-      (o.order_number && String(o.order_number).replace(/^#+/, '') === String(orderId || '').replace(/^#+/, '')) ||
-      (o.supabase_order_id && o.supabase_order_id === orderId)
-    );
-    const targetOrder = orders.find(isOrderMatch);
+    if (!orderId || orderId === 'undefined' || orderId === 'null') return;
+    const targetOrder = orders.find(o => matchesOrderId(o, orderId));
     const isNowServed = newStatus === 'Served' || newStatus === 'Completed';
     const isNowReady = newStatus === 'Ready';
     const deliveredAt = isNowServed ? Date.now() : targetOrder?.food_delivered_at;
     const actorName = staffName || authUser?.name || 'Staff';
     const actorRole = staffRole ? (staffRole === 'chef' ? 'Head Chef' : staffRole === 'waiter' ? 'Floor Waiter' : staffRole === 'cashier' ? 'Cashier' : 'Admin') : (authUser?.role || 'Admin');
 
-    const updated = orders.map(o => isOrderMatch(o) ? { 
+    const updated = orders.map(o => matchesOrderId(o, orderId) ? { 
       ...o, 
       status: newStatus,
       food_delivered_at: deliveredAt || o.food_delivered_at,
@@ -2244,13 +2256,8 @@ export default function App() {
 
   // Toggle individual dish item served/delivered state (Syncs between Kitchen KDS and Customer QR Menu)
   const handleToggleItemServed = (orderId, itemIndex, staffName = null, staffId = null) => {
-    const isOrderMatch = (o) => (
-      o.id === orderId || 
-      o.order_number === orderId || 
-      String(o.id || '').replace(/^#+/, '') === String(orderId || '').replace(/^#+/, '') ||
-      (o.supabase_order_id && o.supabase_order_id === orderId)
-    );
-    const targetOrder = orders.find(isOrderMatch);
+    if (!orderId || orderId === 'undefined' || orderId === 'null') return;
+    const targetOrder = orders.find(o => matchesOrderId(o, orderId));
     if (!targetOrder) return;
 
     const collectorName = staffName || authUser?.name || 'Floor Server';
@@ -2259,7 +2266,7 @@ export default function App() {
     let newlyDeliveredAt = null;
 
     const updated = orders.map(o => {
-      if (!isOrderMatch(o)) return o;
+      if (!matchesOrderId(o, orderId)) return o;
       const items = (o.items || []).map((it, idx) => {
         if (idx !== itemIndex) return it;
         const nextServed = !it.is_served;
@@ -2369,13 +2376,8 @@ export default function App() {
 
   // Toggle individual dish item ready/prepared state by Kitchen Chef
   const handleToggleItemReady = (orderId, itemIndex) => {
-    const isOrderMatch = (o) => (
-      o.id === orderId || 
-      o.order_number === orderId || 
-      String(o.id || '').replace(/^#+/, '') === String(orderId || '').replace(/^#+/, '') ||
-      (o.supabase_order_id && o.supabase_order_id === orderId)
-    );
-    const targetOrder = orders.find(isOrderMatch);
+    if (!orderId || orderId === 'undefined' || orderId === 'null') return;
+    const targetOrder = orders.find(o => matchesOrderId(o, orderId));
     if (!targetOrder) return;
     const targetItem = targetOrder.items?.[itemIndex];
     if (!targetItem) return;
@@ -2383,7 +2385,7 @@ export default function App() {
     const nextReadyState = targetItem.kitchen_status === 'ready' ? 'preparing' : 'ready';
 
     const updated = orders.map(o => {
-      if (!isOrderMatch(o)) return o;
+      if (!matchesOrderId(o, orderId)) return o;
       const items = (o.items || []).map((it, idx) => {
         if (idx !== itemIndex) return it;
         return {
