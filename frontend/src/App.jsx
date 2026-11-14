@@ -1104,7 +1104,9 @@ export default function App() {
           if (!localMatch) return mo;
 
           // Merge item ready/served states so locally updated dishes NEVER revert to 'placed'
-          const dbItems = (mo.items && mo.items.length > 0) ? mo.items : (localMatch.items || []);
+          // If items were recently modified locally (e.g. item deleted by waiter), protect against stale sync
+          const isRecentlyModified = localMatch.last_modified_at && (syncNow - new Date(localMatch.last_modified_at).getTime() < 15000);
+          const dbItems = (isRecentlyModified && Array.isArray(localMatch.items)) ? localMatch.items : ((mo.items && mo.items.length > 0) ? mo.items : (localMatch.items || []));
           const mergedItems = dbItems.map((dbItem, idx) => {
             const localItem = localMatch.items?.[idx] || (localMatch.items || []).find(it => it.name === dbItem.name && it.round === dbItem.round);
             const isLocalPreparing = Boolean(localItem && (localItem.kitchen_status === 'preparing' || localItem.status === 'PREPARING'));
@@ -2946,15 +2948,62 @@ export default function App() {
     setOrders(updated);
     setLocalStore('orders', updated);
 
-    // Sync to Supabase Cloud DB
+    // Sync to Supabase Cloud DB: Update orders AND re-sync order_items
     try {
       const ordUuid = targetOrder.supabase_order_id || targetOrder.id;
-      supabase.from('orders').update({
-        subtotal,
-        tax_amount: tax,
-        total_amount: total,
-        status: nextStatus.toUpperCase()
-      }).eq('id', ordUuid).then(() => {});
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ordUuid);
+      const cleanOrderNumber = String(targetOrder.order_number || targetOrder.id).replace('#', '');
+
+      (async () => {
+        try {
+          let resolvedOrderUuid = isUuid ? ordUuid : null;
+          if (!resolvedOrderUuid) {
+            const { data: ord } = await supabase.from('orders').select('id').eq('order_number', cleanOrderNumber).maybeSingle();
+            if (ord) resolvedOrderUuid = ord.id;
+          }
+
+          if (resolvedOrderUuid) {
+            // 1. Update orders table
+            await supabase.from('orders').update({
+              subtotal,
+              tax_amount: tax,
+              total_amount: total,
+              status: nextStatus.toUpperCase()
+            }).eq('id', resolvedOrderUuid);
+
+            // 2. Clear old order_items and insert updated items
+            await supabase.from('order_items').delete().eq('order_id', resolvedOrderUuid);
+
+            const orderItemRows = newItems.map(item => {
+              const isItemUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id);
+              const qty = parseInt(item.qty || item.quantity, 10) || 1;
+              const unitPrice = parseFloat(item.price || item.unit_price) || 0;
+              const rawStatus = String(item.kitchen_status || item.status || 'PLACED').toUpperCase();
+              const safeItemStatus = (rawStatus === 'PREPARING' || rawStatus === 'COOKING')
+                ? 'PREPARING'
+                : ((rawStatus === 'READY' || rawStatus === 'SERVED' || rawStatus === 'DELIVERED' || item.is_served) ? 'READY' : 'PLACED');
+
+              return {
+                order_id: resolvedOrderUuid,
+                menu_item_id: isItemUuid ? item.id : null,
+                item_name: item.name || item.item_name || 'Dish Item',
+                quantity: qty,
+                unit_price: unitPrice,
+                total_price: parseFloat((unitPrice * qty).toFixed(2)),
+                cooking_note: item.cooking_note || item.note || item.customizations || null,
+                status: safeItemStatus
+              };
+            });
+
+            if (orderItemRows.length > 0) {
+              await supabase.from('order_items').insert(orderItemRows);
+            }
+            console.log(`[SUPABASE] Successfully updated items for Order #${cleanOrderNumber} (${newItems.length} items)`);
+          }
+        } catch (dbErr) {
+          console.warn('[SUPABASE] Failed to persist modified order_items:', dbErr);
+        }
+      })();
 
       const channel = supabase.channel('restaurant_alerts');
       channel.send({
@@ -2962,6 +3011,7 @@ export default function App() {
         event: 'order_status_updated',
         payload: {
           orderId: targetOrder.id,
+          orderNumber: targetOrder.order_number,
           tableNumber: targetOrder.table_number,
           items: newItems,
           total

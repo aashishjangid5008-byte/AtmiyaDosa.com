@@ -236,9 +236,32 @@ export default function WaiterView({
     });
   };
 
+  // Robust order resolver matching by clean ID, order_number, Supabase ID, or active table
+  const findTargetOrder = (orderId, tableNumber = null) => {
+    if (!orderId && !tableNumber) return null;
+    const cleanId = String(orderId || '').replace(/^#+/, '').trim().toLowerCase();
+    
+    // 1. Direct match in orders
+    let found = orders.find(o => {
+      if (!o) return false;
+      const oId = String(o.id || '').replace(/^#+/, '').trim().toLowerCase();
+      const oNum = String(o.order_number || '').replace(/^#+/, '').trim().toLowerCase();
+      const oDb = String(o.supabase_order_id || '').replace(/^#+/, '').trim().toLowerCase();
+      return Boolean(cleanId && (oId === cleanId || oNum === cleanId || oDb === cleanId));
+    });
+    if (found) return found;
+
+    // 2. Fallback to active order for tableNumber
+    if (tableNumber) {
+      const activeForTable = getTableActiveOrders(tableNumber);
+      if (activeForTable.length > 0) return activeForTable[0];
+    }
+    return null;
+  };
+
   // Waiter Order Ticket Item Operations: Adjust quantity, delete dish, add dish, cancel ticket
-  const handleAdjustItemQty = (orderId, itemIndex, delta) => {
-    const targetOrder = orders.find(o => o.id === orderId || o.order_number === orderId);
+  const handleAdjustItemQty = (orderId, itemIndex, delta, tableNumber = null) => {
+    const targetOrder = findTargetOrder(orderId, tableNumber);
     if (!targetOrder || !onUpdateOrderItems) return;
     const currentItems = targetOrder.items || [];
     const updated = currentItems.map((it, idx) => {
@@ -248,24 +271,47 @@ export default function WaiterView({
       return { ...it, qty: nextQty, quantity: nextQty };
     }).filter(it => Number(it.qty || it.quantity || 1) > 0);
 
-    onUpdateOrderItems(orderId, updated, activeWaiterName, 'Waiter');
-  };
-
-  const handleDeleteTicketItem = (orderId, itemIndex, itemName) => {
-    const targetOrder = orders.find(o => o.id === orderId || o.order_number === orderId);
-    if (!targetOrder || !onUpdateOrderItems) return;
-    const currentItems = targetOrder.items || [];
-    const updated = currentItems.filter((_, idx) => idx !== itemIndex);
     if (updated.length === 0) {
-      if (window.confirm(`Removing "${itemName}" will leave no items on Order #${targetOrder.order_number || targetOrder.id}. Do you want to CANCEL this order ticket?`)) {
-        if (onCancelOrder) {
-          onCancelOrder(orderId, 'All items removed from ticket by waiter', activeWaiterName);
-          setTableDishesModal(null);
-        }
+      if (onCancelOrder) {
+        onCancelOrder(targetOrder.id || orderId, 'All items removed from ticket by waiter', activeWaiterName);
+        setTableDishesModal(null);
+        setViewingBillTable(null);
       }
       return;
     }
-    onUpdateOrderItems(orderId, updated, activeWaiterName, 'Waiter');
+
+    onUpdateOrderItems(targetOrder.id || orderId, updated, activeWaiterName, 'Waiter');
+    if (audioEnabled) playSound('click');
+  };
+
+  const handleDeleteTicketItem = (orderId, itemIndex, itemName, tableNumber = null) => {
+    const targetOrder = findTargetOrder(orderId, tableNumber);
+    if (!targetOrder || !onUpdateOrderItems) return;
+    const currentItems = targetOrder.items || [];
+    let removed = false;
+    const updated = currentItems.filter((it, idx) => {
+      if (!removed && itemIndex !== undefined && idx === itemIndex) {
+        removed = true;
+        return false;
+      }
+      if (!removed && itemName && (it.name === itemName || it.item_name === itemName)) {
+        removed = true;
+        return false;
+      }
+      return true;
+    });
+
+    if (updated.length === 0) {
+      if (onCancelOrder) {
+        onCancelOrder(targetOrder.id || orderId, 'All items removed from ticket by waiter', activeWaiterName);
+        setTableDishesModal(null);
+        setViewingBillTable(null);
+      }
+      return;
+    }
+
+    onUpdateOrderItems(targetOrder.id || orderId, updated, activeWaiterName, 'Waiter');
+    if (audioEnabled) playSound('success');
   };
 
   const handleAddDishToOrder = (orderId, menuItem) => {
@@ -2864,7 +2910,10 @@ export default function WaiterView({
                               <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
                                 <button
                                   type="button"
-                                  onClick={() => handleAdjustItemQty(d.orderId, d.itemIndex, -1)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleAdjustItemQty(d.orderId, d.itemIndex, -1, tableDishesModal.number);
+                                  }}
                                   className="w-6 h-6 rounded bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs cursor-pointer shadow-2xs"
                                   title="Decrease quantity"
                                 >
@@ -2875,7 +2924,10 @@ export default function WaiterView({
                                 </span>
                                 <button
                                   type="button"
-                                  onClick={() => handleAdjustItemQty(d.orderId, d.itemIndex, 1)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleAdjustItemQty(d.orderId, d.itemIndex, 1, tableDishesModal.number);
+                                  }}
                                   className="w-6 h-6 rounded bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs cursor-pointer shadow-2xs"
                                   title="Increase quantity"
                                 >
@@ -2886,8 +2938,11 @@ export default function WaiterView({
                               {/* 1-Tap Delete Item button */}
                               <button
                                 type="button"
-                                onClick={() => handleDeleteTicketItem(d.orderId, d.itemIndex, d.name)}
-                                className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center cursor-pointer transition"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteTicketItem(d.orderId, d.itemIndex, d.name, tableDishesModal.number);
+                                }}
+                                className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center cursor-pointer transition shadow-2xs"
                                 title="Delete dish from ticket"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -3185,7 +3240,10 @@ export default function WaiterView({
                                 <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
                                   <button
                                     type="button"
-                                    onClick={() => handleAdjustItemQty(item.orderId, item.itemIndex, -1)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleAdjustItemQty(item.orderId, item.itemIndex, -1, viewingBillTable.number);
+                                    }}
                                     className="w-5 h-5 rounded bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs cursor-pointer shadow-2xs"
                                     title="Decrease quantity"
                                   >
@@ -3196,7 +3254,10 @@ export default function WaiterView({
                                   </span>
                                   <button
                                     type="button"
-                                    onClick={() => handleAdjustItemQty(item.orderId, item.itemIndex, 1)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleAdjustItemQty(item.orderId, item.itemIndex, 1, viewingBillTable.number);
+                                    }}
                                     className="w-5 h-5 rounded bg-white hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs cursor-pointer shadow-2xs"
                                     title="Increase quantity"
                                   >
@@ -3206,11 +3267,9 @@ export default function WaiterView({
 
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    if (window.confirm(`Remove "${item.name}" from Table ${viewingBillTable.number} bill?`)) {
-                                      handleDeleteTicketItem(item.orderId, item.itemIndex, item.name);
-                                      if (audioEnabled) playSound('success');
-                                    }
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteTicketItem(item.orderId, item.itemIndex, item.name, viewingBillTable.number);
                                   }}
                                   className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-600 border border-rose-200 flex items-center justify-center cursor-pointer transition shadow-2xs"
                                   title={`Remove ${item.name} from bill`}
@@ -3274,7 +3333,10 @@ export default function WaiterView({
                                 <div className="flex items-center space-x-1 bg-white/90 p-0.5 rounded-lg border border-amber-300">
                                   <button
                                     type="button"
-                                    onClick={() => handleAdjustItemQty(item.orderId, item.itemIndex, -1)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleAdjustItemQty(item.orderId, item.itemIndex, -1, viewingBillTable.number);
+                                    }}
                                     className="w-5 h-5 rounded bg-amber-50 hover:bg-amber-100 text-amber-900 flex items-center justify-center font-bold text-xs cursor-pointer shadow-2xs"
                                     title="Decrease quantity"
                                   >
@@ -3285,7 +3347,10 @@ export default function WaiterView({
                                   </span>
                                   <button
                                     type="button"
-                                    onClick={() => handleAdjustItemQty(item.orderId, item.itemIndex, 1)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleAdjustItemQty(item.orderId, item.itemIndex, 1, viewingBillTable.number);
+                                    }}
                                     className="w-5 h-5 rounded bg-amber-50 hover:bg-amber-100 text-amber-900 flex items-center justify-center font-bold text-xs cursor-pointer shadow-2xs"
                                     title="Increase quantity"
                                   >
@@ -3295,11 +3360,9 @@ export default function WaiterView({
 
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    if (window.confirm(`Remove "${item.name}" from Table ${viewingBillTable.number} bill?`)) {
-                                      handleDeleteTicketItem(item.orderId, item.itemIndex, item.name);
-                                      if (audioEnabled) playSound('success');
-                                    }
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteTicketItem(item.orderId, item.itemIndex, item.name, viewingBillTable.number);
                                   }}
                                   className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-rose-600 border border-rose-200 flex items-center justify-center cursor-pointer transition shadow-2xs"
                                   title={`Remove ${item.name} from bill`}
