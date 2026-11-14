@@ -85,7 +85,7 @@ export const TRANSLATIONS = {
     guestName: "Guest Name",
     amount: "Amount",
     subtotal: "Subtotal",
-    tax: "GST (5%)",
+    tax: "GST (0%)",
     total: "Total",
 
     // Status Badges
@@ -512,7 +512,7 @@ export const TRANSLATIONS = {
     guestName: "अतिथि का नाम",
     amount: "राशि",
     subtotal: "उप-योग",
-    tax: "जीएसटी (5%)",
+    tax: "जीएसटी (0%)",
     total: "कुल योग",
 
     // Status Badges
@@ -939,7 +939,7 @@ export const TRANSLATIONS = {
     guestName: "ગ્રાહકનું નામ",
     amount: "રકમ",
     subtotal: "સબટોટલ",
-    tax: "જીએસટી (5%)",
+    tax: "જીએસટી (0%)",
     total: "કુલ રકમ",
 
     // Status Badges
@@ -1366,7 +1366,7 @@ export const TRANSLATIONS = {
     guestName: "Customer Name",
     amount: "Amount",
     subtotal: "Subtotal",
-    tax: "GST (5%)",
+    tax: "GST (0%)",
     total: "Total",
 
     // Status Badges

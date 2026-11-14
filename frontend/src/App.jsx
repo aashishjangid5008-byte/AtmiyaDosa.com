@@ -2811,11 +2811,11 @@ export default function App() {
       return;
     }
 
-    // Recalculate financial breakdown
+    // Recalculate financial breakdown (no GST on food)
     const subtotal = Number(newItems.reduce((acc, it) => acc + (Number(it.price || it.unit_price || 0) * (Number(it.qty || it.quantity || 1))), 0).toFixed(2));
-    const tax = Number((subtotal * 0.05).toFixed(2)); // 5% GST
+    const tax = 0; // GST removed per customer instruction
     const discount = Number(targetOrder.discount || 0);
-    const total = Number((subtotal + tax - discount).toFixed(2));
+    const total = Number((subtotal - discount).toFixed(2));
     const summaryStr = newItems.map(i => `${i.qty || i.quantity || 1}x ${i.name || i.item_name}`).join(', ');
 
     const allServed = newItems.every(i => i.is_served);
@@ -2997,7 +2997,7 @@ export default function App() {
       const addedTotal = parseFloat(newOrder.total || newOrder.total_amount || 0);
 
       const cumulativeSubtotal = Number((parseFloat(activeParent.subtotal || 0) + addedSubtotal).toFixed(2));
-      const cumulativeTax = Number((parseFloat(activeParent.tax || 0) + addedTax).toFixed(2));
+      const cumulativeTax = 0;
       const cumulativeDiscount = Number((parseFloat(activeParent.discount || 0) + addedDiscount).toFixed(2));
       const cumulativeTotal = Number((parseFloat(activeParent.total || activeParent.total_amount || 0) + addedTotal).toFixed(2));
       const summaryStr = mergedItems.map(i => `${i.quantity || i.qty || 1}x ${i.name || i.item_name}`).join(', ');

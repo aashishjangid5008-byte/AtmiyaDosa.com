@@ -102,8 +102,8 @@ export default function QuickPosModal({
     return sum + itemBase;
   }, 0);
 
-  const tax = subtotal * 0.05; // 5% GST
-  const grandTotal = Math.max(0, subtotal + tax - appliedDiscount);
+  const tax = 0; // GST removed per customer instruction
+  const grandTotal = Math.max(0, subtotal - appliedDiscount);
   const perPersonSplit = (grandTotal / splitCount).toFixed(2);
 
   const handleApplyPromo = () => {
@@ -510,10 +510,6 @@ export default function QuickPosModal({
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
                   <span>₹{subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>CGST (2.5%) + SGST (2.5%):</span>
-                  <span>₹{tax.toFixed(2)}</span>
                 </div>
                 {appliedDiscount > 0 && (
                   <div className="flex justify-between text-rose-600 font-bold">

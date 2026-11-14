@@ -50,28 +50,21 @@ export function downloadSinglePageBillPdf({
       rawSubtotal = items.reduce((sum, it) => sum + (Number(it.price || it.unit_price || 0) * Number(it.qty || it.quantity || 1)), 0);
     }
 
-    // If subtotal is still 0, reverse calculate from total (assuming 5% GST inclusive)
+    // If subtotal is still 0, use total
     if (rawSubtotal <= 0 && rawTotal > 0) {
-      rawSubtotal = Math.round((rawTotal / 1.05) * 100) / 100;
+      rawSubtotal = rawTotal;
     }
 
-    // Compute taxable amount
+    // Compute net amount (no GST on food per request)
     const taxableAmount = Math.max(0, Math.round((rawSubtotal - rawDiscount) * 100) / 100);
-
-    // If rawTax is 0 or missing, calculate 5% GST on taxable amount
-    let totalTax = rawTax;
-    if (totalTax <= 0 && taxableAmount > 0) {
-      totalTax = Math.round(taxableAmount * 0.05 * 100) / 100;
-    }
-
-    // Exact 50-50 CGST and SGST split
-    const cgstRate = 2.5;
-    const sgstRate = 2.5;
-    const cgstAmount = Math.round((totalTax / 2) * 100) / 100;
-    const sgstAmount = Math.round((totalTax - cgstAmount) * 100) / 100;
+    const totalTax = 0;
+    const cgstRate = 0;
+    const sgstRate = 0;
+    const cgstAmount = 0;
+    const sgstAmount = 0;
 
     // Final grand total
-    const grandTotal = rawTotal > 0 ? rawTotal : Math.round((taxableAmount + totalTax) * 100) / 100;
+    const grandTotal = rawTotal > 0 ? rawTotal : taxableAmount;
 
     // Calculate Dynamic Ticket Height (in mm) for 80mm Roll Width
     // 80mm width standard thermal ticket geometry
@@ -79,9 +72,9 @@ export function downloadSinglePageBillPdf({
     const margin = 4;
     const contentWidth = pageWidth - (margin * 2); // 72mm
 
-    // Measure exact height needed so it fits on 1 page
-    const estimatedHeight = 150 + (items.length * 5.8) + (rawDiscount > 0 ? 5 : 0);
-    const pageHeight = Math.max(165, Math.ceil(estimatedHeight));
+    // Measure exact height needed so it fits on 1 page (compact without GST box)
+    const estimatedHeight = 125 + (items.length * 5.8) + (rawDiscount > 0 ? 5 : 0);
+    const pageHeight = Math.max(140, Math.ceil(estimatedHeight));
 
     const doc = new jsPDF({
       orientation: 'portrait',
@@ -160,7 +153,7 @@ export function downloadSinglePageBillPdf({
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
     doc.setTextColor(255, 255, 255);
-    doc.text('*** TAX INVOICE & DINING BILL ***', pageWidth / 2, y + 3.8, { align: 'center' });
+    doc.text('*** RESTAURANT DINING BILL ***', pageWidth / 2, y + 3.8, { align: 'center' });
     y += 8;
 
     // 4. ORDER & TABLE METADATA (Compact Ticket Format)
@@ -270,45 +263,6 @@ export function downloadSinglePageBillPdf({
     drawDashedDivider(y);
     y += 3.5;
 
-    // 8. STATUTORY GST COMPLIANCE BREAKDOWN (Requested by User)
-    doc.setFillColor(248, 250, 252); // slate-50
-    doc.setDrawColor(226, 232, 240); // slate-200
-    doc.roundedRect(margin, y, contentWidth, 23, 1, 1, 'FD');
-
-    const gstY = y + 3.8;
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.8);
-    doc.setTextColor(15, 23, 42);
-    doc.text(`GST TAX INVOICE DETAILS (SAC: ${sacCode})`, margin + 2, gstY);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6.5);
-    doc.setTextColor(71, 85, 105);
-    doc.text('Taxable Value of Supply:', margin + 2, gstY + 4.2);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(15, 23, 42);
-    doc.text(`Rs. ${taxableAmount.toFixed(2)}`, margin + contentWidth - 2, gstY + 4.2, { align: 'right' });
-
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(71, 85, 105);
-    doc.text(`Central GST (CGST @ ${cgstRate}%):`, margin + 2, gstY + 8.2);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(15, 23, 42);
-    doc.text(`Rs. ${cgstAmount.toFixed(2)}`, margin + contentWidth - 2, gstY + 8.2, { align: 'right' });
-
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(71, 85, 105);
-    doc.text(`State GST (SGST @ ${sgstRate}%):`, margin + 2, gstY + 12.2);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(15, 23, 42);
-    doc.text(`Rs. ${sgstAmount.toFixed(2)}`, margin + contentWidth - 2, gstY + 12.2, { align: 'right' });
-
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(15, 23, 42);
-    doc.text('Total GST Tax (5.0%):', margin + 2, gstY + 16.5);
-    doc.text(`Rs. ${totalTax.toFixed(2)}`, margin + contentWidth - 2, gstY + 16.5, { align: 'right' });
-
-    y += 26;
 
     // 9. GRAND TOTAL SPOTLIGHT (Double Line & Prominent Highlight)
     drawDoubleDivider(y);
@@ -430,21 +384,16 @@ export function printSinglePageReceipt({
     }
 
     if (rawSubtotal <= 0 && rawTotal > 0) {
-      rawSubtotal = Math.round((rawTotal / 1.05) * 100) / 100;
+      rawSubtotal = rawTotal;
     }
 
     const taxableAmount = Math.max(0, Math.round((rawSubtotal - rawDiscount) * 100) / 100);
-
-    let totalTax = rawTax;
-    if (totalTax <= 0 && taxableAmount > 0) {
-      totalTax = Math.round(taxableAmount * 0.05 * 100) / 100;
-    }
-
-    const cgstRate = 2.5;
-    const sgstRate = 2.5;
-    const cgstAmount = Math.round((totalTax / 2) * 100) / 100;
-    const sgstAmount = Math.round((totalTax - cgstAmount) * 100) / 100;
-    const grandTotal = rawTotal > 0 ? rawTotal : Math.round((taxableAmount + totalTax) * 100) / 100;
+    const totalTax = 0;
+    const cgstRate = 0;
+    const sgstRate = 0;
+    const cgstAmount = 0;
+    const sgstAmount = 0;
+    const grandTotal = rawTotal > 0 ? rawTotal : taxableAmount;
 
     const itemsRowsHtml = items.map((it, idx) => `
       <tr style="border-bottom: 1px dashed #cbd5e1;">
@@ -517,7 +466,7 @@ export function printSinglePageReceipt({
         <div class="divider-solid"></div>
 
         <div class="text-center bold" style="font-size: 10.5px; background: #1e293b; color: #fff; padding: 3px 0; border-radius: 4px;">
-          *** TAX INVOICE & DINING BILL ***
+          *** RESTAURANT DINING BILL ***
         </div>
 
         <div style="margin-top: 6px; font-size: 10.5px; line-height: 1.4;">
@@ -563,29 +512,6 @@ export function printSinglePageReceipt({
               <span class="mono bold">-₹${rawDiscount.toFixed(2)}</span>
             </div>
           ` : ''}
-        </div>
-
-        <!-- STATUTORY GST COMPLIANCE BOX -->
-        <div class="gst-box">
-          <div style="font-weight: bold; border-bottom: 1px dashed #cbd5e1; padding-bottom: 3px; margin-bottom: 4px; font-size: 10px;">
-            GST TAX INVOICE DETAILS (SAC: ${escapeHtml(sacCode)})
-          </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
-            <span style="color: #475569;">Taxable Value of Supply:</span>
-            <span class="mono bold">₹${taxableAmount.toFixed(2)}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
-            <span style="color: #475569;">Central GST (CGST @ ${cgstRate}%):</span>
-            <span class="mono bold">₹${cgstAmount.toFixed(2)}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
-            <span style="color: #475569;">State GST (SGST @ ${sgstRate}%):</span>
-            <span class="mono bold">₹${sgstAmount.toFixed(2)}</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; font-weight: bold; border-top: 1px dashed #cbd5e1; padding-top: 3px; margin-top: 2px;">
-            <span>Total GST Tax (5%):</span>
-            <span class="mono">₹${totalTax.toFixed(2)}</span>
-          </div>
         </div>
 
         <div class="divider-double"></div>

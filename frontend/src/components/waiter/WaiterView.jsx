@@ -628,8 +628,8 @@ export default function WaiterView({
     let subtotal = orderPadCart.reduce((acc, i) => acc + (i.price * i.qty), 0);
     if (extraButterPreset) subtotal += 20;
     if (extraCheesePreset) subtotal += 30;
-    const tax = Math.round(subtotal * 0.05);
-    return { subtotal, tax, total: subtotal + tax };
+    const tax = 0; // GST removed per customer instruction
+    return { subtotal, tax, total: subtotal };
   };
 
   const handleFireKOTFromPad = () => {
@@ -2909,10 +2909,6 @@ export default function WaiterView({
                     <span>Items Subtotal:</span>
                     <span className="font-mono font-bold text-slate-800">₹{Number(totalSubtotal || 0).toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-slate-500 font-medium">
-                    <span>GST Tax (5%):</span>
-                    <span className="font-mono font-bold text-slate-800">₹{Number(totalTax || 0).toFixed(2)}</span>
-                  </div>
                   <div className="flex justify-between items-center text-sm font-black text-slate-900 border-t border-slate-200 pt-1">
                     <span>Ticket Total:</span>
                     <span className="font-mono text-emerald-700 text-base">₹{Number(totalTicketPrice || 0).toFixed(2)}</span>
@@ -3222,10 +3218,6 @@ export default function WaiterView({
                       <span className="font-mono font-semibold">-₹{discount}</span>
                     </div>
                   )}
-                  <div className="flex justify-between text-slate-600">
-                    <span>GST (5%):</span>
-                    <span className="font-mono font-semibold text-slate-800">₹{tax}</span>
-                  </div>
                   <div className="flex justify-between text-base font-black pt-2 border-t border-slate-200 text-slate-900">
                     <span>Grand Total:</span>
                     <span className="font-mono text-emerald-600 text-lg">₹{total}</span>

@@ -689,7 +689,7 @@ export default function CustomerMenu({
   };
 
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
-  const tax = subtotal * 0.05; // 5% GST
+  const tax = 0; // GST removed per customer instruction
 
   // Dynamic Multi-Model Restaurant Discount Engine
   let discount = 0;
@@ -746,7 +746,7 @@ export default function CustomerMenu({
     }
   }
 
-  const totalAmount = Math.max(0, subtotal + tax - discount);
+  const totalAmount = Math.max(0, subtotal - discount);
   const totalCartCount = cart.reduce((sum, item) => sum + item.qty, 0);
 
   const handleApplyPromo = (couponToApply = null) => {
@@ -2233,10 +2233,6 @@ export default function CustomerMenu({
                 <span>{t('subtotal')}:</span>
                 <span>₹{subtotal.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between font-bold text-slate-600">
-                <span>{t('tax')} (5% GST):</span>
-                <span>₹{tax.toFixed(2)}</span>
-              </div>
 
 
               {activeTableOrder && (
@@ -2309,8 +2305,8 @@ export default function CustomerMenu({
         const isPlaced = statusLower === 'placed' || statusLower === 'pending';
 
         const totalTableBill = activeTableOrders.reduce((acc, o) => acc + Number(o.total || o.total_amount || 0), 0);
-        const totalSubtotal = activeTableOrders.reduce((acc, o) => acc + Number(o.subtotal || 0), 0) || Math.round(totalTableBill / 1.05);
-        const totalTax = activeTableOrders.reduce((acc, o) => acc + Number(o.tax || 0), 0) || Math.round(totalTableBill - totalSubtotal);
+        const totalSubtotal = activeTableOrders.reduce((acc, o) => acc + Number(o.subtotal || 0), 0) || totalTableBill;
+        const totalTax = 0;
 
         // Filter dishes for customer view ('all' | 'cooking' | 'delivered')
         const displayedDishes = allTableItems.filter(it => {
@@ -2704,14 +2700,6 @@ export default function CustomerMenu({
                   <span>Dishes Subtotal</span>
                   <span>₹{totalSubtotal}</span>
                 </div>
-                <div className="flex justify-between text-slate-500 text-[11px]">
-                  <span>CGST (2.5%)</span>
-                  <span>₹{(Number(totalTax || 0) / 2).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-slate-500 text-[11px]">
-                  <span>SGST (2.5%)</span>
-                  <span>₹{(Number(totalTax || 0) / 2).toFixed(2)}</span>
-                </div>
                 <div className="flex justify-between items-center pt-1.5 border-t border-slate-200 text-sm font-black text-slate-900">
                   <span>{t('billTotal')}</span>
                   <span className="text-base text-orange-600">₹{totalTableBill || activeTableOrder.total || activeTableOrder.total_amount}</span>
@@ -3054,29 +3042,6 @@ export default function CustomerMenu({
                     <span className="font-mono">-₹{Number(activeBillOrder?.discount || 0).toFixed(2)}</span>
                   </div>
                 )}
-                {/* Statutory GST Tax Box */}
-                <div className="p-2.5 my-1.5 bg-white rounded-xl border border-slate-200 space-y-1 text-[11px]">
-                  <div className="font-bold text-slate-800 border-b border-dashed border-slate-200 pb-1 flex justify-between">
-                    <span>GST TAX INVOICE DETAILS</span>
-                    <span className="text-[10px] text-slate-500 font-normal">SAC: 996331</span>
-                  </div>
-                  <div className="flex justify-between text-slate-500">
-                    <span>Taxable Value of Supply:</span>
-                    <span className="font-mono font-bold text-slate-700">₹{Math.max(0, Number(activeBillOrder?.subtotal || 0) - Number(activeBillOrder?.discount || 0)).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Central GST (CGST @ 2.5%):</span>
-                    <span className="font-mono font-bold">₹{(Number(activeBillOrder?.tax || 0) / 2).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>State GST (SGST @ 2.5%):</span>
-                    <span className="font-mono font-bold">₹{(Number(activeBillOrder?.tax || 0) / 2).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-900 font-bold border-t border-dashed border-slate-200 pt-1">
-                    <span>Total GST Tax (5%):</span>
-                    <span className="font-mono">₹{Number(activeBillOrder?.tax || 0).toFixed(2)}</span>
-                  </div>
-                </div>
                 <div className="flex justify-between items-center text-sm font-black text-slate-900 pt-1.5 border-t border-slate-300">
                   <span>{isPaymentConfirmed ? 'Grand Total Paid:' : 'Grand Total Due:'}</span>
                   <span className="font-mono text-emerald-700 text-base">₹{Number(activeBillOrder?.total || activeBillOrder?.total_amount || 0).toFixed(2)}</span>

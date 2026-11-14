@@ -906,14 +906,13 @@ export default function OrdersView({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs print:p-0 print:bg-white print:static">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full border border-slate-200 shadow-2xl space-y-4 print:border-none print:shadow-none print:p-0">
             <div className="flex items-center justify-between border-b pb-2 print:hidden">
-              <span className="font-heading font-black text-sm text-slate-900">Thermal KOT Tax Receipt</span>
+              <span className="font-heading font-black text-sm text-slate-900">Thermal Dining Receipt</span>
               <button onClick={() => setSelectedOrder(null)} className="p-1 cursor-pointer"><X className="w-4 h-4" /></button>
             </div>
 
             <div className="text-center font-mono space-y-1 text-slate-900">
               <div className="font-bold text-base">ATMIYA DOSA HUB</div>
               <div className="text-[10px] text-slate-500">Petlad - Anand Road, Gujarat</div>
-              <div className="text-[10px] text-slate-500">GSTIN: 24AAACA1234A1Z5</div>
               <div className="border-b border-dashed my-2 border-slate-300"></div>
               <div className="flex justify-between text-xs font-bold">
                 <span>{selectedOrder.id}</span>
@@ -943,10 +942,6 @@ export default function OrdersView({
               <div className="flex justify-between text-xs">
                 <span>Subtotal:</span>
                 <span>₹{selectedOrder.subtotal || selectedOrder.total || selectedOrder.total_amount}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span>GST (5%):</span>
-                <span>₹{selectedOrder.tax || 0}</span>
               </div>
               {selectedOrder.discount > 0 && (
                 <div className="flex justify-between text-xs text-emerald-600">
