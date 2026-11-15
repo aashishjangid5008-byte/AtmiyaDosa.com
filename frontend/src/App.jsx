@@ -1342,23 +1342,54 @@ export default function App() {
     }
   }, []);
 
-  // Live Floor Tables Synchronizer: Guarantees newly created tables (Tables 17+) reflect across all devices
+  // Live Floor Tables Synchronizer: Guarantees newly created tables reflect across all devices
   const refreshTablesFromSupabase = useCallback(async () => {
     try {
       const liveTables = await fetchLiveTablesFromSupabase();
       if (liveTables && Array.isArray(liveTables) && liveTables.length > 0) {
         setTables(prevTables => {
+          // Parse deleted tables tombstone list to prevent resurrecting deleted tables
+          let deletedSet = new Set();
+          try {
+            const rawDel = localStorage.getItem('restaurant_deleted_tables');
+            if (rawDel) {
+              const arr = JSON.parse(rawDel);
+              if (Array.isArray(arr)) {
+                arr.forEach(x => {
+                  const s = String(x).trim().toUpperCase();
+                  deletedSet.add(s);
+                  const d = s.replace(/\D/g, '');
+                  if (d) {
+                    deletedSet.add(d);
+                    deletedSet.add(parseInt(d, 10));
+                    deletedSet.add(`T${d}`);
+                    deletedSet.add(`T-${d.padStart(2, '0')}`);
+                  }
+                });
+              }
+            }
+          } catch (e) {}
+
           const map = new Map();
-          // Populate live tables from Supabase Cloud
+          // Populate live tables from Supabase Cloud (ignoring tombstoned deleted tables)
           liveTables.forEach(lt => {
-            const code = (lt.number || '').replace(/\D/g, '');
-            const key = code ? parseInt(code, 10) : lt.number;
+            const rawNum = String(lt.number || '').trim().toUpperCase();
+            const code = rawNum.replace(/\D/g, '');
+            const key = code ? parseInt(code, 10) : rawNum;
+            if (deletedSet.has(rawNum) || deletedSet.has(code) || deletedSet.has(key)) {
+              return; // Table was deleted
+            }
             map.set(key, lt);
           });
+
           // Preserve local dynamic runtime properties (active orders, seated timing, delivered timestamps)
           (prevTables || []).forEach(pt => {
-            const code = (pt.number || '').replace(/\D/g, '');
-            const key = code ? parseInt(code, 10) : pt.number;
+            const rawNum = String(pt.number || '').trim().toUpperCase();
+            const code = rawNum.replace(/\D/g, '');
+            const key = code ? parseInt(code, 10) : rawNum;
+            if (deletedSet.has(rawNum) || deletedSet.has(code) || deletedSet.has(key)) {
+              return; // Table was deleted
+            }
             if (map.has(key)) {
               const existing = map.get(key);
               const isVacant = String(existing.status || '').toLowerCase() === 'vacant' || String(existing.status || '').toLowerCase() === 'available';
@@ -1372,10 +1403,10 @@ export default function App() {
                 turnover_notified: isVacant ? false : (pt.turnover_notified || existing.turnover_notified),
                 status: isVacant ? 'available' : (existing.status || pt.status || 'available')
               });
-            } else {
-              map.set(key, pt);
             }
+            // Tables deleted in Supabase are NOT re-added here!
           });
+
           const merged = Array.from(map.values()).sort((a, b) => {
             const numA = parseInt(String(a.number).replace(/\D/g, ''), 10) || 0;
             const numB = parseInt(String(b.number).replace(/\D/g, ''), 10) || 0;
@@ -3522,6 +3553,26 @@ export default function App() {
 
   const handleAddTable = async (tableData) => {
     const cleanNumber = String(tableData.number || '').trim().toUpperCase();
+    const digits = cleanNumber.replace(/\D/g, '');
+
+    // Clear from deleted tables tombstone list if re-adding
+    try {
+      const rawDel = localStorage.getItem('restaurant_deleted_tables');
+      if (rawDel) {
+        let arr = JSON.parse(rawDel);
+        if (Array.isArray(arr)) {
+          arr = arr.filter(x => {
+            const s = String(x).trim().toUpperCase();
+            const d = s.replace(/\D/g, '');
+            if (s === cleanNumber) return false;
+            if (digits && d && digits === d) return false;
+            return true;
+          });
+          localStorage.setItem('restaurant_deleted_tables', JSON.stringify(arr));
+        }
+      }
+    } catch (e) {}
+
     const tableObj = {
       id: cleanNumber,
       number: cleanNumber,
@@ -3532,7 +3583,13 @@ export default function App() {
       timing: null
     };
 
-    const updated = [...tables.filter(t => t.number !== cleanNumber), tableObj].sort((a, b) => {
+    const updated = [...tables.filter(t => {
+      const tNum = String(t.number || '').trim().toUpperCase();
+      const tDigits = tNum.replace(/\D/g, '');
+      if (tNum === cleanNumber) return false;
+      if (digits && tDigits && digits === tDigits) return false;
+      return true;
+    }), tableObj].sort((a, b) => {
       const numA = parseInt(String(a.number).replace(/\D/g, ''), 10) || 0;
       const numB = parseInt(String(b.number).replace(/\D/g, ''), 10) || 0;
       return numA - numB;
@@ -3541,7 +3598,7 @@ export default function App() {
     setTables(updated);
     setLocalStore('tables', updated);
 
-    // PERMANENT CLOUD PERSISTENCE: Save to Supabase Cloud PostgreSQL
+    // PERMANENT CLOUD PERSISTENCE: Save directly to Supabase Cloud PostgreSQL
     try {
       await saveTableToSupabaseApi(tableObj);
     } catch (e) {
@@ -3561,14 +3618,51 @@ export default function App() {
   };
 
   const handleDeleteTable = async (id) => {
-    if (!window.confirm('Delete this dining table?')) return;
-    const targetTable = tables.find(t => t.id === id || t.number === id);
-    const tableNum = targetTable?.number || id;
-    const updated = tables.filter(t => t.id !== id && t.number !== id);
+    const cleanId = String(id || '').trim().toUpperCase();
+    const targetDigits = cleanId.replace(/\D/g, '');
+    const targetTable = tables.find(t => {
+      const tId = String(t.id || '').trim().toUpperCase();
+      const tNum = String(t.number || '').trim().toUpperCase();
+      if (tId === cleanId || tNum === cleanId) return true;
+      if (targetDigits) {
+        const tDigits = tNum.replace(/\D/g, '') || tId.replace(/\D/g, '');
+        if (tDigits && parseInt(tDigits, 10) === parseInt(targetDigits, 10)) return true;
+      }
+      return false;
+    });
+
+    const tableNum = targetTable?.number || cleanId;
+    if (!window.confirm(`Are you sure you want to permanently delete Table ${tableNum}?`)) {
+      return;
+    }
+
+    // 1. Immediately record in deleted tombstone list
+    try {
+      const rawDel = localStorage.getItem('restaurant_deleted_tables');
+      const arr = rawDel ? JSON.parse(rawDel) : [];
+      arr.push(tableNum);
+      if (cleanId) arr.push(cleanId);
+      if (targetDigits) arr.push(targetDigits, `T${targetDigits}`, `T-${targetDigits.padStart(2, '0')}`);
+      localStorage.setItem('restaurant_deleted_tables', JSON.stringify(Array.from(new Set(arr))));
+    } catch (e) {}
+
+    // 2. Filter out immediately from local state & storage
+    const updated = tables.filter(t => {
+      const tId = String(t.id || '').trim().toUpperCase();
+      const tNum = String(t.number || '').trim().toUpperCase();
+      if (tId === cleanId || tNum === cleanId || tNum === String(tableNum).toUpperCase()) return false;
+      if (targetDigits) {
+        const tDigits = tNum.replace(/\D/g, '') || tId.replace(/\D/g, '');
+        if (tDigits && parseInt(tDigits, 10) === parseInt(targetDigits, 10)) return false;
+      }
+      return true;
+    });
     setTables(updated);
     setLocalStore('tables', updated);
 
-    // PERMANENT CLOUD PERSISTENCE: Delete from Supabase Cloud PostgreSQL
+    playSound('trash');
+
+    // 3. PERMANENT CLOUD PERSISTENCE: Delete directly from Supabase Cloud PostgreSQL
     try {
       await deleteTableFromSupabaseApi(tableNum);
     } catch (e) {

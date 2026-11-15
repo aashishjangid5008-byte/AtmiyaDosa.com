@@ -539,9 +539,12 @@ export default function TablesView({
                   </button>
 
                   <button
-                    onClick={() => onDeleteTable(table.id)}
-                    className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                    title="Delete Table"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onDeleteTable) onDeleteTable(table.id || table.number);
+                    }}
+                    className="p-1.5 rounded-lg hover:bg-rose-100 bg-rose-50/60 text-rose-500 hover:text-rose-700 transition cursor-pointer border border-rose-100"
+                    title={`Delete Table ${table.number}`}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -572,12 +575,28 @@ export default function TablesView({
                 </div>
               </div>
 
-              <button 
-                onClick={() => setSelectedTable(null)}
-                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center space-x-2">
+                {onDeleteTable && (
+                  <button 
+                    onClick={() => {
+                      if (onDeleteTable) {
+                        onDeleteTable(selectedTable.id || selectedTable.number);
+                        setSelectedTable(null);
+                      }
+                    }}
+                    className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 transition cursor-pointer border border-rose-200"
+                    title={`Delete Table ${selectedTable.number}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+                <button 
+                  onClick={() => setSelectedTable(null)}
+                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {/* Active Ticket Status */}
@@ -617,6 +636,21 @@ export default function TablesView({
                         >
                           <CheckCircle2 className="w-3.5 h-3.5 text-amber-600" />
                           <span>Clear Stale Status</span>
+                        </button>
+                      )}
+                      {onDeleteTable && (
+                        <button
+                          onClick={() => {
+                            if (onDeleteTable) {
+                              onDeleteTable(selectedTable.id || selectedTable.number);
+                              setSelectedTable(null);
+                            }
+                          }}
+                          className="px-4 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center space-x-1.5 border border-rose-200 cursor-pointer"
+                          title="Permanently remove this table"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                          <span>Delete Table</span>
                         </button>
                       )}
                     </div>

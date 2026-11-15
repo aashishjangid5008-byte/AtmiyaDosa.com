@@ -1597,10 +1597,38 @@ export const fetchLiveTablesFromSupabase = async () => {
 export const saveTableToSupabaseApi = async (tableObj) => {
   if (!tableObj || !tableObj.number) return null;
   const cleanNumber = String(tableObj.number).trim().toUpperCase();
+  const digits = cleanNumber.replace(/\D/g, '');
+  const supabaseTNum = digits ? `T-${digits.padStart(2, '0')}` : cleanNumber;
 
+  // 1. Write directly to Supabase Cloud PostgreSQL using supabaseAdmin (bypasses RLS)
   try {
-    // 1. Write via FastAPI backend (uses SUPABASE_SERVICE_ROLE_KEY to bypass RLS)
-    const resp = await fetch(`${API_BASE_URL}/tables`, {
+    const payload = {
+      restaurant_id: RESTAURANT_ID,
+      table_number: supabaseTNum,
+      capacity: parseInt(tableObj.capacity, 10) || 4,
+      zone: tableObj.zone || 'Main Hall',
+      status: (tableObj.status || 'available').toLowerCase() === 'occupied' ? 'OCCUPIED' : 'VACANT',
+      floor: tableObj.floor || 'Ground Floor'
+    };
+
+    const { data, error } = await supabaseAdmin
+      .from('restaurant_tables')
+      .upsert(payload, { onConflict: 'restaurant_id,table_number' })
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[TABLES] Supabase direct save error:', error.message);
+    } else {
+      console.log(`[TABLES] Persisted table ${supabaseTNum} to Cloud DB:`, data);
+    }
+  } catch (err) {
+    console.warn('[TABLES] Supabase direct save exception:', err);
+  }
+
+  // 2. Also notify FastAPI backend if running
+  try {
+    await fetch(`${API_BASE_URL}/tables`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1609,15 +1637,9 @@ export const saveTableToSupabaseApi = async (tableObj) => {
         zone: tableObj.zone || 'Main Hall'
       })
     });
-    if (resp.ok) {
-      const data = await resp.json();
-      console.log(`[TABLES] Persisted table ${cleanNumber} via API:`, data);
-    }
-  } catch (apiErr) {
-    console.warn('[TABLES] Backend table creation notice:', apiErr);
-  }
+  } catch (apiErr) {}
 
-  // 2. Broadcast on Supabase realtime channel so all connected devices update immediately
+  // 3. Broadcast on Supabase realtime channel so all connected devices update immediately
   try {
     const channel = supabase.channel('restaurant_alerts');
     await channel.send({
@@ -1638,21 +1660,70 @@ export const saveTableToSupabaseApi = async (tableObj) => {
 export const deleteTableFromSupabaseApi = async (tableIdOrNum) => {
   if (!tableIdOrNum) return;
   const cleanNumber = String(tableIdOrNum).trim().toUpperCase();
+  const digits = cleanNumber.replace(/\D/g, '');
+  const supabaseTNum = digits ? `T-${digits.padStart(2, '0')}` : cleanNumber;
+  const tNoDash = digits ? `T${digits.padStart(2, '0')}` : cleanNumber;
+  const tShort = digits ? `T${parseInt(digits, 10)}` : cleanNumber;
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tableIdOrNum);
 
+  // 1. Direct delete from Supabase Cloud PostgreSQL using supabaseAdmin (bypasses RLS)
+  try {
+    let tableRows = [];
+    if (isUUID) {
+      const { data } = await supabaseAdmin.from('restaurant_tables').select('id, table_number').eq('id', tableIdOrNum);
+      if (data) tableRows.push(...data);
+    }
+
+    const { data: byNum } = await supabaseAdmin
+      .from('restaurant_tables')
+      .select('id, table_number')
+      .or(`table_number.eq.${supabaseTNum},table_number.eq.${tNoDash},table_number.eq.${tShort},table_number.eq.${cleanNumber}`);
+
+    if (byNum && Array.isArray(byNum)) {
+      byNum.forEach(r => {
+        if (!tableRows.some(x => x.id === r.id)) tableRows.push(r);
+      });
+    }
+
+    // Clean up foreign key references before deleting table row
+    for (const tbl of tableRows) {
+      try {
+        await supabaseAdmin.from('table_sessions').delete().eq('table_id', tbl.id);
+      } catch (e) {}
+      try {
+        await supabaseAdmin.from('orders').update({ table_id: null }).eq('table_id', tbl.id);
+      } catch (e) {}
+      const { error: delErr } = await supabaseAdmin.from('restaurant_tables').delete().eq('id', tbl.id);
+      if (delErr) {
+        console.warn(`[SUPABASE] Failed to delete table row ${tbl.id}:`, delErr.message);
+      } else {
+        console.log(`[SUPABASE] Deleted table ${tbl.table_number} (${tbl.id}) from Cloud DB`);
+      }
+    }
+
+    // Also perform broad deletion by table_number directly
+    await supabaseAdmin
+      .from('restaurant_tables')
+      .delete()
+      .or(`table_number.eq.${supabaseTNum},table_number.eq.${tNoDash},table_number.eq.${tShort},table_number.eq.${cleanNumber}`);
+  } catch (e) {
+    console.warn('[TABLES] Supabase direct delete exception:', e);
+  }
+
+  // 2. Also notify backend if running
   try {
     await fetch(`${API_BASE_URL}/tables/${cleanNumber}`, {
       method: 'DELETE'
     });
-  } catch (e) {
-    console.warn('[TABLES] Backend delete notice:', e);
-  }
+  } catch (e) {}
 
+  // 3. Broadcast on realtime channel
   try {
     const channel = supabase.channel('restaurant_alerts');
     await channel.send({
       type: 'broadcast',
       event: 'table_deleted',
-      payload: { tableNumber: cleanNumber }
+      payload: { tableNumber: cleanNumber, formattedNum: supabaseTNum }
     });
   } catch (e) {}
 };
@@ -1663,6 +1734,28 @@ export const deleteTableFromSupabaseApi = async (tableIdOrNum) => {
 export const updateTableInSupabaseApi = async (tableIdOrNum, updates) => {
   if (!tableIdOrNum) return;
   const cleanNumber = String(tableIdOrNum).trim().toUpperCase();
+  const digits = cleanNumber.replace(/\D/g, '');
+  const supabaseTNum = digits ? `T-${digits.padStart(2, '0')}` : cleanNumber;
+  const tNoDash = digits ? `T${digits.padStart(2, '0')}` : cleanNumber;
+  const tShort = digits ? `T${parseInt(digits, 10)}` : cleanNumber;
+
+  try {
+    const patchData = {};
+    if (updates.capacity !== undefined) patchData.capacity = parseInt(updates.capacity, 10) || 4;
+    if (updates.zone !== undefined) patchData.zone = updates.zone;
+    if (updates.status !== undefined) {
+      patchData.status = updates.status.toUpperCase() === 'OCCUPIED' ? 'OCCUPIED' : 'VACANT';
+    }
+
+    if (Object.keys(patchData).length > 0) {
+      await supabaseAdmin
+        .from('restaurant_tables')
+        .update(patchData)
+        .or(`table_number.eq.${supabaseTNum},table_number.eq.${tNoDash},table_number.eq.${tShort},table_number.eq.${cleanNumber}`);
+    }
+  } catch (e) {
+    console.warn('[TABLES] Supabase update table exception:', e);
+  }
 
   try {
     await fetch(`${API_BASE_URL}/tables/${cleanNumber}`, {
@@ -1681,5 +1774,6 @@ export const updateTableInSupabaseApi = async (tableIdOrNum, updates) => {
     });
   } catch (e) {}
 };
+
 
 
