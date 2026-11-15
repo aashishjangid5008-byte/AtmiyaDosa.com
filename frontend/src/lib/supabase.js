@@ -663,15 +663,27 @@ export const updateOrderItemStatusInSupabase = async (orderIdOrNumber, itemIndex
 
       const itemKey = String(itemIndexOrName);
       itemStates[itemKey] = safeItemStatus.toLowerCase();
+      if (typeof itemIndexOrName === 'string') {
+        itemStates[itemIndexOrName] = safeItemStatus.toLowerCase();
+      }
+      if (existingOrderObj?.items && Array.isArray(existingOrderObj.items)) {
+        const found = (typeof itemIndexOrName === 'number') 
+          ? existingOrderObj.items[itemIndexOrName]
+          : existingOrderObj.items.find(i => i.id === itemIndexOrName || i.name === itemIndexOrName);
+        if (found) {
+          if (found.name) itemStates[found.name] = safeItemStatus.toLowerCase();
+          if (found.id) itemStates[found.id] = safeItemStatus.toLowerCase();
+        }
+      }
 
       const newSpecialNotes = `${cleanNotes ? cleanNotes + ' ' : ''}[KDS_ITEM_STATES:${JSON.stringify(itemStates)}]`.trim();
 
-      // 2. Fetch dbItems for evaluating whole order readiness
+      // 2. Fetch dbItems for evaluating whole order readiness (ordered chronologically)
       const { data: dbItems } = await supabase
         .from('order_items')
-        .select('id, item_name, quantity, status')
+        .select('id, item_name, quantity, status, created_at')
         .eq('order_id', orderUuid)
-        .order('id', { ascending: true });
+        .order('created_at', { ascending: true });
 
       let fallbackCount = 1;
       if (existingOrderObj?.items && Array.isArray(existingOrderObj.items) && existingOrderObj.items.length > 0) {
@@ -742,10 +754,13 @@ export const updateOrderItemStatusInSupabase = async (orderIdOrNumber, itemIndex
       // 4. Also attempt updating individual order_items for direct relation compatibility
       if (dbItems && dbItems.length > 0) {
         let targetItem = null;
-        if (typeof itemIndexOrName === 'number' && dbItems[itemIndexOrName]) {
-          targetItem = dbItems[itemIndexOrName];
-        } else if (typeof itemIndexOrName === 'string') {
+        if (typeof itemIndexOrName === 'string') {
           targetItem = dbItems.find(i => i.id === itemIndexOrName || i.item_name?.toLowerCase() === itemIndexOrName?.toLowerCase());
+        } else if (typeof itemIndexOrName === 'number' && dbItems[itemIndexOrName]) {
+          targetItem = dbItems[itemIndexOrName];
+        }
+        if (!targetItem && typeof itemIndexOrName === 'string') {
+          targetItem = dbItems.find(i => i.item_name?.toLowerCase().includes(itemIndexOrName.toLowerCase()));
         }
 
         if (targetItem) {
@@ -953,7 +968,8 @@ export const fetchLiveOrdersFromSupabase = async () => {
           unit_price,
           total_price,
           cooking_note,
-          status
+          status,
+          created_at
         )
       `)
       .order('placed_at', { ascending: false })
@@ -966,7 +982,13 @@ export const fetchLiveOrdersFromSupabase = async () => {
     if (data && Array.isArray(data)) {
       data.forEach(ord => {
         if (Array.isArray(ord.order_items)) {
-          ord.order_items.sort((a, b) => String(a.id || '').localeCompare(String(b.id || '')));
+          // Sort items chronologically by creation timestamp to preserve round order
+          ord.order_items.sort((a, b) => {
+            if (a.created_at && b.created_at) {
+              return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+            }
+            return 0;
+          });
         }
       });
     }

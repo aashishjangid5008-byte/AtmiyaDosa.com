@@ -74,47 +74,38 @@ const resolveTicketItems = (order) => {
     });
   }
 
-  // 4. Ensure newly added items are never dropped if they exist
-  if (Array.isArray(order.newly_added_items) && order.newly_added_items.length > 0) {
+  // 4. Ensure newly added items are only used as fallback if base is completely empty
+  if (base.length === 0 && Array.isArray(order.newly_added_items) && order.newly_added_items.length > 0) {
     order.newly_added_items.forEach(newItem => {
-      const alreadyInBase = base.some(b => 
-        (b.id && newItem.id && b.id === newItem.id) ||
-        (b.name && newItem.name && b.name.toLowerCase().trim() === newItem.name.toLowerCase().trim() && (b.round === (newItem.round || order.round || 2)))
-      );
-      if (!alreadyInBase) {
-        base.push({
-          ...newItem,
-          qty: newItem.qty || newItem.quantity || 1,
-          quantity: newItem.qty || newItem.quantity || 1,
-          round: newItem.round || order.round || 2,
-          is_addon: true,
-          kitchen_status: newItem.kitchen_status || 'placed',
-          is_served: Boolean(newItem.is_served)
-        });
-      }
+      base.push({
+        ...newItem,
+        qty: newItem.qty || newItem.quantity || 1,
+        quantity: newItem.qty || newItem.quantity || 1,
+        round: newItem.round || order.round || 2,
+        is_addon: true,
+        kitchen_status: newItem.kitchen_status || 'placed',
+        is_served: Boolean(newItem.is_served)
+      });
     });
   }
 
-  // 5. Fallback: Parse from special_note if add-on (e.g. Mineral Water) was recorded
-  if (order.special_note) {
+  // 5. Fallback: Parse from special_note if base is still empty and add-on (e.g. Mineral Water) was recorded
+  if (base.length === 0 && order.special_note) {
     const waterMatch = order.special_note.match(/(?:\+|💧)?\s*(\d+)x?\s*Mineral\s*Water/i);
     if (waterMatch) {
-      const alreadyHasWater = base.some(it => (it.name || '').toLowerCase().includes('water'));
-      if (!alreadyHasWater) {
-        const waterQty = parseInt(waterMatch[1], 10) || 1;
-        base.push({
-          id: `addon_water_${order.id}`,
-          name: 'Packaged Mineral Water (1 Litre Bottle)',
-          qty: waterQty,
-          quantity: waterQty,
-          price: 20,
-          kitchen_status: (order.status || '').toLowerCase() === 'ready' ? 'ready' : 'placed',
-          is_addon: true,
-          round: order.round || 2,
-          is_served: (order.status || '').toLowerCase() === 'served',
-          cooking_note: 'Chilled bottle'
-        });
-      }
+      const waterQty = parseInt(waterMatch[1], 10) || 1;
+      base.push({
+        id: `addon_water_${order.id}`,
+        name: 'Packaged Mineral Water (1 Litre Bottle)',
+        qty: waterQty,
+        quantity: waterQty,
+        price: 20,
+        kitchen_status: (order.status || '').toLowerCase() === 'ready' ? 'ready' : 'placed',
+        is_addon: true,
+        round: order.round || 2,
+        is_served: (order.status || '').toLowerCase() === 'served',
+        cooking_note: 'Chilled bottle'
+      });
     }
   }
 
@@ -470,14 +461,14 @@ export default function KitchenPanelView({
   };
 
   // Item Check-off / Ready to Serve Trigger
-  const toggleItemCheck = (orderId, idx) => {
+  const toggleItemCheck = (orderId, idx, item = null) => {
     if (!orderId || orderId === 'undefined' || orderId === 'null') return;
     const cleanId = String(orderId).trim();
     if (audioEnabled) playSound('click');
     if (onToggleItemReady) {
-      onToggleItemReady(cleanId, idx);
+      onToggleItemReady(cleanId, idx, item);
     } else if (onToggleItemServed) {
-      onToggleItemServed(cleanId, idx);
+      onToggleItemServed(cleanId, idx, null, null, item);
     }
   };
 
@@ -1130,25 +1121,22 @@ export default function KitchenPanelView({
     // 1. Multi-tier resilient items resolution (guarantees dishes are NEVER missing or blank)
     const displayItems = [...resolveTicketItems(order)];
 
-    // If order has special_note mentioning Mineral Water, ensure it's in displayItems
-    if (order.special_note) {
+    // If order has special_note mentioning Mineral Water and displayItems is empty, ensure it's in displayItems
+    if (displayItems.length === 0 && order.special_note) {
       const waterMatch = order.special_note.match(/(?:\+|💧)?\s*(\d+)x?\s*Mineral\s*Water/i);
       if (waterMatch) {
         const waterQty = parseInt(waterMatch[1], 10) || 1;
-        const alreadyHasWater = displayItems.some(it => (it.name || '').toLowerCase().includes('water'));
-        if (!alreadyHasWater) {
-          const waterServed = s === 'served' || s === 'completed' || s === 'settled';
-          displayItems.push({
-            id: `addon_water_${order.id}`,
-            name: 'Packaged Mineral Water (1 Litre Bottle)',
-            qty: waterQty,
-            price: 20,
-            kitchen_status: waterServed ? 'served' : 'placed',
-            is_addon: true,
-            is_served: waterServed,
-            cooking_note: 'Chilled bottle'
-          });
-        }
+        const waterServed = s === 'served' || s === 'completed' || s === 'settled';
+        displayItems.push({
+          id: `addon_water_${order.id}`,
+          name: 'Packaged Mineral Water (1 Litre Bottle)',
+          qty: waterQty,
+          price: 20,
+          kitchen_status: waterServed ? 'served' : 'placed',
+          is_addon: true,
+          is_served: waterServed,
+          cooking_note: 'Chilled bottle'
+        });
       }
     }
 
@@ -1278,7 +1266,7 @@ export default function KitchenPanelView({
         )}
 
         {/* Newly Added Add-on Banner for Kitchen */}
-        {order.newly_added_summary && (order.round > 1 || order.is_addon) && (
+        {order.newly_added_summary && (order.round > 1 || order.is_addon) && displayItems.some(it => (it.is_addon || (it.round && it.round > 1)) && !it.is_served && it.kitchen_status !== 'ready') && (
           <div className="p-2.5 rounded-xl bg-purple-50/90 border border-purple-200 text-purple-950 text-xs flex items-start space-x-2">
             <span className="text-base shrink-0">⚡</span>
             <div className="min-w-0">
@@ -1353,12 +1341,7 @@ export default function KitchenPanelView({
                       (item.kitchen_status || '').toLowerCase() === 'prepared'
                     )
                   );
-                  const isItemAddon = Boolean(
-                    item.is_addon || 
-                    (item.round && item.round > 1) ||
-                    (order.round > 1 && (item.round === order.round || item.round > 1 || !item.is_served)) || 
-                    (order.is_addon && !item.is_served)
-                  );
+                  const isItemAddon = Boolean(item.is_addon || (item.round && item.round > 1));
                   const dishPhoto = item.image_url || item.imageUrl || item.image || item.photo || (menuItems.find(m => m.id === item.id || m.name === item.name)?.image_url);
                   const gujaratiTitle = getDishDisplayName({ name: item.name }, 'gu');
                   const cuisineKey = getDishCuisine({ name: item.name, category: item.category });
@@ -1367,7 +1350,7 @@ export default function KitchenPanelView({
                   return (
                     <div
                       key={originalIdx}
-                      onClick={() => !isItemServed && toggleItemCheck(safeOrderId, originalIdx)}
+                      onClick={() => !isItemServed && toggleItemCheck(safeOrderId, originalIdx, item)}
                       className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 active:scale-[0.99] ${
                         isItemServed 
                           ? 'bg-slate-50 border-slate-200 text-slate-400 opacity-75' 
@@ -1473,16 +1456,24 @@ export default function KitchenPanelView({
                             <span>Delivered</span>
                           </div>
                         ) : isItemReady ? (
-                          <div className="px-2.5 py-1.5 rounded-lg bg-emerald-600 text-white flex items-center space-x-1 text-[11px] font-black shadow-xs">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleItemCheck(safeOrderId, originalIdx, item);
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white flex items-center space-x-1 text-[11px] font-black shadow-xs cursor-pointer transition"
+                            title="Dish is Ready on pass. Click to revert back to Cooking."
+                          >
                             <Check className="w-3.5 h-3.5 stroke-[3]" />
-                            <span>Ready</span>
-                          </div>
+                            <span>Ready ✓</span>
+                          </button>
                         ) : isItemAddon ? (
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              toggleItemCheck(safeOrderId, originalIdx);
+                              toggleItemCheck(safeOrderId, originalIdx, item);
                             }}
                             className="px-2.5 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 active:bg-purple-900 text-white text-[11px] font-black shadow-xs transition flex items-center space-x-1 cursor-pointer"
                             title="Mark add-on dish ready"
@@ -1491,10 +1482,18 @@ export default function KitchenPanelView({
                             <span>Tap Ready</span>
                           </button>
                         ) : (
-                          <div className="px-2.5 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-[11px] font-bold hover:bg-amber-100 flex items-center space-x-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleItemCheck(safeOrderId, originalIdx, item);
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-900 text-[11px] font-bold flex items-center space-x-1 cursor-pointer transition shadow-2xs"
+                            title="Mark main dish ready"
+                          >
                             <Clock className="w-3 h-3 text-amber-700" />
                             <span>Tap Ready</span>
-                          </div>
+                          </button>
                         )}
                       </div>
                     </div>
@@ -1505,12 +1504,7 @@ export default function KitchenPanelView({
                 const addonItemsWithIdx = [];
 
                 displayItems.forEach((item, idx) => {
-                  const isItemAddon = Boolean(
-                    item.is_addon || 
-                    (item.round && item.round > 1) ||
-                    (order.round > 1 && (item.round === order.round || item.round > 1 || !item.is_served)) || 
-                    (order.is_addon && !item.is_served)
-                  );
+                  const isItemAddon = Boolean(item.is_addon || (item.round && item.round > 1));
                   if (isItemAddon) {
                     addonItemsWithIdx.push({ item, idx });
                   } else {

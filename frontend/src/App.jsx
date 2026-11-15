@@ -1151,7 +1151,10 @@ export default function App() {
             ? mo.items
             : (hasLocalItems ? localMatch.items : (mo.items || []));
           const mergedItems = dbItems.map((dbItem, idx) => {
-            const localItem = localMatch.items?.[idx] || (localMatch.items || []).find(it => it.name === dbItem.name && (it.round === dbItem.round || !dbItem.round));
+            const localItem = (localMatch.items || []).find(it => 
+              (it.id && dbItem.id && it.id === dbItem.id) ||
+              (it.name && dbItem.name && it.name.toLowerCase().trim() === dbItem.name.toLowerCase().trim() && (it.round === dbItem.round || !dbItem.round))
+            ) || localMatch.items?.[idx];
             const isLocalPreparing = Boolean(localItem && (localItem.kitchen_status === 'preparing' || localItem.status === 'PREPARING'));
             const isDbPreparing = Boolean(dbItem.kitchen_status === 'preparing' || String(dbItem.status || '').toLowerCase() === 'preparing');
             const isExplicitlyPreparing = isLocalPreparing || isDbPreparing;
@@ -1962,6 +1965,9 @@ export default function App() {
                       total_amount: payload.total !== undefined ? payload.total : o.total_amount,
                       items_summary: payload.items_summary || (payload.items ? payload.items.map(i => `${i.qty || 1}x ${i.name}`).join(', ') : o.items_summary),
                       status: payload.status || o.status,
+                      is_addon: payload.is_addon !== undefined ? payload.is_addon : o.is_addon,
+                      newly_added_items: payload.newly_added_items !== undefined ? payload.newly_added_items : o.newly_added_items,
+                      newly_added_summary: payload.newly_added_summary !== undefined ? payload.newly_added_summary : o.newly_added_summary,
                       kds_cleared: false,
                       last_modified_at: new Date().toISOString()
                     };
@@ -2589,20 +2595,32 @@ export default function App() {
   };
 
   // Toggle individual dish item served/delivered state (Syncs between Kitchen KDS and Customer QR Menu)
-  const handleToggleItemServed = (orderId, itemIndex, staffName = null, staffId = null) => {
+  // Toggle individual dish item served/delivered state (Syncs between Kitchen KDS and Customer QR Menu)
+  const handleToggleItemServed = (orderId, itemIndex, staffName = null, staffId = null, itemObj = null) => {
     if (!orderId || orderId === 'undefined' || orderId === 'null') return;
     const targetOrder = orders.find(o => matchesOrderId(o, orderId));
     if (!targetOrder) return;
+
+    let targetIndex = itemIndex;
+    if (itemObj && Array.isArray(targetOrder.items)) {
+      const fIdx = targetOrder.items.findIndex(it => 
+        (itemObj.id && it.id && it.id === itemObj.id) ||
+        (itemObj.name && it.name && it.name.toLowerCase().trim() === itemObj.name.toLowerCase().trim() && (it.round === itemObj.round || !itemObj.round))
+      );
+      if (fIdx >= 0) targetIndex = fIdx;
+    }
 
     const collectorName = staffName || authUser?.name || 'Floor Server';
     const collectorId = staffId || authUser?.waiter_id || authUser?.id || 'WTR-101';
 
     let newlyDeliveredAt = null;
+    let updatedItems = [];
+    let updatedNextStatus = 'Served';
 
     const updated = orders.map(o => {
       if (!matchesOrderId(o, orderId)) return o;
       const items = (o.items || []).map((it, idx) => {
-        if (idx !== itemIndex) return it;
+        if (idx !== targetIndex) return it;
         const nextServed = !it.is_served;
         return {
           ...it,
@@ -2613,11 +2631,13 @@ export default function App() {
           served_by_waiter_name: nextServed ? collectorName : null
         };
       });
+      updatedItems = items;
 
       const allServed = items.length > 0 && items.every(i => i.is_served);
       const anyServed = items.some(i => i.is_served);
       const allReadyOrServed = items.length > 0 && items.every(i => i.is_served || i.kitchen_status === 'ready');
       const nextStatus = allServed ? 'Served' : (allReadyOrServed ? 'Ready' : (anyServed ? 'Preparing' : o.status));
+      updatedNextStatus = nextStatus;
       const deliveredAt = anyServed ? (o.food_delivered_at || Date.now()) : (allServed ? Date.now() : o.food_delivered_at);
       if (anyServed && !o.food_delivered_at) {
         newlyDeliveredAt = deliveredAt;
@@ -2626,10 +2646,12 @@ export default function App() {
       return {
         ...o,
         items,
+        order_items: items,
         status: nextStatus,
         food_delivered_at: deliveredAt,
         delivered_by_waiter_id: collectorId,
-        delivered_by_waiter_name: collectorName
+        delivered_by_waiter_name: collectorName,
+        last_modified_at: new Date().toISOString()
       };
     });
 
@@ -2637,11 +2659,11 @@ export default function App() {
     setLocalStore('orders', updated);
 
     // If marked served, clear any matching food_ready service call
-    const targetItem = targetOrder.items?.[itemIndex];
+    const targetItem = targetOrder.items?.[targetIndex];
     const isNowServed = targetItem ? !targetItem.is_served : true;
     if (isNowServed) {
       setServiceCalls(prev => {
-        const nextCalls = prev.filter(c => !(c.type === 'food_ready' && (c.orderId === orderId || String(c.orderId) === String(orderId)) && (c.itemIndex === itemIndex || c.itemIndex === undefined)));
+        const nextCalls = prev.filter(c => !(c.type === 'food_ready' && (c.orderId === orderId || String(c.orderId) === String(orderId)) && (c.itemIndex === targetIndex || c.itemIndex === undefined)));
         setLocalStore('service_calls', nextCalls);
         return nextCalls;
       });
@@ -2675,13 +2697,24 @@ export default function App() {
       setLocalStore('tables', updatedTables);
     }
 
-    // Broadcast update via Supabase Realtime so Customer Menu on guest phone updates live
+    // Broadcast update via Supabase Realtime so Customer Menu and KDS update live
     try {
       const channel = supabase.channel('restaurant_alerts');
       channel.send({
         type: 'broadcast',
         event: 'order_item_served_updated',
-        payload: { orderId, itemIndex }
+        payload: { orderId, itemIndex: targetIndex }
+      });
+      channel.send({
+        type: 'broadcast',
+        event: 'order_items_updated',
+        payload: {
+          orderId: targetOrder.id,
+          orderNumber: targetOrder.order_number,
+          tableNumber: targetOrder.table_number,
+          items: updatedItems,
+          status: updatedNextStatus
+        }
       });
     } catch (e) {
       console.warn('Realtime item served broadcast error:', e);
@@ -2691,12 +2724,12 @@ export default function App() {
     try {
       updateOrderItemStatusInSupabase(
         targetOrder.supabase_order_id || targetOrder.id || targetOrder.order_number || orderId,
-        itemIndex,
+        targetItem?.name || targetIndex,
         isNowServed ? 'SERVED' : 'READY',
-        targetOrder
+        { ...targetOrder, items: updatedItems }
       );
       const cleanOrdId = String(targetOrder.id || orderId).replace('#', '');
-      fetch(`/api/orders/${cleanOrdId}/items/${itemIndex}/status`, {
+      fetch(`/api/orders/${cleanOrdId}/items/${targetIndex}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: isNowServed ? 'served' : 'ready' })
@@ -2709,33 +2742,49 @@ export default function App() {
   };
 
   // Toggle individual dish item ready/prepared state by Kitchen Chef
-  const handleToggleItemReady = (orderId, itemIndex) => {
+  const handleToggleItemReady = (orderId, itemIndex, itemObj = null) => {
     if (!orderId || orderId === 'undefined' || orderId === 'null') return;
     const targetOrder = orders.find(o => matchesOrderId(o, orderId));
     if (!targetOrder) return;
-    const targetItem = targetOrder.items?.[itemIndex];
+
+    let targetIndex = itemIndex;
+    if (itemObj && Array.isArray(targetOrder.items)) {
+      const fIdx = targetOrder.items.findIndex(it => 
+        (itemObj.id && it.id && it.id === itemObj.id) ||
+        (itemObj.name && it.name && it.name.toLowerCase().trim() === itemObj.name.toLowerCase().trim() && (it.round === itemObj.round || !itemObj.round))
+      );
+      if (fIdx >= 0) targetIndex = fIdx;
+    }
+
+    const targetItem = targetOrder.items?.[targetIndex];
     if (!targetItem) return;
 
     const nextReadyState = targetItem.kitchen_status === 'ready' ? 'preparing' : 'ready';
 
+    let updatedItems = [];
+    let updatedNextStatus = 'Preparing';
     const updated = orders.map(o => {
       if (!matchesOrderId(o, orderId)) return o;
       const items = (o.items || []).map((it, idx) => {
-        if (idx !== itemIndex) return it;
+        if (idx !== targetIndex) return it;
         return {
           ...it,
           kitchen_status: nextReadyState,
           ready_at: nextReadyState === 'ready' ? Date.now() : null
         };
       });
+      updatedItems = items;
 
       const allReady = items.length > 0 && items.every(i => i.kitchen_status === 'ready' || i.is_served);
       const nextStatus = allReady ? 'Ready' : (o.status === 'Ready' || o.status === 'Placed' ? 'Preparing' : o.status);
+      updatedNextStatus = nextStatus;
 
       return {
         ...o,
         items,
-        status: nextStatus
+        order_items: items,
+        status: nextStatus,
+        last_modified_at: new Date().toISOString()
       };
     });
 
@@ -2749,13 +2798,13 @@ export default function App() {
     // If marked ready, notify waiters via voice, push, and add to Calls section!
     if (nextReadyState === 'ready') {
       const foodReadyCall = {
-        id: `ready_item_${orderId}_${itemIndex}_${Date.now()}`,
+        id: `ready_item_${orderId}_${targetIndex}_${Date.now()}`,
         tableNumber: cleanTbl,
         label: `Dish Ready: ${qty}x ${itemName}`,
         type: 'food_ready',
         orderId,
         orderNumber: targetOrder.order_number || targetOrder.id,
-        itemIndex,
+        itemIndex: targetIndex,
         itemsSummary: `${qty}x ${itemName}`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         timestamp: Date.now()
@@ -2764,7 +2813,7 @@ export default function App() {
         const nextCalls = [foodReadyCall, ...prev.filter(c => {
           if (c.type !== 'food_ready') return true;
           const matchesOrder = matchesOrderId(targetOrder, c.orderId);
-          const matchesItem = (c.itemIndex === itemIndex) || (itemName && (c.itemName === itemName || c.dishName === itemName || c.itemsSummary?.includes(itemName)));
+          const matchesItem = (c.itemIndex === targetIndex) || (itemName && (c.itemName === itemName || c.dishName === itemName || c.itemsSummary?.includes(itemName)));
           return !(matchesOrder && matchesItem);
         })];
         setLocalStore('service_calls', nextCalls);
@@ -2778,7 +2827,7 @@ export default function App() {
           itemsSummary: `${qty}x ${itemName}`
         });
       } else {
-        // Kitchen Chef ticked dish ready: gentle chime, NO waiter speech announcement!
+        // Kitchen Chef ticked dish ready: gentle chime
         playSound('kitchen_bell');
       }
 
@@ -2790,11 +2839,22 @@ export default function App() {
           event: 'order_item_ready',
           payload: {
             orderId: targetOrder.id,
-            itemIndex,
+            itemIndex: targetIndex,
             tableNumber: cleanTbl,
             itemName,
             qty,
             readyAt: Date.now()
+          }
+        });
+        channel.send({
+          type: 'broadcast',
+          event: 'order_items_updated',
+          payload: {
+            orderId: targetOrder.id,
+            orderNumber: targetOrder.order_number,
+            tableNumber: targetOrder.table_number,
+            items: updatedItems,
+            status: updatedNextStatus
           }
         });
       } catch (e) {
@@ -2806,7 +2866,7 @@ export default function App() {
         const nextCalls = prev.filter(c => {
           if (c.type !== 'food_ready') return true;
           const matchesOrder = matchesOrderId(targetOrder, c.orderId);
-          const matchesItem = (c.itemIndex === itemIndex) || (itemName && (c.itemName === itemName || c.dishName === itemName || c.itemsSummary?.includes(itemName)));
+          const matchesItem = (c.itemIndex === targetIndex) || (itemName && (c.itemName === itemName || c.dishName === itemName || c.itemsSummary?.includes(itemName)));
           return !(matchesOrder && matchesItem);
         });
         setLocalStore('service_calls', nextCalls);
@@ -2822,9 +2882,20 @@ export default function App() {
           payload: {
             orderId: targetOrder.id,
             orderNumber: targetOrder.order_number || targetOrder.id,
-            itemIndex,
+            itemIndex: targetIndex,
             itemName,
             tableNumber: cleanTbl
+          }
+        });
+        channel.send({
+          type: 'broadcast',
+          event: 'order_items_updated',
+          payload: {
+            orderId: targetOrder.id,
+            orderNumber: targetOrder.order_number,
+            tableNumber: targetOrder.table_number,
+            items: updatedItems,
+            status: updatedNextStatus
           }
         });
       } catch (e) {
@@ -2836,13 +2907,13 @@ export default function App() {
     try {
       updateOrderItemStatusInSupabase(
         targetOrder.supabase_order_id || targetOrder.id || targetOrder.order_number || orderId,
-        itemIndex,
+        targetItem.name || targetIndex,
         nextReadyState === 'ready' ? 'READY' : 'PREPARING',
-        targetOrder
+        { ...targetOrder, items: updatedItems }
       );
       // Dual persistence: sync with FastAPI local orders database
       const cleanOrdId = String(targetOrder.id || orderId).replace('#', '');
-      fetch(`/api/orders/${cleanOrdId}/items/${itemIndex}/status`, {
+      fetch(`/api/orders/${cleanOrdId}/items/${targetIndex}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextReadyState })
@@ -3118,6 +3189,17 @@ export default function App() {
     const anyReadyOrCooking = newItems.some(i => i.kitchen_status === 'ready' || i.kitchen_status === 'preparing');
     const nextStatus = allServed ? 'Served' : (allReady ? 'Ready' : (anyReadyOrCooking ? 'Preparing' : 'Placed'));
 
+    const hasAnyAddon = newItems.some(it => it.is_addon || (it.round && it.round > 1));
+    const filteredNewlyAdded = (targetOrder.newly_added_items || []).filter(nai => 
+      newItems.some(it => 
+        (it.id && nai.id && it.id === nai.id) ||
+        (it.name && nai.name && it.name.toLowerCase().trim() === nai.name.toLowerCase().trim())
+      )
+    );
+    const filteredNewlyAddedSummary = filteredNewlyAdded.length > 0 
+      ? filteredNewlyAdded.map(i => `${i.qty || i.quantity || 1}x ${i.name || i.item_name}`).join(', ')
+      : null;
+
     const updated = orders.map(o => {
       if (!matchesOrderId(o, orderId)) return o;
       return {
@@ -3130,6 +3212,9 @@ export default function App() {
         total_amount: total,
         items_summary: summaryStr,
         status: nextStatus,
+        is_addon: hasAnyAddon,
+        newly_added_items: filteredNewlyAdded.length > 0 ? filteredNewlyAdded : null,
+        newly_added_summary: filteredNewlyAddedSummary,
         last_modified_at: new Date().toISOString(),
         modified_by: actorName
       };
@@ -3228,6 +3313,9 @@ export default function App() {
         total,
         items_summary: summaryStr,
         status: nextStatus,
+        is_addon: hasAnyAddon,
+        newly_added_items: filteredNewlyAdded.length > 0 ? filteredNewlyAdded : null,
+        newly_added_summary: filteredNewlyAddedSummary,
         last_modified_at: new Date().toISOString()
       };
 
@@ -3366,48 +3454,23 @@ export default function App() {
       const mergedItems = [...parentBaseItems];
 
       (newOrder.items || []).forEach(newItem => {
-        // Only merge with an unserved existing item; if previous round item was already served, keep it served and add new item as fresh round
-        const existingIdx = mergedItems.findIndex(i => 
-          !i.is_served && (
-            (i.id && newItem.id && i.id === newItem.id) || 
-            (i.name && newItem.name && i.name.toLowerCase().trim() === newItem.name.toLowerCase().trim())
-          )
-        );
-
         const addedQty = Number(newItem.quantity || newItem.qty || 1);
         const isDeliveredByWaiter = Boolean(newItem.is_served);
         const targetKitchenStatus = isDeliveredByWaiter 
           ? 'served' 
           : (newItem.kitchen_status || 'placed');
 
-        if (existingIdx !== -1) {
-          const cur = mergedItems[existingIdx];
-          const curQty = Number(cur.quantity || cur.qty || 1);
-          const newQty = curQty + addedQty;
-          const unitPrice = Number(cur.price || cur.unit_price || newItem.price || 0);
-          mergedItems[existingIdx] = {
-            ...cur,
-            quantity: newQty,
-            qty: newQty,
-            total_price: Number((newQty * unitPrice).toFixed(2)),
-            kitchen_status: isDeliveredByWaiter ? cur.kitchen_status : targetKitchenStatus,
-            is_served: isDeliveredByWaiter ? cur.is_served : false,
-            served_at: isDeliveredByWaiter ? (newItem.served_at || Date.now()) : cur.served_at,
-            round: roundNumber,
-            is_addon: true
-          };
-        } else {
-          mergedItems.push({
-            ...newItem,
-            quantity: addedQty,
-            qty: addedQty,
-            round: roundNumber,
-            is_addon: true,
-            kitchen_status: targetKitchenStatus,
-            is_served: isDeliveredByWaiter,
-            served_at: isDeliveredByWaiter ? (newItem.served_at || Date.now()) : null
-          });
-        }
+        mergedItems.push({
+          ...newItem,
+          id: newItem.id || `addon_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+          quantity: addedQty,
+          qty: addedQty,
+          round: roundNumber,
+          is_addon: true,
+          kitchen_status: targetKitchenStatus,
+          is_served: isDeliveredByWaiter,
+          served_at: isDeliveredByWaiter ? (newItem.served_at || Date.now()) : null
+        });
       });
 
       const addedSubtotal = parseFloat(newOrder.subtotal || 0);
@@ -3422,8 +3485,8 @@ export default function App() {
       const summaryStr = mergedItems.map(i => `${i.quantity || i.qty || 1}x ${i.name || i.item_name}`).join(', ');
 
       const allItemsServed = mergedItems.length > 0 && mergedItems.every(i => i.is_served);
-      const hasReadyItems = mergedItems.some(i => (i.kitchen_status === 'ready' || i.kitchen_status === 'prepared') && !i.is_served);
-      const nextOrderStatus = allItemsServed ? 'Served' : (hasReadyItems ? 'Ready' : 'Placed');
+      const allItemsReady = mergedItems.length > 0 && mergedItems.every(i => i.kitchen_status === 'ready' || i.is_served);
+      const nextOrderStatus = allItemsServed ? 'Served' : (allItemsReady ? 'Ready' : 'Placed');
 
       finalOrder = {
         ...activeParent,

@@ -476,13 +476,14 @@ export default function WaiterView({
   };
 
   const handleDeliverReadyDish = (dish) => {
+    const itemObj = { id: dish.id, name: dish.dishName || dish.name, round: dish.round };
     if (dish.orderId && dish.itemIndex !== undefined && onToggleItemServed) {
-      onToggleItemServed(dish.orderId, dish.itemIndex, activeWaiterName, activeWaiterId);
+      onToggleItemServed(dish.orderId, dish.itemIndex, activeWaiterName, activeWaiterId, itemObj);
     } else if (dish.orderId && dish.dishName && onToggleItemServed) {
       const ord = orders.find(o => o.id === dish.orderId || o.order_number === dish.orderId);
       const matchIdx = ord?.items?.findIndex(it => it.name === dish.dishName || it.id === dish.id);
       if (matchIdx !== undefined && matchIdx >= 0) {
-        onToggleItemServed(dish.orderId, matchIdx, activeWaiterName, activeWaiterId);
+        onToggleItemServed(dish.orderId, matchIdx, activeWaiterName, activeWaiterId, itemObj);
       } else if (dish.tableNumber && onMarkAllTableItemsServed) {
         onMarkAllTableItemsServed(dish.tableNumber, activeWaiterName, activeWaiterId);
       }
@@ -2979,7 +2980,7 @@ export default function WaiterView({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    if (onToggleItemServed) onToggleItemServed(d.orderId, d.itemIndex, activeWaiterName, activeWaiterId);
+                                    if (onToggleItemServed) onToggleItemServed(d.orderId, d.itemIndex, activeWaiterName, activeWaiterId, { id: d.id, name: d.dishName || d.name, round: d.round });
                                     if (audioEnabled) playSound('success');
                                   }}
                                   className={`px-2.5 py-1.5 rounded-lg text-white font-bold text-[10px] cursor-pointer flex items-center space-x-1 ${
