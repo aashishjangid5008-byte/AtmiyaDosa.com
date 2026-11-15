@@ -117,7 +117,7 @@ CANONICAL_TABLES: Dict[str, Dict[str, Any]] = {
         "id": f"T{i:02d}",
         "number": f"T{i:02d}",
         "capacity": 4 if i <= 10 else (6 if i <= 14 else 8),
-        "zone": "Main Hall" if i <= 6 else ("AC Section" if i <= 10 else ("Patio Garden" if i <= 13 else "Family Section")),
+        "zone": None,
         "status": "available",
         "current_order_id": None,
         "timing": None

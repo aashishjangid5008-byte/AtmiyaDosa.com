@@ -1158,7 +1158,7 @@ export default function ExecutiveDashboard({
     try {
       const { data: sessData, error: sessErr } = await supabase
         .from('table_sessions')
-        .select('*, restaurant_tables(table_number, floor, zone)')
+        .select('*, restaurant_tables(table_number, floor)')
         .eq('restaurant_id', RESTAURANT_ID)
         .order('opened_at', { ascending: false });
 

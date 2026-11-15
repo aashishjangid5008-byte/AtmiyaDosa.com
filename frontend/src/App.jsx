@@ -1346,7 +1346,6 @@ export default function App() {
               id: tableNumStr,
               number: tableNumStr,
               capacity: 4,
-              zone: 'Main Hall',
               status: 'occupied',
               current_order_id: matchOrd?.id,
               current_customer_name: matchOrd?.customer_name,
@@ -3623,7 +3622,6 @@ export default function App() {
       id: cleanNumber,
       number: cleanNumber,
       capacity: parseInt(tableData.capacity, 10) || 4,
-      zone: tableData.zone || 'Main Hall',
       status: 'available',
       current_order_id: null,
       timing: null
@@ -3656,7 +3654,7 @@ export default function App() {
       employeeRole: authUser?.role || 'Admin',
       tableNumber: cleanNumber,
       actionType: 'TABLE_ADDED',
-      details: `Added new dining table ${cleanNumber} (${tableObj.zone}, Capacity: ${tableObj.capacity})`,
+      details: `Added new dining table ${cleanNumber} (Capacity: ${tableObj.capacity})`,
       type: 'table',
       color: 'blue'
     });
@@ -3794,7 +3792,6 @@ export default function App() {
           id: tableNumStr,
           number: tableNumStr,
           capacity: 4,
-          zone: 'Main Hall',
           status: 'occupied',
           current_order_id: matchOrd?.id,
           current_customer_name: matchOrd?.customer_name,

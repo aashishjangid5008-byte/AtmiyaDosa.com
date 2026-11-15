@@ -5,7 +5,7 @@ class DiningTable(BaseModel):
     id: str
     number: str
     capacity: int = 4
-    zone: str = "Main Hall"
+    zone: Optional[str] = None
     status: str = "available"  # available, occupied, billing, reserved
     current_order_id: Optional[str] = None
     timing: Optional[str] = None

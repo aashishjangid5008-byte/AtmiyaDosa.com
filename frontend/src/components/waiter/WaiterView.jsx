@@ -109,7 +109,6 @@ export default function WaiterView({
   const [serviceFilter, setServiceFilter] = useState('all'); // 'all' | 'ready' | 'calls'
   const [showShiftDrawer, setShowShiftDrawer] = useState(false);
   const [tableSearch, setTableSearch] = useState('');
-  const [selectedZone, setSelectedZone] = useState('All');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('All');
   
   // Modals
@@ -874,11 +873,6 @@ export default function WaiterView({
     setShiftTarget('');
   };
 
-  // Resolve table zone robustly
-  const getTableZone = (tbl) => {
-    return tbl.zone || '';
-  };
-
   // Filter Tables
   const filteredTables = tables.filter(tbl => {
     if (tableSearch.trim()) {
@@ -886,10 +880,6 @@ export default function WaiterView({
       const numMatch = String(tbl.number || '').toLowerCase().includes(q);
       const custMatch = String(tbl.current_customer_name || '').toLowerCase().includes(q);
       if (!numMatch && !custMatch) return false;
-    }
-    if (selectedZone !== 'All') {
-      const zoneStr = getTableZone(tbl);
-      if (zoneStr !== selectedZone) return false;
     }
     if (selectedStatusFilter === 'Available') return tbl.status === 'available';
     if (selectedStatusFilter === 'Occupied') return tbl.status === 'occupied';
@@ -1470,52 +1460,9 @@ export default function WaiterView({
         {/* 4A. MAIN FLOOR MAP CANVAS */}
         <div className="w-full lg:flex-1 min-w-0 space-y-3.5">
           
-          {/* Zone & Status Filter Bar + Search (Adaptive 2-Tier Mobile-Friendly Layout) */}
+          {/* Status Filter Bar + Search */}
           <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-xs space-y-2.5">
-            {/* Tier 1: Floor Zones (Only visible when 2+ distinct floor zones exist) */}
-            {(() => {
-              const zoneList = [{ id: 'All', label: 'All Floor Zones' }];
-              const seenZones = new Set(['All', '']);
-              (tables || []).forEach(t => {
-                const z = (getTableZone(t) || '').trim();
-                if (z && !seenZones.has(z)) {
-                  seenZones.add(z);
-                  zoneList.push({ id: z, label: z });
-                }
-              });
-              if (zoneList.length <= 2) return null;
-              return (
-                <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar scroll-smooth w-full py-0.5">
-                  {zoneList.map(z => {
-                    const zoneCount = z.id === 'All' 
-                      ? tables.length 
-                      : tables.filter(t => (getTableZone(t) || '').trim() === z.id).length;
-                    const isSelected = selectedZone === z.id;
-                    return (
-                      <button
-                        key={z.id}
-                        type="button"
-                        onClick={() => setSelectedZone(z.id)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer shrink-0 flex items-center space-x-1.5 min-h-[36px] ${
-                          isSelected 
-                            ? 'bg-slate-900 text-white shadow-xs' 
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
-                      >
-                        <span>{z.label}</span>
-                        <span className={`px-1.5 py-0.2 rounded-md font-mono text-[10px] font-bold ${
-                          isSelected ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-600'
-                        }`}>
-                          {zoneCount}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              );
-            })()}
-
-            {/* Tier 2: Search Input + Status Filter Chips */}
+            {/* Search Input + Status Filter Chips */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               {/* Table Search Input */}
               <div className="relative w-full sm:w-56 shrink-0">
@@ -1613,7 +1560,6 @@ export default function WaiterView({
               // Dining elapsed time
               const seatedTime = table.timing ? table.timing : (activeTableOrders[0]?.placed_at ? new Date(activeTableOrders[0].placed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null);
               const tableCap = Number(table.capacity) || 4;
-              const tableZone = getTableZone(table);
 
               // Dining duration
               const elapsedDiningMins = table.food_delivered_at ? Math.floor((now - Number(table.food_delivered_at)) / 60000) : null;

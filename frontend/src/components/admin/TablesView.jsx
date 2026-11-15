@@ -56,7 +56,6 @@ export default function TablesView({
   currentLang,
   theme = 'light'
 }) {
-  const [selectedZone, setSelectedZone] = useState('All');
   const [showAddModal, setShowAddModal] = useState(false);
   const [addStep, setAddStep] = useState('form'); // 'form' or 'created'
   const [createdTable, setCreatedTable] = useState(null);
@@ -69,16 +68,13 @@ export default function TablesView({
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [vacateConfirmState, setVacateConfirmState] = useState(null); // { step: 1 | 2, table, method, amount }
   
-  const [newTable, setNewTable] = useState({ number: '', capacity: 4, zone: 'Main Hall' });
+  const [newTable, setNewTable] = useState({ number: '', capacity: 4 });
 
   // 10-Second Reactive Clock for Dining & Turnover Tracking
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(Date.now()), 10000);
     return () => clearInterval(timer);
   }, []);
-
-  // 30-Minute Automatic Table Vacate Engine removed as requested: Tables remain occupied until staff explicitly settles or vacates
-  const zones = ['All', 'Main Hall', 'AC Section', 'Patio Garden', 'Family Section'];
 
   const filteredTables = tables;
 
@@ -194,7 +190,7 @@ export default function TablesView({
 
   const handleOpenAddModal = () => {
     const autoNum = getNextTableNumber();
-    setNewTable({ number: autoNum, capacity: 4, zone: 'Main Hall' });
+    setNewTable({ number: autoNum, capacity: 4 });
     setAddStep('form');
     setCreatedTable(null);
     setShowAddModal(true);
@@ -1190,23 +1186,6 @@ export default function TablesView({
                     />
                   </div>
 
-                  {/* Floor Zone Selection */}
-                  <div>
-                    <label className="block text-xs font-black text-slate-800 uppercase tracking-wider mb-1.5">
-                      Floor Zone Section
-                    </label>
-                    <select
-                      value={newTable.zone}
-                      onChange={(e) => setNewTable({ ...newTable, zone: e.target.value })}
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold focus:outline-none focus:border-orange-500 cursor-pointer bg-white"
-                    >
-                      <option value="Main Hall">Main Hall</option>
-                      <option value="AC Section">AC Section</option>
-                      <option value="Patio Garden">Patio Garden</option>
-                      <option value="Family Section">Family Section</option>
-                      <option value="Rooftop Lounge">Rooftop Lounge</option>
-                    </select>
-                  </div>
 
                   {/* Touchless QR Guest Flow Highlight Card */}
                   <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200 text-xs space-y-2">
@@ -1364,7 +1343,7 @@ export default function TablesView({
                     Table {createdTable.number} is Live on the Floor Plan!
                   </h4>
                   <p className="text-xs text-emerald-800 font-medium">
-                    The dining table has been provisioned ({createdTable.zone}, {createdTable.capacity} Guests). Its dedicated QR code is ready for customer table ordering.
+                    The dining table has been provisioned (Capacity: {createdTable.capacity || 4} Guests). Its dedicated QR code is ready for customer table ordering.
                   </p>
                 </div>
 
@@ -1441,7 +1420,7 @@ export default function TablesView({
                   <button
                     onClick={() => {
                       const autoNum = getNextTableNumber();
-                      setNewTable({ number: autoNum, capacity: 4, zone: 'Main Hall' });
+                      setNewTable({ number: autoNum, capacity: 4 });
                       setAddStep('form');
                       setCreatedTable(null);
                     }}

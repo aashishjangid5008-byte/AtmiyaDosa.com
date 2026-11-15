@@ -24,7 +24,7 @@ import { playSound } from '../../lib/sound';
 import { generateTableSecurityKey, getTableQrUrl, getActiveQrBaseUrl, isPrivateOrLocalAddress } from '../../lib/security';
 
 export default function QRManagementView({ tables = [], orders = [], restaurantSettings, currentLang }) {
-  const [activeTable, setActiveTable] = useState(() => tables[0] || { number: 'T01', zone: 'Main Hall', capacity: 4 });
+  const [activeTable, setActiveTable] = useState(() => tables[0] || { number: 'T01', capacity: 4 });
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
@@ -259,8 +259,7 @@ export default function QRManagementView({ tables = [], orders = [], restaurantS
     if (!searchQuery.trim()) return tables;
     const q = searchQuery.toLowerCase().trim();
     return tables.filter(tbl => 
-      tbl.number.toLowerCase().includes(q) || 
-      (tbl.zone || '').toLowerCase().includes(q)
+      tbl.number.toLowerCase().includes(q)
     );
   }, [tables, searchQuery]);
 

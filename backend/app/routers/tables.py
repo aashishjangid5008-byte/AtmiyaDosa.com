@@ -76,7 +76,7 @@ async def list_tables(request: Request):
                             "id": clean_code or t_num,
                             "number": clean_code or t_num,
                             "capacity": dt.get("capacity", 4),
-                            "zone": dt.get("zone", "Main Hall"),
+                            "zone": dt.get("zone"),
                             "status": norm_status,
                             "current_order_id": None,
                             "timing": None
@@ -139,7 +139,7 @@ async def add_table(
         "id": clean_code,
         "number": clean_code,
         "capacity": body.capacity,
-        "zone": body.zone or "Main Hall",
+        "zone": body.zone,
         "status": "available",
         "current_order_id": None,
         "timing": None
@@ -162,7 +162,7 @@ async def add_table(
                     "restaurant_id": RESTAURANT_ID,
                     "table_number": supabase_tnum,
                     "capacity": body.capacity,
-                    "zone": body.zone or "Main Hall",
+                    "zone": body.zone,
                     "status": "VACANT",
                     "floor": "Ground Floor"
                 }
@@ -208,7 +208,7 @@ async def update_table(
             "id": clean_code,
             "number": clean_code,
             "capacity": body.capacity or 4,
-            "zone": body.zone or "Main Hall",
+            "zone": body.zone,
             "status": body.status or "available",
             "current_order_id": body.current_order_id,
             "timing": body.timing
@@ -405,7 +405,7 @@ async def settle_table_bill(
             "id": clean_num,
             "number": clean_num,
             "capacity": 4,
-            "zone": "Main Hall",
+            "zone": None,
             "status": "available",
             "current_order_id": None,
             "timing": None

@@ -172,12 +172,10 @@ export const INITIAL_SETTINGS = {
 
 export const INITIAL_TABLES = Array.from({ length: 16 }, (_, i) => {
   const num = (i + 1).toString().padStart(2, '0');
-  const zones = ['Main Hall', 'AC Section', 'Family Section', 'Patio Garden'];
   return {
     id: `T${num}`,
     number: `T${num}`,
     capacity: (i % 3 === 0) ? 6 : (i % 2 === 0 ? 2 : 4),
-    zone: zones[i % zones.length],
     status: 'available',
     current_order_id: null,
     timing: null

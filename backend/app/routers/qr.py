@@ -79,7 +79,7 @@ async def get_table_qr_meta(table_number: str, request: Request):
 
     table = CANONICAL_TABLES.get(clean_num)
     capacity = table.get("capacity", 4) if table else 4
-    zone = table.get("zone", "Main Hall") if table else "Main Hall"
+    zone = table.get("zone") if table else None
 
     return {
         "success": True,

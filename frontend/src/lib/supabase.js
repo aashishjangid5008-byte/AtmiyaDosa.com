@@ -251,8 +251,7 @@ export const dispatchOrderToSupabase = async ({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             number: cleanTableCode,
-            capacity: 4,
-            zone: 'Main Hall'
+            capacity: 4
           })
         });
         if (createRes.ok) {
@@ -1724,7 +1723,6 @@ export const fetchLiveTablesFromSupabase = async () => {
           id: cleanCode || tNum,
           number: cleanCode || tNum,
           capacity: parseInt(dt.capacity, 10) || 4,
-          zone: dt.zone || 'Main Hall',
           status: st === 'OCCUPIED' ? 'occupied' : 'available',
           current_order_id: null,
           timing: null
@@ -1753,9 +1751,9 @@ export const saveTableToSupabaseApi = async (tableObj) => {
       restaurant_id: RESTAURANT_ID,
       table_number: supabaseTNum,
       capacity: parseInt(tableObj.capacity, 10) || 4,
-      zone: tableObj.zone || 'Main Hall',
+      zone: tableObj.zone || null,
       status: (tableObj.status || 'available').toLowerCase() === 'occupied' ? 'OCCUPIED' : 'VACANT',
-      floor: tableObj.floor || 'Ground Floor'
+      floor: tableObj.floor || null
     };
 
     const { data, error } = await supabaseAdmin
@@ -1780,8 +1778,7 @@ export const saveTableToSupabaseApi = async (tableObj) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         number: cleanNumber,
-        capacity: parseInt(tableObj.capacity, 10) || 4,
-        zone: tableObj.zone || 'Main Hall'
+        capacity: parseInt(tableObj.capacity, 10) || 4
       })
     });
   } catch (apiErr) {}
