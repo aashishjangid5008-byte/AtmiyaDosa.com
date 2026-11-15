@@ -3232,11 +3232,12 @@ export default function App() {
   };
 
   const handlePlaceCustomerOrder = async (rawOrder) => {
-    // Client-side XSS and injection sanitization
-    const newOrder = sanitizeOrderPayload(rawOrder);
-    const isCustomerScreen = viewMode === 'customer' || Boolean(scannedTable);
-    const isStaffSession = Boolean(authUser) && !isCustomerScreen;
-    const userRole = isStaffSession ? authUser?.role : 'customer';
+    try {
+      // Client-side XSS and injection sanitization
+      const newOrder = sanitizeOrderPayload(rawOrder);
+      const isCustomerScreen = viewMode === 'customer' || Boolean(scannedTable);
+      const isStaffSession = Boolean(authUser) && !isCustomerScreen;
+      const userRole = isStaffSession ? authUser?.role : 'customer';
 
     // Ensure session table lock is reinforced upon customer order placement
     if (viewMode === 'customer' && !authUser) {
@@ -3318,9 +3319,8 @@ export default function App() {
     let finalOrder = newOrder;
     let updated = [];
 
-    if (isAddonOrder) {
+    if (isAddonOrder && activeParent) {
       // MERGE INTO CONTINUOUS TABLE BILL: Do not generate a separate bill for water or add-ons!
-      const activeParent = existingActiveOrders[0];
       const parentBaseItems = (Array.isArray(activeParent.items) && activeParent.items.length > 0)
         ? activeParent.items
         : (Array.isArray(activeParent.order_items) && activeParent.order_items.length > 0
@@ -3350,7 +3350,11 @@ export default function App() {
                 : []));
       const mergedItems = [...parentBaseItems];
 
-      (newOrder.items || []).forEach(newItem => {
+      const newItemsList = (Array.isArray(newOrder.items) && newOrder.items.length > 0)
+        ? newOrder.items
+        : (Array.isArray(newOrder.order_items) && newOrder.order_items.length > 0 ? newOrder.order_items : []);
+
+      newItemsList.forEach(newItem => {
         const addedQty = Number(newItem.quantity || newItem.qty || 1);
         const isDeliveredByWaiter = Boolean(newItem.is_served);
         const targetKitchenStatus = isDeliveredByWaiter 
@@ -3362,6 +3366,7 @@ export default function App() {
           id: newItem.id || `addon_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
           quantity: addedQty,
           qty: addedQty,
+          price: Number(newItem.price || newItem.unit_price || newItem.finalPrice || 0),
           round: roundNumber,
           is_addon: true,
           kitchen_status: targetKitchenStatus,
@@ -3375,10 +3380,12 @@ export default function App() {
       const addedDiscount = parseFloat(newOrder.discount || 0);
       const addedTotal = parseFloat(newOrder.total || newOrder.total_amount || 0);
 
-      const cumulativeSubtotal = Number((parseFloat(activeParent.subtotal || 0) + addedSubtotal).toFixed(2));
+      const itemsSum = Number(mergedItems.reduce((acc, it) => acc + (Number(it.price || it.unit_price || it.finalPrice || 0) * Number(it.quantity || it.qty || 1)), 0).toFixed(2));
+      const fallbackSubtotal = Number((parseFloat(activeParent.subtotal || 0) + addedSubtotal).toFixed(2));
+      const cumulativeSubtotal = itemsSum > 0 ? Math.max(itemsSum, fallbackSubtotal) : fallbackSubtotal;
       const cumulativeTax = 0;
       const cumulativeDiscount = Number((parseFloat(activeParent.discount || 0) + addedDiscount).toFixed(2));
-      const cumulativeTotal = Number((parseFloat(activeParent.total || activeParent.total_amount || 0) + addedTotal).toFixed(2));
+      const cumulativeTotal = Math.max(0, Number((cumulativeSubtotal - cumulativeDiscount).toFixed(2)));
       const summaryStr = mergedItems.map(i => `${i.quantity || i.qty || 1}x ${i.name || i.item_name}`).join(', ');
 
       const allItemsServed = mergedItems.length > 0 && mergedItems.every(i => i.is_served);
@@ -3405,8 +3412,8 @@ export default function App() {
         status: nextOrderStatus,
         payment_status: 'Pending Cash', // Continuous bill remains pending until final table checkout
         kds_cleared: false, // CRITICAL: Reset kds_cleared so fresh add-on appears in KDS!
-        newly_added_items: newOrder.items || [],
-        newly_added_summary: newOrder.items_summary || (newOrder.items || []).map(i => `${i.qty || i.quantity || 1}x ${i.name}`).join(', '),
+        newly_added_items: newItemsList,
+        newly_added_summary: newOrder.items_summary || newItemsList.map(i => `${i.qty || i.quantity || 1}x ${i.name}`).join(', '),
         last_addon_at: new Date().toISOString(),
         last_modified_at: new Date().toISOString(),
         special_note: [activeParent.special_note, newOrder.special_note]
@@ -3416,7 +3423,12 @@ export default function App() {
           .join(' • ') || null
       };
 
-      updated = orders.map(o => o.id === activeParent.id ? finalOrder : o);
+      const existsInOrders = orders.some(o => o.id === activeParent.id || matchesOrderId(o, activeParent.id));
+      if (existsInOrders) {
+        updated = orders.map(o => (o.id === activeParent.id || matchesOrderId(o, activeParent.id)) ? finalOrder : o);
+      } else {
+        updated = [finalOrder, ...orders];
+      }
     } else {
       updated = [newOrder, ...orders];
     }
@@ -3517,7 +3529,7 @@ export default function App() {
 
       if (supaResult && supaResult.sessionId) {
         // Enrich local order record with Supabase Session ID and DB Order UUID
-        const enrichedOrders = updated.map(o => o.id === finalOrder.id ? {
+        const enrichedOrders = updated.map(o => (o.id === finalOrder.id || matchesOrderId(o, finalOrder.id)) ? {
           ...o,
           supabase_order_id: supaResult.order?.id || o.supabase_order_id || null,
           session_id: supaResult.sessionId,
@@ -3571,7 +3583,16 @@ export default function App() {
       console.warn('[SUPABASE] Broadcast new_order_placed notice:', bcErr);
     }
 
-    return finalOrder.id;
+      return finalOrder.id;
+    } catch (orderPlacementError) {
+      console.error('[ORDER] Critical failure in handlePlaceCustomerOrder:', orderPlacementError);
+      setActiveToast({
+        title: '⚠️ Order Notice',
+        message: `Order could not be saved: ${orderPlacementError?.message || 'Internal processing error'}`,
+        type: 'error'
+      });
+      return null;
+    }
   };
 
   const handleAddCustomerPoints = (customerId, points = 100) => {
