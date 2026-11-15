@@ -2646,8 +2646,28 @@ export default function WaiterView({
         const primaryOrder = tOrders[0];
         const allDishes = [];
         tOrders.forEach(ord => {
-          (ord.items || []).forEach((it, idx) => {
-            const hasExplicitStatuses = (ord.items || []).some(i => i.kitchen_status);
+          let list = (Array.isArray(ord.items) && ord.items.length > 0)
+            ? ord.items
+            : (Array.isArray(ord.order_items) && ord.order_items.length > 0 ? ord.order_items : []);
+
+          if (list.length === 0 && ord.items_summary && typeof ord.items_summary === 'string') {
+            const parts = ord.items_summary.split(',').map(s => s.trim()).filter(Boolean);
+            list = parts.map((part, pIdx) => {
+              const m = part.match(/^(\d+)x?\s*(.+)$/i);
+              return {
+                id: `summary_${ord.id}_${pIdx}`,
+                name: m ? m[2].trim() : part,
+                qty: m ? parseInt(m[1], 10) : 1,
+                price: 0,
+                kitchen_status: ord.status === 'Ready' ? 'ready' : 'placed',
+                is_served: false,
+                round: 1
+              };
+            });
+          }
+
+          list.forEach((it, idx) => {
+            const hasExplicitStatuses = list.some(i => i.kitchen_status);
             const isItemServed = Boolean(it.is_served);
             const isItemReady = !isItemServed && (it.kitchen_status === 'ready' || it.kitchen_status === 'prepared' || (!hasExplicitStatuses && ord.status === 'Ready'));
             allDishes.push({
@@ -3148,7 +3168,27 @@ export default function WaiterView({
         const activeOrder = tOrders[0] || null;
         const allItems = [];
         tOrders.forEach(o => {
-          (o.items || []).forEach((it, idx) => allItems.push({
+          let list = (Array.isArray(o.items) && o.items.length > 0)
+            ? o.items
+            : (Array.isArray(o.order_items) && o.order_items.length > 0 ? o.order_items : []);
+
+          if (list.length === 0 && o.items_summary && typeof o.items_summary === 'string') {
+            const parts = o.items_summary.split(',').map(s => s.trim()).filter(Boolean);
+            list = parts.map((part, pIdx) => {
+              const m = part.match(/^(\d+)x?\s*(.+)$/i);
+              return {
+                id: `summary_${o.id}_${pIdx}`,
+                name: m ? m[2].trim() : part,
+                qty: m ? parseInt(m[1], 10) : 1,
+                price: 0,
+                kitchen_status: 'placed',
+                is_served: false,
+                round: 1
+              };
+            });
+          }
+
+          list.forEach((it, idx) => allItems.push({
             ...it,
             orderId: o.id || o.order_number,
             itemIndex: idx

@@ -1144,10 +1144,12 @@ export default function App() {
 
           // If items were recently modified on this local client (<15s), briefly protect in-flight changes
           const isRecentlyModified = localMatch.last_modified_at && (syncNow - new Date(localMatch.last_modified_at).getTime() < 15000);
-          // DB is the authoritative source of truth for the list of items; deleted items are never resurrected
-          const dbItems = (mo.items && mo.items.length > 0)
+          const hasDbItems = Array.isArray(mo.items) && mo.items.length > 0;
+          const hasLocalItems = Array.isArray(localMatch.items) && localMatch.items.length > 0;
+          // DB is authoritative when it contains items. If DB returned 0 items but local order has dishes, PRESERVE local items!
+          const dbItems = hasDbItems
             ? mo.items
-            : ((isRecentlyModified && Array.isArray(localMatch.items) && localMatch.items.length > 0) ? localMatch.items : (mo.items || []));
+            : (hasLocalItems ? localMatch.items : (mo.items || []));
           const mergedItems = dbItems.map((dbItem, idx) => {
             const localItem = localMatch.items?.[idx] || (localMatch.items || []).find(it => it.name === dbItem.name && (it.round === dbItem.round || !dbItem.round));
             const isLocalPreparing = Boolean(localItem && (localItem.kitchen_status === 'preparing' || localItem.status === 'PREPARING'));
@@ -3149,20 +3151,27 @@ export default function App() {
       }
 
       if (resolvedOrderUuid) {
-        // 1. Update orders table with new subtotal, total, status AND items_summary
-        await supabase.from('orders').update({
+        // 1. Update orders table with new subtotal, total, status (items_summary column does NOT exist in orders)
+        const { error: ordErr } = await supabase.from('orders').update({
           subtotal,
           tax_amount: tax,
           total_amount: total,
-          items_summary: summaryStr,
           status: nextStatus.toUpperCase()
         }).eq('id', resolvedOrderUuid);
+        if (ordErr) console.warn('[SUPABASE] Update orders table notice:', ordErr.message);
 
-        // 2. Re-sync order_items table
-        await supabase.from('order_items').delete().eq('order_id', resolvedOrderUuid);
+        // 2. Fetch known valid menu_items ids to prevent foreign key constraint violations
+        let validMenuIds = new Set();
+        try {
+          const { data: menuList } = await supabase.from('menu_items').select('id');
+          if (menuList && Array.isArray(menuList)) {
+            menuList.forEach(m => validMenuIds.add(m.id));
+          }
+        } catch (e) {}
 
         const orderItemRows = newItems.map(item => {
           const isItemUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id);
+          const safeMenuId = (isItemUuid && validMenuIds.has(item.id)) ? item.id : null;
           const qty = parseInt(item.qty || item.quantity, 10) || 1;
           const unitPrice = parseFloat(item.price || item.unit_price) || 0;
           const rawStatus = String(item.kitchen_status || item.status || 'PLACED').toUpperCase();
@@ -3172,7 +3181,7 @@ export default function App() {
 
           return {
             order_id: resolvedOrderUuid,
-            menu_item_id: isItemUuid ? item.id : null,
+            menu_item_id: safeMenuId,
             item_name: item.name || item.item_name || 'Dish Item',
             quantity: qty,
             unit_price: unitPrice,
@@ -3183,10 +3192,17 @@ export default function App() {
         });
 
         if (orderItemRows.length > 0) {
-          await supabase.from('order_items').insert(orderItemRows);
+          // Clear previous items and insert updated list
+          await supabase.from('order_items').delete().eq('order_id', resolvedOrderUuid);
+          const { error: insErr } = await supabase.from('order_items').insert(orderItemRows);
+          if (insErr) {
+            console.warn('[SUPABASE] order_items insert retry with menu_item_id: null:', insErr.message);
+            const safeRows = orderItemRows.map(r => ({ ...r, menu_item_id: null }));
+            await supabase.from('order_items').insert(safeRows);
+          }
         }
 
-        // 3. Update table_sessions running total if present
+        // 3. Update table_sessions running total & summary if present
         if (targetOrder.session_id) {
           try {
             await supabase.from('table_sessions').update({

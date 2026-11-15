@@ -456,14 +456,22 @@ export const dispatchOrderToSupabase = async ({
         };
       });
 
-      const { data: insertedItems, error: itemsErr } = await supabase
+      let { data: insertedItems, error: itemsErr } = await supabase
         .from('order_items')
         .insert(orderItemRows)
         .select();
 
       if (itemsErr) {
-        console.error('[SUPABASE] Order items insert error:', itemsErr.message);
-      } else {
+        console.warn('[SUPABASE] Order items insert error, retrying with menu_item_id: null...', itemsErr.message);
+        const safeRows = orderItemRows.map(r => ({ ...r, menu_item_id: null }));
+        const retryRes = await supabase.from('order_items').insert(safeRows).select();
+        if (retryRes.data) {
+          insertedItems = retryRes.data;
+          itemsErr = null;
+        }
+      }
+
+      if (!itemsErr) {
         console.log(`[SUPABASE] Successfully stored ${insertedItems?.length || orderItemRows.length} items for Order #${createdOrder.order_number || createdOrder.id} in Cloud DB!`);
       }
     }
