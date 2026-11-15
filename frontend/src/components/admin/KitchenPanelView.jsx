@@ -1183,7 +1183,7 @@ export default function KitchenPanelView({
               ? 'border-amber-300 ring-1 ring-amber-300/50'
               : isCooking 
                 ? 'border-blue-300' 
-                : (isReady || allChecked)
+                : allChecked
                   ? 'border-emerald-300 bg-emerald-50/10'
                   : 'border-slate-200 opacity-90'
         }`}
@@ -1204,7 +1204,7 @@ export default function KitchenPanelView({
                     ? 'bg-blue-50 text-blue-800 border-blue-200 animate-pulse'
                     : isCooking 
                       ? 'bg-blue-50 text-blue-800 border-blue-200' 
-                      : (isReady || allChecked)
+                      : allChecked
                         ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                         : 'bg-slate-100 text-slate-600 border-slate-200'
               }`}>
@@ -1214,7 +1214,7 @@ export default function KitchenPanelView({
                     ? `🔥 ${checkedCount}/${totalItemsCount} Ready (${totalItemsCount - checkedCount} Cooking)`
                     : isCooking 
                       ? 'Cooking · રસોઈ ચાલુ' 
-                      : (isReady || allChecked)
+                      : allChecked
                         ? '✨ Food Ready on Pass · તૈયાર છે' 
                         : 'Completed'}
               </span>
@@ -1242,7 +1242,7 @@ export default function KitchenPanelView({
                   ? 'bg-rose-50 text-rose-700 border-rose-200 font-bold' 
                   : isWarning 
                     ? 'bg-amber-50 text-amber-800 border-amber-200' 
-                    : (isReady || allChecked)
+                    : allChecked
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold'
                       : 'bg-slate-50 text-slate-700 border-slate-200'
             }`}>

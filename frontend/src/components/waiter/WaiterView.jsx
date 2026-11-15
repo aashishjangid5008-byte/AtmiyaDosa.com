@@ -1544,12 +1544,10 @@ export default function WaiterView({
               const isTableOrderReady = activeTableOrders.some(o => (o.status || '').toLowerCase() === 'ready');
               const readyDishes = allDishes.filter(it => !it.is_served && (
                 (it.kitchen_status || '').toLowerCase() === 'ready' || 
-                (it.kitchen_status || '').toLowerCase() === 'prepared' ||
-                isTableOrderReady
+                (it.kitchen_status || '').toLowerCase() === 'prepared'
               ));
               const cookingDishes = allDishes.filter(it => !it.is_served && !readyDishes.includes(it));
               const hasReadyFood = isOccupied && (
-                isTableOrderReady || 
                 tableReadyDishes.length > 0 || 
                 readyDishes.length > 0
               );

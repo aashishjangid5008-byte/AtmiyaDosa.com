@@ -111,7 +111,7 @@ export const resolveCustomerOrderItems = (order, menuItems = []) => {
         image_url: it.image_url || it.imageUrl || it.image || it.photo || menuItem?.image_url || null,
         cooking_note: it.cooking_note || it.note || it.customNote || it.customizations || null,
         is_served: Boolean(it.is_served || (order.status || '').toLowerCase() === 'served' || (order.status || '').toLowerCase() === 'completed'),
-        kitchen_status: String(it.kitchen_status || it.status || (order.status || 'placed')).toLowerCase(),
+        kitchen_status: String(it.kitchen_status || it.status || 'placed').toLowerCase(),
         is_addon: Boolean(it.is_addon || (order.round > 1 && it.round === order.round)),
         round: it.round || order.round || 1
       };
@@ -160,7 +160,7 @@ export const resolveCustomerOrderItems = (order, menuItems = []) => {
         image_url: menuItem?.image_url || null,
         cooking_note: null,
         is_served: (order.status || '').toLowerCase() === 'served' || (order.status || '').toLowerCase() === 'completed',
-        kitchen_status: (order.status || '').toLowerCase() === 'ready' ? 'ready' : ((order.status || '').toLowerCase() === 'preparing' ? 'preparing' : 'placed'),
+        kitchen_status: 'placed',
         is_addon: Boolean(order.is_addon),
         round: order.round || 1
       };

@@ -453,7 +453,7 @@ export const dispatchOrderToSupabase = async ({
         // Database check constraint allows only 'PLACED', 'PREPARING', 'READY' in order_items
         const safeItemStatus = (rawStatus === 'PREPARING' || rawStatus === 'COOKING') 
           ? 'PREPARING' 
-          : ((rawStatus === 'READY' || rawStatus === 'SERVED' || rawStatus === 'DELIVERED' || item.is_served) ? 'READY' : 'PLACED');
+          : ((rawStatus === 'SERVED' || rawStatus === 'DELIVERED' || item.is_served) ? 'SERVED' : (rawStatus === 'READY' ? 'READY' : 'PLACED'));
 
         return {
           order_id: createdOrder.id,
@@ -773,7 +773,7 @@ export const updateOrderItemStatusInSupabase = async (orderIdOrNumber, itemIndex
         if (targetItem) {
           try {
             // DB check constraint allows only 'PLACED', 'PREPARING', 'READY' in order_items
-            const dbItemStatus = (safeItemStatus === 'SERVED' || safeItemStatus === 'DELIVERED') ? 'READY' : safeItemStatus;
+            const dbItemStatus = (safeItemStatus === 'SERVED' || safeItemStatus === 'DELIVERED') ? 'SERVED' : safeItemStatus;
             await supabase
               .from('order_items')
               .update({ status: dbItemStatus })
@@ -901,14 +901,14 @@ export const settleTableSessionInSupabase = async (tableNumber, orderIdOrNumber,
       if (isUuid) {
         await supabase.from('orders').update(updatePayload).eq('id', orderIdOrNumber);
         try {
-          await supabase.from('order_items').update({ status: 'READY' }).eq('order_id', orderIdOrNumber);
+          await supabase.from('order_items').update({ status: 'SERVED' }).eq('order_id', orderIdOrNumber);
         } catch (itemErr) {}
       } else {
         const cleanNum = String(orderIdOrNumber).replace('#', '');
         const { data: ord } = await supabase.from('orders').update(updatePayload).eq('order_number', cleanNum).select('id').maybeSingle();
         if (ord?.id) {
           try {
-            await supabase.from('order_items').update({ status: 'READY' }).eq('order_id', ord.id);
+            await supabase.from('order_items').update({ status: 'SERVED' }).eq('order_id', ord.id);
           } catch (itemErr) {}
         }
       }

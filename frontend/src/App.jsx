@@ -169,7 +169,12 @@ const mapDbOrderToFrontend = (dbOrd) => {
 
   let itms = (dbOrd.order_items || []).map((i, idx) => {
     const rawItemStatus = String(i.status || '').toLowerCase().trim();
-    const savedState = (i.id && itemStates[i.id]) || (i.item_id && itemStates[i.item_id]) || itemStates[`oi_${idx}`];
+    const savedState = (i.id && itemStates[i.id]) || 
+                       (i.item_id && itemStates[i.item_id]) || 
+                       (i.item_name && itemStates[i.item_name]) || 
+                       (i.name && itemStates[i.name]) || 
+                       itemStates[String(idx)] || 
+                       itemStates[`oi_${idx}`];
     const isSavedReady = savedState === 'ready';
     const isSavedServed = savedState === 'served';
     const isSavedPrep = savedState === 'preparing' || savedState === 'cooking' || savedState === 'placed';
@@ -193,7 +198,7 @@ const mapDbOrderToFrontend = (dbOrd) => {
         isItemReady = false;
       } else if (rawItemStatus === 'ready') {
         isItemReady = true;
-      } else if (!hasSpecificStates && (dbOrd.status === 'READY' || itemStates['all'] === 'ready')) {
+      } else if (itemStates['all'] === 'ready') {
         isItemReady = true;
       }
     }
@@ -1166,7 +1171,7 @@ export default function App() {
 
             const isDbReady = Boolean(dbItem.kitchen_status === 'ready' || String(dbItem.status || '').toLowerCase() === 'ready');
             const isLocalReady = Boolean(localItem && (localItem.kitchen_status === 'ready'));
-            const finalReady = !isExplicitlyPreparing && (finalServed || isDbReady || isLocalReady);
+            const finalReady = !finalServed && !isExplicitlyPreparing && (isDbReady || isLocalReady);
 
             return {
               ...dbItem,
@@ -1969,8 +1974,7 @@ export default function App() {
                   const oNum = String(o.order_number || o.id || '').replace('#', '');
                   const oTbl = String(o.table_number || '').replace(/\D/g, '');
                   const isMatch = (payload.orderId && matchesOrderId(o, payload.orderId)) ||
-                                  (targetNum && oNum === targetNum) ||
-                                  (targetTbl && oTbl === targetTbl && o.status !== 'Completed' && o.status !== 'Cancelled');
+                                  (targetNum && oNum === targetNum);
                   if (isMatch) {
                     return {
                       ...o,
@@ -2060,8 +2064,7 @@ export default function App() {
             setOrders(prev => {
               const updated = (prev || []).map(o => {
                 const isMatch = matchesOrderId(o, payload.orderId) || 
-                                matchesOrderId(o, payload.orderNumber) || 
-                                (normalizeTableNumber(o.table_number) === normalizeTableNumber(payload.tableNumber) && String(o.status || '').toLowerCase() !== 'completed' && String(o.status || '').toLowerCase() !== 'settled');
+                                matchesOrderId(o, payload.orderNumber);
                 if (!isMatch) return o;
                 const items = (o.items || []).map((it, idx) => {
                   const isItemMatch = (payload.itemIndex !== undefined && idx === payload.itemIndex) ||
@@ -3279,7 +3282,7 @@ export default function App() {
           const rawStatus = String(item.kitchen_status || item.status || 'PLACED').toUpperCase();
           const safeItemStatus = (rawStatus === 'PREPARING' || rawStatus === 'COOKING')
             ? 'PREPARING'
-            : ((rawStatus === 'READY' || rawStatus === 'SERVED' || rawStatus === 'DELIVERED' || item.is_served) ? 'READY' : 'PLACED');
+            : ((rawStatus === 'SERVED' || rawStatus === 'DELIVERED' || item.is_served) ? 'SERVED' : (rawStatus === 'READY' ? 'READY' : 'PLACED'));
 
           return {
             order_id: resolvedOrderUuid,

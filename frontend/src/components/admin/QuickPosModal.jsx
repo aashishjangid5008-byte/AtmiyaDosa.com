@@ -149,7 +149,9 @@ export default function QuickPosModal({
           id: i.id,
           name: i.name + (modTags.length ? ` (${modTags.join(', ')})` : ''),
           price: i.price,
-          qty: i.qty
+          qty: i.qty,
+          kitchen_status: 'placed',
+          is_served: false
         };
       }),
       items_summary: cart.map(i => `${i.qty}x ${i.name}`).join(', '),
@@ -158,7 +160,7 @@ export default function QuickPosModal({
       discount: appliedDiscount,
       total: grandTotal,
       total_amount: grandTotal,
-      status: 'Preparing',
+      status: 'Placed',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       payment_mode: paymentMode,
       payment_status: paymentMode === 'Cash' ? 'Pending Cash' : 'Paid',
