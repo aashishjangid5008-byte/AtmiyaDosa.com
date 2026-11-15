@@ -403,7 +403,7 @@ export function validateTableAccess(requestedTable, securityKey, hasActiveOrders
   }
 
   // 2. Active Order Protection:
-  // If user already has an active dining session with orders in progress, forbid switching tables!
+  // Only restrict if there is a genuinely pending cooking order on the previous table
   if (bound && reqNorm !== bound && hasActiveOrdersOnBoundTable) {
     return {
       allowed: false,
@@ -412,7 +412,7 @@ export function validateTableAccess(requestedTable, securityKey, hasActiveOrders
     };
   }
 
-  // 3. Genuine physical QR scan verified!
+  // 3. Genuine physical QR scan verified! Automatically bind to newly scanned table
   return {
     allowed: true,
     boundTable: reqNorm,

@@ -406,8 +406,22 @@ export default function CustomerMenu({
   const isOrderActive = (order) => {
     if (!order) return false;
     const st = String(order.status || '').toLowerCase().trim();
+    const paySt = String(order.payment_status || '').toLowerCase().trim();
     if (st === 'completed' || st === 'cancelled' || st === 'settled' || st === 'paid_out') {
       return false;
+    }
+    if (paySt === 'paid' || paySt === 'void' || paySt === 'settled') {
+      return false;
+    }
+    const orderTime = new Date(order.placed_at || order.created_at || order.timestamp || 0).getTime();
+    if (orderTime > 0 && (Date.now() - orderTime) > 2 * 60 * 60 * 1000) {
+      return false;
+    }
+    if (st === 'served') {
+      const servedTime = new Date(order.served_at || order.placed_at || order.created_at || 0).getTime();
+      if (servedTime > 0 && (Date.now() - servedTime) > 30 * 60 * 1000) {
+        return false;
+      }
     }
     return true;
   };

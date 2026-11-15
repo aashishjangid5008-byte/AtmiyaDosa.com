@@ -1212,6 +1212,15 @@ export default function ExecutiveDashboard({
 
   const displaySessions = liveSessions;
 
+  const activeLiveSessions = useMemo(() => {
+    return (displaySessions || []).filter(s => {
+      if (s.status !== 'ACTIVE') return false;
+      if (!s.opened_at) return true;
+      const ageMs = Date.now() - new Date(s.opened_at).getTime();
+      return ageMs < 4 * 60 * 60 * 1000;
+    });
+  }, [displaySessions]);
+
   const handleSettleSession = (session) => {
     setDashboardVacateConfirm({
       step: 1,
@@ -2258,7 +2267,7 @@ export default function ExecutiveDashboard({
               <div className="flex items-center space-x-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                 <h2 className={`text-base font-semibold font-heading ${palette.textPrimary}`}>
-                  {t('liveTableSessions') || 'Live Table Sessions & Bill Settlement'} ({displaySessions.filter(s => s.status === 'ACTIVE').length} {t('tablesSeatedCount') || 'Tables Seated'})
+                  {t('liveTableSessions') || 'Live Table Sessions & Bill Settlement'} ({activeLiveSessions.length} {t('tablesSeatedCount') || 'Tables Seated'})
                 </h2>
               </div>
               <p className="text-xs text-slate-400 font-normal mt-0.5">
@@ -2275,14 +2284,14 @@ export default function ExecutiveDashboard({
             </button>
           </div>
 
-          {displaySessions.filter(s => s.status === 'ACTIVE').length === 0 ? (
+          {activeLiveSessions.length === 0 ? (
             <div className="p-8 text-center rounded-2xl bg-slate-50 border border-dashed border-slate-200">
               <p className="text-sm font-medium text-slate-700">{t('allTablesVacant') || 'All dining tables are currently clean & VACANT'}</p>
               <p className="text-xs text-slate-400 mt-1">{t('liveTableSessionsEmptyTip') || 'Live table sessions will appear here as soon as guests scan table QR codes.'}</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {displaySessions.filter(s => s.status === 'ACTIVE').map(session => {
+              {activeLiveSessions.map(session => {
               const elapsedMinutes = Math.round((Date.now() - new Date(session.opened_at).getTime()) / 60000);
               const isOnlinePaid = session.payment_status === 'PAID';
 

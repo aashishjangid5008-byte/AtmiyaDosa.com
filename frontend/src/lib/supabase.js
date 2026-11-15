@@ -229,20 +229,22 @@ export const dispatchOrderToSupabase = async ({
     if (tableId) {
       const { data: activeSession, error: sessFindErr } = await supabase
         .from('table_sessions')
-        .select('id, session_code, total_amount')
+        .select('id, session_code, total_amount, opened_at')
         .eq('table_id', tableId)
         .eq('status', 'ACTIVE')
         .order('opened_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (!sessFindErr && activeSession) {
+      const sessionAgeMs = (activeSession && activeSession.opened_at)
+        ? (Date.now() - new Date(activeSession.opened_at).getTime())
+        : 0;
+      const isSessionFresh = activeSession && (!activeSession.opened_at || sessionAgeMs < 2.5 * 60 * 60 * 1000);
+
+      if (!sessFindErr && activeSession && isSessionFresh) {
         sessionId = activeSession.id;
         sessionCode = activeSession.session_code;
-        // Cumulative session total (adds new order total to running bill)
-        const prevTotal = parseFloat(activeSession.total_amount || 0);
-        const thisTotal = parseFloat(total || 0);
-        const cumulativeTotal = (prevTotal + thisTotal).toFixed(2);
+        const targetTotal = Number(parseFloat(total || 0).toFixed(2));
         const summaryText = items && items.length > 0 
           ? items.map(i => `${i.quantity || 1}x ${i.name || i.item_name || 'Dish'}`).join(', ') 
           : 'Order Placed';
@@ -250,7 +252,7 @@ export const dispatchOrderToSupabase = async ({
         await supabase
           .from('table_sessions')
           .update({
-            total_amount: cumulativeTotal,
+            total_amount: targetTotal,
             customer_name: guestName,
             customer_phone: cleanPhone || activeSession.customer_phone,
             table_number: formattedTableNum,
@@ -259,6 +261,14 @@ export const dispatchOrderToSupabase = async ({
             items_summary: summaryText
           })
           .eq('id', activeSession.id);
+      } else if (activeSession && !isSessionFresh) {
+        // Auto-close stale session from hours or days ago
+        try {
+          await supabase
+            .from('table_sessions')
+            .update({ status: 'COMPLETED', closed_at: new Date().toISOString() })
+            .eq('id', activeSession.id);
+        } catch (e) {}
       }
     }
 
@@ -330,11 +340,11 @@ export const dispatchOrderToSupabase = async ({
       if (data) existingDbOrder = data;
     }
 
-    // C. Check by sessionId: In restaurant dine-in, all add-ons (e.g. water, extra dishes) merge into the table's ONE active continuous bill!
+    // C. Check by sessionId: In restaurant dine-in, only merge if this is an active order placed within the last 2.5 hours!
     if (!existingDbOrder && sessionId) {
       const { data: activeOrderForSession } = await supabase
         .from('orders')
-        .select('id, order_number')
+        .select('id, order_number, placed_at')
         .eq('session_id', sessionId)
         .neq('status', 'CANCELLED')
         .neq('status', 'COMPLETED')
@@ -342,7 +352,12 @@ export const dispatchOrderToSupabase = async ({
         .limit(1)
         .maybeSingle();
       if (activeOrderForSession) {
-        existingDbOrder = activeOrderForSession;
+        const orderAgeMs = activeOrderForSession.placed_at 
+          ? (Date.now() - new Date(activeOrderForSession.placed_at).getTime()) 
+          : 0;
+        if (!activeOrderForSession.placed_at || orderAgeMs < 2.5 * 60 * 60 * 1000) {
+          existingDbOrder = activeOrderForSession;
+        }
       }
     }
 

@@ -392,11 +392,14 @@ export default function App() {
             if (Array.isArray(rawOrders)) {
               hasActiveOrderOnBound = rawOrders.some(o => {
                 const oTbl = normalizeTableNumber(o?.table_number);
+                if (oTbl !== existingBound) return false;
                 const st = String(o?.status || '').toLowerCase().trim();
                 const paySt = String(o?.payment_status || '').toLowerCase().trim();
-                if (oTbl !== existingBound) return false;
                 if (st === 'cancelled' || st === 'completed' || st === 'settled') return false;
-                if (st === 'served' && (paySt === 'paid' || paySt === 'settled' || paySt === 'void')) return false;
+                if (paySt === 'paid' || paySt === 'settled' || paySt === 'void') return false;
+                const orderTime = new Date(o?.placed_at || o?.created_at || o?.timestamp || 0).getTime();
+                if (orderTime > 0 && (Date.now() - orderTime) > 30 * 60 * 1000) return false;
+                if (st === 'served') return false;
                 return true;
               });
             }
@@ -851,12 +854,17 @@ export default function App() {
 
       // If bound table exists and url table is different:
       if (urlNorm !== bound) {
-        const hasActiveOrder = orders.some(o => 
-          normalizeTableNumber(o.table_number) === bound && 
-          String(o.status || '').toLowerCase() !== 'completed' && 
-          String(o.status || '').toLowerCase() !== 'cancelled' &&
-          String(o.status || '').toLowerCase() !== 'settled'
-        );
+        const hasActiveOrder = orders.some(o => {
+          if (normalizeTableNumber(o.table_number) !== bound) return false;
+          const st = String(o.status || '').toLowerCase();
+          const paySt = String(o.payment_status || '').toLowerCase();
+          if (st === 'completed' || st === 'cancelled' || st === 'settled') return false;
+          if (paySt === 'paid' || paySt === 'settled' || paySt === 'void') return false;
+          const orderTime = new Date(o.placed_at || o.created_at || o.timestamp || 0).getTime();
+          if (orderTime > 0 && (Date.now() - orderTime) > 30 * 60 * 1000) return false;
+          if (st === 'served') return false;
+          return true;
+        });
 
         const validation = validateTableAccess(urlTable, key, hasActiveOrder);
         if (!validation.allowed && !isPrivileged) {
@@ -3245,18 +3253,20 @@ export default function App() {
 
     // Ensure session table lock is reinforced upon customer order placement
     if (viewMode === 'customer' && !authUser) {
-      const boundTable = getBoundSessionTable();
-      if (boundTable) {
-        const safeTable = Number(boundTable) < 10 ? `T0${boundTable}` : `T${boundTable}`;
-        newOrder.table_number = safeTable;
-      } else {
-        setActiveToast({
-          title: '🔒 Table Verification Required',
-          message: 'Please scan your dining table QR standee before placing an order.',
-          type: 'error'
-        });
-        playSound('alert');
-        return;
+      if (!newOrder.table_number) {
+        const boundTable = getBoundSessionTable();
+        if (boundTable) {
+          const safeTable = Number(boundTable) < 10 ? `T0${boundTable}` : `T${boundTable}`;
+          newOrder.table_number = safeTable;
+        } else {
+          setActiveToast({
+            title: '🔒 Table Verification Required',
+            message: 'Please scan your dining table QR standee before placing an order.',
+            type: 'error'
+          });
+          playSound('alert');
+          return;
+        }
       }
     }
     if (newOrder.table_number) {
@@ -3274,8 +3284,16 @@ export default function App() {
       const paySt = String(o?.payment_status || '').toLowerCase().trim();
       if (st === 'cancelled') return false;
       if (st === 'completed' || st === 'settled') return false;
-      // If order is served AND already paid, the dining session has finished!
-      if (st === 'served' && (paySt === 'paid' || paySt === 'void')) return false;
+      // If already paid or void: dining order is settled!
+      if (paySt === 'paid' || paySt === 'void' || paySt === 'settled') return false;
+      // Stale order boundary (> 2 hours cannot be active)
+      const orderTime = new Date(o?.placed_at || o?.created_at || o?.timestamp || 0).getTime();
+      if (orderTime > 0 && (Date.now() - orderTime) > 2 * 60 * 60 * 1000) return false;
+      // If order was already served more than 30 mins ago, dining round has concluded
+      if (st === 'served') {
+        const servedTime = new Date(o?.served_at || o?.placed_at || o?.created_at || 0).getTime();
+        if (servedTime > 0 && (Date.now() - servedTime) > 30 * 60 * 1000) return false;
+      }
       return true;
     };
 
