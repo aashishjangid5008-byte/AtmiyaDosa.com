@@ -1020,7 +1020,7 @@ export default function TablesView({
                     .filter(t => t.number !== selectedTable.number && t.status !== 'occupied')
                     .map(t => (
                       <option key={t.id} value={t.number}>
-                        {t.number} ({t.zone} - {t.capacity} seats)
+                        {t.number} ({t.capacity || 4} seats)
                       </option>
                     ))}
                 </select>
@@ -1452,7 +1452,7 @@ export default function TablesView({
                     Table {previewQRTable.number} QR Standee
                   </h3>
                   <p className="text-xs text-slate-400 font-medium">
-                    {previewQRTable.zone} • {previewQRTable.capacity} Guests
+                    {previewQRTable.capacity || 4} Guests Capacity
                   </p>
                 </div>
               </div>

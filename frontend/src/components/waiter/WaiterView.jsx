@@ -822,11 +822,7 @@ export default function WaiterView({
 
   // Resolve table zone robustly
   const getTableZone = (tbl) => {
-    if (tbl.zone) return tbl.zone;
-    const num = parseInt(String(tbl.number || '').replace(/\D/g, ''), 10) || 0;
-    if (num >= 13) return 'Main Counter';
-    if (num >= 7) return 'Garden Outdoor';
-    return 'AC Family Hall';
+    return tbl.zone || '';
   };
 
   // Filter Tables
@@ -1422,48 +1418,51 @@ export default function WaiterView({
           
           {/* Zone & Status Filter Bar + Search (Adaptive 2-Tier Mobile-Friendly Layout) */}
           <div className="bg-white p-3 rounded-2xl border border-slate-200/90 shadow-xs space-y-2.5">
-            {/* Tier 1: Floor Zones (Full Width Horizontal Scrollable Pills with Counts) */}
-            <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar scroll-smooth w-full py-0.5">
-              {(() => {
-                const zoneList = [{ id: 'All', label: 'All Floor Zones' }];
-                const seenZones = new Set(['All']);
-                (tables || []).forEach(t => {
-                  const z = getTableZone(t);
-                  if (z && !seenZones.has(z)) {
-                    seenZones.add(z);
-                    zoneList.push({ id: z, label: z });
-                  }
-                });
-                return zoneList;
-              })().map(z => {
-                const zoneCount = z.id === 'All' 
-                  ? tables.length 
-                  : tables.filter(t => getTableZone(t) === z.id).length;
-                const isSelected = selectedZone === z.id;
-                return (
-                  <button
-                    key={z.id}
-                    type="button"
-                    onClick={() => setSelectedZone(z.id)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer shrink-0 flex items-center space-x-1.5 min-h-[36px] ${
-                      isSelected 
-                        ? 'bg-slate-900 text-white shadow-xs' 
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    <span>{z.label}</span>
-                    <span className={`px-1.5 py-0.2 rounded-md font-mono text-[10px] font-bold ${
-                      isSelected ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-600'
-                    }`}>
-                      {zoneCount}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            {/* Tier 1: Floor Zones (Only visible when 2+ distinct floor zones exist) */}
+            {(() => {
+              const zoneList = [{ id: 'All', label: 'All Floor Zones' }];
+              const seenZones = new Set(['All', '']);
+              (tables || []).forEach(t => {
+                const z = (getTableZone(t) || '').trim();
+                if (z && !seenZones.has(z)) {
+                  seenZones.add(z);
+                  zoneList.push({ id: z, label: z });
+                }
+              });
+              if (zoneList.length <= 2) return null;
+              return (
+                <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar scroll-smooth w-full py-0.5">
+                  {zoneList.map(z => {
+                    const zoneCount = z.id === 'All' 
+                      ? tables.length 
+                      : tables.filter(t => (getTableZone(t) || '').trim() === z.id).length;
+                    const isSelected = selectedZone === z.id;
+                    return (
+                      <button
+                        key={z.id}
+                        type="button"
+                        onClick={() => setSelectedZone(z.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer shrink-0 flex items-center space-x-1.5 min-h-[36px] ${
+                          isSelected 
+                            ? 'bg-slate-900 text-white shadow-xs' 
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        <span>{z.label}</span>
+                        <span className={`px-1.5 py-0.2 rounded-md font-mono text-[10px] font-bold ${
+                          isSelected ? 'bg-slate-800 text-white' : 'bg-slate-200 text-slate-600'
+                        }`}>
+                          {zoneCount}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             {/* Tier 2: Search Input + Status Filter Chips */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               {/* Table Search Input */}
               <div className="relative w-full sm:w-56 shrink-0">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -1596,9 +1595,6 @@ export default function WaiterView({
                             {tableCap} Seats
                           </span>
                         </div>
-                        <p className="text-[11px] text-slate-500 font-medium">
-                          {tableZone}
-                        </p>
                       </div>
 
                       {/* Status Badge Pill */}

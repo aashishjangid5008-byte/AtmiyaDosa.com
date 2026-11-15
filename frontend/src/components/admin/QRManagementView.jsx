@@ -424,7 +424,7 @@ export default function QRManagementView({ tables = [], orders = [], restaurantS
                       setActiveTable(table);
                       playSound('click');
                     }}
-                    className={`p-3 rounded-xl border text-left transition relative flex flex-col justify-between cursor-pointer active:scale-98 ${
+                    className={`py-3 px-3.5 rounded-xl border text-left transition relative flex items-center justify-between cursor-pointer active:scale-98 ${
                       isSelected
                         ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white border-orange-500 shadow-sm shadow-orange-500/20'
                         : (tblActiveOrder 
@@ -432,33 +432,22 @@ export default function QRManagementView({ tables = [], orders = [], restaurantS
                             : 'bg-slate-50 border-slate-200/90 text-slate-700 hover:bg-white hover:border-orange-300 hover:shadow-xs')
                     }`}
                   >
-                    <div className="flex items-center justify-between w-full">
-                      <span className={`text-base font-black font-heading ${isSelected ? 'text-white' : 'text-slate-900'}`}>
-                        {table.number}
+                    <span className={`text-base font-black font-heading ${isSelected ? 'text-white' : 'text-slate-900'}`}>
+                      {table.number}
+                    </span>
+                    {tblActiveOrder ? (
+                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${
+                        isSelected ? 'bg-white text-orange-700 font-black' : 'bg-amber-200 text-amber-900'
+                      }`}>
+                        🔒 Busy
                       </span>
-                      {tblActiveOrder ? (
-                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
-                          isSelected ? 'bg-white text-orange-700' : 'bg-amber-200 text-amber-900'
-                        }`}>
-                          🔒 Busy
-                        </span>
-                      ) : (
-                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
-                          isSelected ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
-                        }`}>
-                          ✨ Open
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="mt-2 flex items-center justify-between text-[10px]">
-                      <span className={`font-medium truncate ${isSelected ? 'text-white/90' : 'text-slate-500'}`}>
-                        {table.zone || 'Dining Area'}
+                    ) : (
+                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${
+                        isSelected ? 'bg-white/20 text-white font-black' : 'bg-emerald-100 text-emerald-800'
+                      }`}>
+                        ✨ Open
                       </span>
-                      <span className={`font-bold ${isSelected ? 'text-white/80' : 'text-slate-400'}`}>
-                        {table.capacity || 4}p
-                      </span>
-                    </div>
+                    )}
                   </button>
                 );
               })}

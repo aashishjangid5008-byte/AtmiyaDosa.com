@@ -250,7 +250,7 @@ export default function QuickPosModal({
                   >
                     {tables.map(t => (
                       <option key={t.id} value={t.number}>
-                        {t.number} ({t.zone} - {t.capacity}p) {t.status === 'occupied' ? '• [Dining]' : '• [Free]'}
+                        {t.number} {t.status === 'occupied' ? '• [Dining]' : '• [Free]'}
                       </option>
                     ))}
                   </select>
