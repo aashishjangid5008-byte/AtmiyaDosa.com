@@ -768,7 +768,7 @@ export default function OrdersView({
                               onMarkOrderAsSeen?.(order.id);
                             }}
                             className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition cursor-pointer border border-emerald-200"
-                            title="Download 1-Page GST Tax Invoice (PDF)"
+                            title="Download 1-Page Dining Bill (PDF)"
                           >
                             <Download className="w-3.5 h-3.5" />
                           </button>
@@ -981,7 +981,7 @@ export default function OrdersView({
                   currentTable: selectedOrder.table_number
                 })}
                 className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition"
-                title="Download Official 1-Page Tax Invoice (PDF)"
+                title="Download Official 1-Page Dining Bill (PDF)"
               >
                 <Download className="w-4 h-4" />
                 <span>PDF Bill</span>

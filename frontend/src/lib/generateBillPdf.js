@@ -72,9 +72,9 @@ export function downloadSinglePageBillPdf({
     const margin = 4;
     const contentWidth = pageWidth - (margin * 2); // 72mm
 
-    // Measure exact height needed so it fits on 1 page (compact without GST box)
-    const estimatedHeight = 125 + (items.length * 5.8) + (rawDiscount > 0 ? 5 : 0);
-    const pageHeight = Math.max(140, Math.ceil(estimatedHeight));
+    // Measure exact height needed so it fits on 1 page (compact without GST box / statutory lines)
+    const estimatedHeight = 115 + (items.length * 5.8) + (rawDiscount > 0 ? 5 : 0);
+    const pageHeight = Math.max(130, Math.ceil(estimatedHeight));
 
     const doc = new jsPDF({
       orientation: 'portrait',
@@ -130,22 +130,7 @@ export function downloadSinglePageBillPdf({
     // Split address if long
     const splitAddress = doc.splitTextToSize(address, contentWidth);
     doc.text(splitAddress, pageWidth / 2, y, { align: 'center' });
-    y += (splitAddress.length * 3);
-
-    doc.text(`Ph: ${phone}`, pageWidth / 2, y, { align: 'center' });
-    y += 3.2;
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.5);
-    doc.setTextColor(15, 23, 42);
-    doc.text(`GSTIN: ${gstin}  |  State: ${stateName} (${stateCode})`, pageWidth / 2, y, { align: 'center' });
-    y += 3.2;
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6);
-    doc.setTextColor(100, 116, 139);
-    doc.text(`FSSAI Lic No: ${fssai}`, pageWidth / 2, y, { align: 'center' });
-    y += 4;
+    y += (splitAddress.length * 3) + 2;
 
     // 3. TICKET TITLE BAR (Black Filled or Bordered Ticket Pill)
     doc.setFillColor(30, 41, 59); // slate-800
@@ -456,11 +441,6 @@ export function printSinglePageReceipt({
           <div style="font-size: 15px; font-weight: 900; letter-spacing: 0.5px;">${escapeHtml(restName)}</div>
           <div style="font-size: 10px; color: #475569;">${escapeHtml(tagline)}</div>
           <div style="font-size: 9px; color: #64748b;">${escapeHtml(address)}</div>
-          <div style="font-size: 9px; color: #64748b;">Ph: ${escapeHtml(phone)}</div>
-          <div style="font-size: 9.5px; font-weight: bold; color: #0f172a; margin-top: 2px;">
-            GSTIN: ${escapeHtml(gstin)} | State: ${escapeHtml(stateName)} (${escapeHtml(stateCode)})
-          </div>
-          <div style="font-size: 9px; color: #64748b;">FSSAI Lic: ${escapeHtml(fssai)}</div>
         </div>
 
         <div class="divider-solid"></div>
@@ -538,8 +518,8 @@ export function printSinglePageReceipt({
 
         <div class="text-center" style="font-size: 9.5px; color: #475569; margin-top: 4px;">
           <div class="bold">*** THANK YOU! PLEASE VISIT AGAIN ***</div>
-          <div style="font-size: 8.5px; color: #64748b; margin-top: 2px;">100% Pure Veg • FSSAI Approved • Live Tawa Taste</div>
-          <div style="font-size: 8px; color: #94a3b8; margin-top: 2px;">Computer Generated Tax Invoice • Single-Page Ticket</div>
+          <div style="font-size: 8.5px; color: #64748b; margin-top: 2px;">100% Pure Veg • Authentic Taste • Live Tawa</div>
+          <div style="font-size: 8px; color: #94a3b8; margin-top: 2px;">Computer Generated Dining Bill • Single-Page Ticket</div>
         </div>
 
         <div class="divider-dashed" style="margin-top: 6px;"></div>

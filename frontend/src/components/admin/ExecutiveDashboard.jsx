@@ -2572,9 +2572,6 @@ export default function ExecutiveDashboard({
                 <p className="text-[10px] text-slate-500">
                   {restaurantSettings?.address || 'Opp. New Bus Station, Station Road, Petlad, Anand, Gujarat - 388450'}
                 </p>
-                <p className="text-[10px] text-slate-500">
-                  {restaurantSettings?.gstin ? `GSTIN: ${restaurantSettings.gstin} • ` : ''}Phone: {restaurantSettings?.phone || '+91 98765 43210'}
-                </p>
                 <div className="border-b border-dashed border-slate-300 pt-2"></div>
               </div>
 

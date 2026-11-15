@@ -950,7 +950,7 @@ export default function TablesView({
                           className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center space-x-1.5 transition border border-slate-200 cursor-pointer"
                         >
                           <Printer className="w-3.5 h-3.5" />
-                          <span>Print Tax Invoice</span>
+                          <span>Print Dining Bill</span>
                         </button>
                       </div>
                     </div>

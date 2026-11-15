@@ -3179,8 +3179,8 @@ export default function CustomerMenu({
                 <div className="text-[10px] text-slate-500 font-medium">
                   {restaurantSettings?.tagline || 'Pure Veg Authentic Taste • Petlad'}
                 </div>
-                <div className="text-[9px] text-slate-400 font-mono">
-                  GSTIN: {restaurantSettings?.gstin || '24AAACA1234A1Z5'} • Ph: {restaurantSettings?.phone || '+91 63530 59221'}
+                <div className="text-[9px] text-slate-400">
+                  {restaurantSettings?.address || 'Station Road, Opp. Atmiya Complex, Petlad - 388450'}
                 </div>
               </div>
 
