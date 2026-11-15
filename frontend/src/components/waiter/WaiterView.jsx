@@ -224,14 +224,18 @@ export default function WaiterView({
 
   const getTableActiveOrders = (tableNum) => {
     const tCode = normalizeTbl(tableNum);
+    const tableObj = tables.find(t => normalizeTbl(t.number) === tCode);
+    if (tableObj && (tableObj.status === 'available' || tableObj.status === 'vacant') && !tableObj.current_order_id) {
+      return [];
+    }
     return orders.filter(o => {
       const oCode = normalizeTbl(o.table_number);
       if (oCode !== tCode) return false;
       const st = String(o.status || '').toLowerCase().trim();
       const paySt = String(o.payment_status || '').toLowerCase().trim();
-      if (st === 'completed' || st === 'cancelled' || st === 'settled') return false;
-      // If order is served AND already paid, the dining session has completed!
-      if (st === 'served' && (paySt === 'paid' || paySt === 'void')) return false;
+      if (st === 'cancelled' || paySt === 'void') return false;
+      const orderTime = new Date(o.placed_at || o.created_at || o.timestamp || 0).getTime();
+      if (orderTime > 0 && (Date.now() - orderTime) > 2.5 * 60 * 60 * 1000) return false;
       return true;
     });
   };
@@ -753,18 +757,23 @@ export default function WaiterView({
 
     const itemsSummary = formattedItems.map(i => `${i.qty}x ${i.name}`).join(', ');
 
-    const newTicketId = `#ORD${Math.floor(1000 + Math.random() * 9000)}`;
+    const ticketId = hasActiveOrder 
+      ? activeParent.id 
+      : `#ORD${Math.floor(1000 + Math.random() * 9000)}`;
 
     const newTicket = {
-      id: newTicketId,
-      order_number: newTicketId.replace('#', ''),
-      parent_order_id: hasActiveOrder ? activeParent.id : null,
-      session_id: hasActiveOrder ? activeParent.session_id : null,
+      id: ticketId,
+      order_number: hasActiveOrder ? (activeParent.order_number || String(ticketId).replace('#', '')) : ticketId.replace('#', ''),
+      supabase_order_id: hasActiveOrder ? (activeParent.supabase_order_id || null) : null,
+      session_id: hasActiveOrder ? (activeParent.session_id || null) : null,
+      parent_order_id: null,
       table_number: String(orderingTable.number).toLowerCase().startsWith('table') ? orderingTable.number : `Table ${orderingTable.number}`,
       customer_name: customerNameInput || activeParent?.customer_name || `Guest ${orderingTable.number}`,
       customer_phone: customerPhoneInput || activeParent?.customer_phone || '9825010000',
       items: formattedItems,
       items_summary: itemsSummary,
+      newly_added_items: formattedItems,
+      newly_added_summary: itemsSummary,
       subtotal,
       tax,
       total,
@@ -778,8 +787,9 @@ export default function WaiterView({
       placed_by_waiter_id: activeWaiterId,
       placed_by_waiter_name: activeWaiterName,
       is_waiter_order: true,
-      placed_at: new Date().toISOString(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      placed_at: hasActiveOrder ? (activeParent.placed_at || new Date().toISOString()) : new Date().toISOString(),
+      last_addon_at: new Date().toISOString(),
+      time: hasActiveOrder ? (activeParent.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       special_note: customTags.join(' • ') || null
     };
 
@@ -794,7 +804,10 @@ export default function WaiterView({
   const handleQuickTableWater = (table) => {
     const activeOrders = getTableActiveOrders(table.number);
     const activeParent = activeOrders[0];
-    const newTicketId = `#ORD${Math.floor(1000 + Math.random() * 9000)}`;
+    const ticketId = activeParent 
+      ? activeParent.id 
+      : `#ORD${Math.floor(1000 + Math.random() * 9000)}`;
+
     const waterItem = {
       id: 'ATM_WATER_01',
       name: 'Packaged Mineral Water (1 Litre Bottle)',
@@ -813,16 +826,19 @@ export default function WaiterView({
       station: 'Beverages & Extras'
     };
     const waterTicket = {
-      id: newTicketId,
-      order_number: newTicketId.replace('#', ''),
-      parent_order_id: activeParent ? activeParent.id : null,
-      session_id: activeParent ? activeParent.session_id : null,
+      id: ticketId,
+      order_number: activeParent ? (activeParent.order_number || String(ticketId).replace('#', '')) : ticketId.replace('#', ''),
+      supabase_order_id: activeParent ? (activeParent.supabase_order_id || null) : null,
+      session_id: activeParent ? (activeParent.session_id || null) : null,
+      parent_order_id: null,
       table_number: String(table.number).toLowerCase().startsWith('table') ? table.number : `Table ${table.number}`,
       customer_name: activeParent?.customer_name || `Guest ${table.number}`,
       customer_phone: activeParent?.customer_phone || '9825010000',
       items: [waterItem],
       order_items: [waterItem],
       items_summary: '1x Packaged Mineral Water (1L)',
+      newly_added_items: [waterItem],
+      newly_added_summary: '1x Packaged Mineral Water (1L)',
       subtotal: 20,
       tax: 0,
       total: 20,
@@ -836,8 +852,9 @@ export default function WaiterView({
       placed_by_waiter_id: activeWaiterId,
       placed_by_waiter_name: activeWaiterName,
       is_waiter_order: true,
-      placed_at: new Date().toISOString(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      placed_at: activeParent ? (activeParent.placed_at || new Date().toISOString()) : new Date().toISOString(),
+      last_addon_at: new Date().toISOString(),
+      time: activeParent ? (activeParent.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       special_note: '💧 1x Chilled Packaged Mineral Water (Delivered by Waiter)'
     };
     if (onPlaceOrder) {

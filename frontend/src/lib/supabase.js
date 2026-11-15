@@ -383,14 +383,13 @@ export const dispatchOrderToSupabase = async ({
       if (data) existingDbOrder = data;
     }
 
-    // C. Check by sessionId: In restaurant dine-in, only merge if this is an active order placed within the last 2.5 hours!
+    // C. Check by sessionId: In restaurant dine-in, merge into active order for this table session!
     if (!existingDbOrder && sessionId) {
       const { data: activeOrderForSession } = await supabase
         .from('orders')
-        .select('id, order_number, placed_at')
+        .select('id, order_number, placed_at, special_notes')
         .eq('session_id', sessionId)
         .neq('status', 'CANCELLED')
-        .neq('status', 'COMPLETED')
         .order('placed_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -400,6 +399,26 @@ export const dispatchOrderToSupabase = async ({
           : 0;
         if (!activeOrderForSession.placed_at || orderAgeMs < 2.5 * 60 * 60 * 1000) {
           existingDbOrder = activeOrderForSession;
+        }
+      }
+    }
+
+    // D. Check by table_id: If table has a recent order placed within 2.5 hours, merge into it
+    if (!existingDbOrder && tableId) {
+      const { data: latestTableOrder } = await supabase
+        .from('orders')
+        .select('id, order_number, placed_at, special_notes')
+        .eq('table_id', tableId)
+        .neq('status', 'CANCELLED')
+        .order('placed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (latestTableOrder) {
+        const orderAgeMs = latestTableOrder.placed_at 
+          ? (Date.now() - new Date(latestTableOrder.placed_at).getTime()) 
+          : 0;
+        if (!latestTableOrder.placed_at || orderAgeMs < 2.5 * 60 * 60 * 1000) {
+          existingDbOrder = latestTableOrder;
         }
       }
     }

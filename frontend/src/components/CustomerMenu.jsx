@@ -407,29 +407,30 @@ export default function CustomerMenu({
     if (!order) return false;
     const st = String(order.status || '').toLowerCase().trim();
     const paySt = String(order.payment_status || '').toLowerCase().trim();
-    if (st === 'completed' || st === 'cancelled' || st === 'settled' || st === 'paid_out') {
-      return false;
-    }
-    if (paySt === 'paid' || paySt === 'void' || paySt === 'settled') {
+    if (st === 'cancelled' || paySt === 'void') {
       return false;
     }
     const orderTime = new Date(order.placed_at || order.created_at || order.timestamp || 0).getTime();
-    if (orderTime > 0 && (Date.now() - orderTime) > 2 * 60 * 60 * 1000) {
+    if (orderTime > 0 && (Date.now() - orderTime) > 2.5 * 60 * 60 * 1000) {
       return false;
-    }
-    if (st === 'served') {
-      const servedTime = new Date(order.served_at || order.placed_at || order.created_at || 0).getTime();
-      if (servedTime > 0 && (Date.now() - servedTime) > 30 * 60 * 1000) {
-        return false;
-      }
     }
     return true;
   };
 
-  // Active table order in the kitchen queue (Locks QR and blocks 2nd order)
-  const activeTableOrder = orders.find(o => 
-    isTableMatch(o.table_number, currentTable) && isOrderActive(o)
-  );
+  // Active table order in the kitchen queue (Locks QR to table session)
+  const activeTableOrder = React.useMemo(() => {
+    const tableOrders = orders.filter(o => 
+      isTableMatch(o.table_number, currentTable) && isOrderActive(o)
+    );
+    if (tableOrders.length === 0) return null;
+    if (placedOrderId) {
+      const matchPlaced = tableOrders.find(o => o.id === placedOrderId || o.order_number === String(placedOrderId).replace('#', ''));
+      if (matchPlaced) return matchPlaced;
+    }
+    tableOrders.sort((a, b) => new Date(b.placed_at || b.created_at || 0) - new Date(a.placed_at || a.created_at || 0));
+    return tableOrders[0];
+  }, [orders, currentTable, placedOrderId]);
+
   const activeOrderDisplayId = activeTableOrder?.id 
     ? (String(activeTableOrder.id).startsWith('#') ? activeTableOrder.id : `#${activeTableOrder.id}`)
     : '';
@@ -1030,13 +1031,13 @@ export default function CustomerMenu({
     let finalOrderObj;
 
     if (activeTableOrder) {
-      // NEW ADD-ON / ROUND 2+ ORDER: Creates a distinct ticket for kitchen and billing!
-      // NEVER overwrites or wipes previous dishes already cooking or served!
-      const newAddonId = `#ORD${Math.floor(1000 + Math.random() * 9000)}`;
-
+      // CONTINUOUS SESSION BILL: Keep the exact same order ID for the entire dining session!
+      // Add-on dishes are appended into the single order and single bill!
       finalOrderObj = {
-        id: newAddonId,
-        order_number: newAddonId.replace('#', ''),
+        id: activeTableOrder.id,
+        order_number: activeTableOrder.order_number || String(activeTableOrder.id).replace('#', ''),
+        supabase_order_id: activeTableOrder.supabase_order_id || null,
+        session_id: activeTableOrder.session_id || null,
         table_number: currentTable,
         customer_name: trimmedName || activeTableOrder.customer_name,
         customer_phone: cleanPhone || activeTableOrder.customer_phone,
@@ -1054,9 +1055,10 @@ export default function CustomerMenu({
         total_amount: totalAmount,
         status: 'Placed',
         channel: activeTableOrder.channel || 'Dine-In QR',
-        placed_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        placed_at: activeTableOrder.placed_at || new Date().toISOString(),
+        last_addon_at: new Date().toISOString(),
+        created_at: activeTableOrder.created_at || new Date().toISOString(),
+        time: activeTableOrder.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         payment_mode: 'Cash',
         payment_status: 'Pending Cash',
         payment_verified_online: false,
@@ -1064,7 +1066,7 @@ export default function CustomerMenu({
         special_note: specialNote ? specialNote.trim() : null,
         is_addon: true,
         round: roundNum,
-        parent_order_id: activeTableOrder.id
+        parent_order_id: null
       };
     } else {
       const newId = `#ORD${Math.floor(1000 + Math.random() * 9000)}`;

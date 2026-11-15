@@ -3265,35 +3265,49 @@ export default function App() {
       const digits = String(val || '').replace(/[^0-9]/g, '');
       return digits ? String(parseInt(digits, 10)) : String(val || '').trim().toLowerCase();
     };
-    const isOrderActive = (o) => {
-      if (!o) return false;
-      const st = String(o?.status || '').toLowerCase().trim();
-      const paySt = String(o?.payment_status || '').toLowerCase().trim();
-      if (st === 'cancelled') return false;
-      if (st === 'completed' || st === 'settled') return false;
-      // If already paid or void: dining order is settled!
-      if (paySt === 'paid' || paySt === 'void' || paySt === 'settled') return false;
-      // Stale order boundary (> 2 hours cannot be active)
-      const orderTime = new Date(o?.placed_at || o?.created_at || o?.timestamp || 0).getTime();
-      if (orderTime > 0 && (Date.now() - orderTime) > 2 * 60 * 60 * 1000) return false;
-      // If order was already served more than 30 mins ago, dining round has concluded
-      if (st === 'served') {
-        const servedTime = new Date(o?.served_at || o?.placed_at || o?.created_at || 0).getTime();
-        if (servedTime > 0 && (Date.now() - servedTime) > 30 * 60 * 1000) return false;
-      }
-      return true;
-    };
 
-    const existingActiveOrders = orders.filter(o => 
-      normalizeTbl(o.table_number) === normalizeTbl(newOrder.table_number) && isOrderActive(o)
-    );
-    const isAddonOrder = existingActiveOrders.length > 0;
-    const roundNumber = isAddonOrder ? (existingActiveOrders[0].round || 1) + 1 : 1;
+    // Locate active live order for this table session
+    let activeParent = null;
+
+    // Check 1: Direct match by order ID if passed
+    if (newOrder.id) {
+      activeParent = orders.find(o => matchesOrderId(o, newOrder.id) && String(o.status || '').toLowerCase() !== 'cancelled');
+    }
+
+    // Check 2: Match by table occupancy & recent orders (< 2.5 hours)
+    if (!activeParent && newOrder.table_number) {
+      const normTarget = normalizeTbl(newOrder.table_number);
+      const tblObj = tables.find(t => normalizeTbl(t.number) === normTarget || t.id === newOrder.table_number);
+
+      if (tblObj && tblObj.current_order_id) {
+        activeParent = orders.find(o => matchesOrderId(o, tblObj.current_order_id) && String(o.status || '').toLowerCase() !== 'cancelled');
+      }
+
+      if (!activeParent) {
+        const candidateOrders = orders.filter(o => {
+          if (normalizeTbl(o.table_number) !== normTarget) return false;
+          if (String(o.status || '').toLowerCase() === 'cancelled') return false;
+          const orderTime = new Date(o.placed_at || o.created_at || 0).getTime();
+          return orderTime > 0 && (Date.now() - orderTime) < 2.5 * 60 * 60 * 1000;
+        });
+
+        if (candidateOrders.length > 0) {
+          candidateOrders.sort((a, b) => new Date(b.placed_at || b.created_at || 0) - new Date(a.placed_at || a.created_at || 0));
+          const isTableVacated = tblObj && (tblObj.status === 'available' || tblObj.status === 'vacant') && !tblObj.current_order_id;
+          if (!isTableVacated) {
+            activeParent = candidateOrders[0];
+          }
+        }
+      }
+    }
+
+    const isAddonOrder = Boolean(activeParent);
+    const roundNumber = isAddonOrder ? ((activeParent.round || 1) + 1) : 1;
 
     // Tag order with round metadata and link to parent table session
     newOrder.is_addon = isAddonOrder;
     newOrder.round = roundNumber;
-    newOrder.parent_order_id = isAddonOrder ? (existingActiveOrders[0].id || existingActiveOrders[0].order_number) : null;
+    newOrder.parent_order_id = isAddonOrder ? (activeParent.id || activeParent.order_number) : null;
 
     // Enforce proper payment classification
     const isOnline = newOrder.payment_mode === 'UPI' || newOrder.payment_verified_online === true;
@@ -3373,6 +3387,11 @@ export default function App() {
 
       finalOrder = {
         ...activeParent,
+        id: activeParent.id,
+        order_number: activeParent.order_number || String(activeParent.id).replace('#', ''),
+        supabase_order_id: activeParent.supabase_order_id || null,
+        session_id: activeParent.session_id || null,
+        table_number: activeParent.table_number || newOrder.table_number,
         items: mergedItems,
         order_items: mergedItems,
         subtotal: cumulativeSubtotal,
@@ -3552,7 +3571,7 @@ export default function App() {
       console.warn('[SUPABASE] Broadcast new_order_placed notice:', bcErr);
     }
 
-    return newOrder.id;
+    return finalOrder.id;
   };
 
   const handleAddCustomerPoints = (customerId, points = 100) => {
