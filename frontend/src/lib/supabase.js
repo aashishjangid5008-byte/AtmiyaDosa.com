@@ -365,10 +365,21 @@ export const dispatchOrderToSupabase = async ({
     if (existingDbOrder) {
       let mergedSpecialNotes = special_note || '';
       if (existingDbOrder.special_notes && existingDbOrder.special_notes.includes('[KDS_ITEM_STATES:') && !mergedSpecialNotes.includes('[KDS_ITEM_STATES:')) {
-        const kdsStatesMatch = existingDbOrder.special_notes.match(/\[KDS_ITEM_STATES:\{.*?\}\]/);
-        if (kdsStatesMatch) {
-          mergedSpecialNotes = `${mergedSpecialNotes ? mergedSpecialNotes + ' ' : ''}${kdsStatesMatch[0]}`.trim();
-        }
+        try {
+          const kdsStatesMatch = existingDbOrder.special_notes.match(/\[KDS_ITEM_STATES:(\{.*?\})\]/);
+          if (kdsStatesMatch) {
+            const prevStates = JSON.parse(kdsStatesMatch[1]);
+            const cleanStates = {};
+            Object.keys(prevStates).forEach(k => {
+              if (k.length > 5 && isNaN(Number(k)) && k !== 'all') {
+                cleanStates[k] = prevStates[k];
+              }
+            });
+            if (Object.keys(cleanStates).length > 0) {
+              mergedSpecialNotes = `${mergedSpecialNotes ? mergedSpecialNotes + ' ' : ''}[KDS_ITEM_STATES:${JSON.stringify(cleanStates)}]`.trim();
+            }
+          }
+        } catch (e) {}
       }
 
       const { data: orderUpdateData, error: orderUpdateErr } = await supabase
@@ -663,16 +674,12 @@ export const updateOrderItemStatusInSupabase = async (orderIdOrNumber, itemIndex
 
       const itemKey = String(itemIndexOrName);
       itemStates[itemKey] = safeItemStatus.toLowerCase();
-      if (typeof itemIndexOrName === 'string') {
-        itemStates[itemIndexOrName] = safeItemStatus.toLowerCase();
-      }
       if (existingOrderObj?.items && Array.isArray(existingOrderObj.items)) {
         const found = (typeof itemIndexOrName === 'number') 
           ? existingOrderObj.items[itemIndexOrName]
-          : existingOrderObj.items.find(i => i.id === itemIndexOrName || i.name === itemIndexOrName);
-        if (found) {
-          if (found.name) itemStates[found.name] = safeItemStatus.toLowerCase();
-          if (found.id) itemStates[found.id] = safeItemStatus.toLowerCase();
+          : existingOrderObj.items.find(i => i.id === itemIndexOrName);
+        if (found && found.id) {
+          itemStates[found.id] = safeItemStatus.toLowerCase();
         }
       }
 

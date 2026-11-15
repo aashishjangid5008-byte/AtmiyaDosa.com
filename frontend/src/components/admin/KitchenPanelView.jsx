@@ -66,8 +66,8 @@ const resolveTicketItems = (order) => {
         qty: qty,
         quantity: qty,
         price: 0,
-        kitchen_status: (order.status || '').toLowerCase() === 'ready' ? 'ready' : 'placed',
-        is_served: (order.status || '').toLowerCase() === 'served',
+        kitchen_status: 'placed',
+        is_served: false,
         cooking_note: null,
         round: 1
       };
@@ -100,10 +100,10 @@ const resolveTicketItems = (order) => {
         qty: waterQty,
         quantity: waterQty,
         price: 20,
-        kitchen_status: (order.status || '').toLowerCase() === 'ready' ? 'ready' : 'placed',
+        kitchen_status: 'placed',
         is_addon: true,
         round: order.round || 2,
-        is_served: (order.status || '').toLowerCase() === 'served',
+        is_served: false,
         cooking_note: 'Chilled bottle'
       });
     }
@@ -409,8 +409,24 @@ export default function KitchenPanelView({
 
       // 3. Spoken Voice Announcement
       if (voiceAlertsEnabled) {
-        const items = latest.items_summary || (latest.items || []).map(i => `${i.qty || 1} ${i.name}`).join(', ');
-        speakOrderAlert(tbl, latest.is_addon, items);
+        const isAddon = Boolean(latest.is_addon || (latest.round && latest.round > 1) || latest.newly_added_summary);
+        let itemsToAnnounce = '';
+        if (isAddon) {
+          if (latest.newly_added_summary) {
+            itemsToAnnounce = latest.newly_added_summary;
+          } else if (Array.isArray(latest.newly_added_items) && latest.newly_added_items.length > 0) {
+            itemsToAnnounce = latest.newly_added_items.map(i => `${i.qty || i.quantity || 1} ${i.name}`).join(', ');
+          } else if (Array.isArray(latest.items)) {
+            const addonOnly = latest.items.filter(i => (i.is_addon || (i.round && i.round > 1)) && !i.is_served);
+            if (addonOnly.length > 0) {
+              itemsToAnnounce = addonOnly.map(i => `${i.qty || i.quantity || 1} ${i.name}`).join(', ');
+            }
+          }
+        }
+        if (!itemsToAnnounce) {
+          itemsToAnnounce = latest.items_summary || (latest.items || []).map(i => `${i.qty || 1} ${i.name}`).join(', ');
+        }
+        speakOrderAlert(tbl, isAddon, itemsToAnnounce);
       }
 
       // 4. Alert Banner & Auto-switch to 'new'

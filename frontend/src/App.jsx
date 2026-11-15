@@ -168,7 +168,8 @@ const mapDbOrderToFrontend = (dbOrd) => {
   const hasSpecificStates = Object.keys(itemStates).length > 0;
 
   let itms = (dbOrd.order_items || []).map((i, idx) => {
-    const savedState = itemStates[String(idx)] || itemStates[i.item_name] || itemStates[i.id];
+    const rawItemStatus = String(i.status || '').toLowerCase().trim();
+    const savedState = (i.id && itemStates[i.id]) || (i.item_id && itemStates[i.item_id]) || itemStates[`oi_${idx}`];
     const isSavedReady = savedState === 'ready';
     const isSavedServed = savedState === 'served';
     const isSavedPrep = savedState === 'preparing' || savedState === 'cooking' || savedState === 'placed';
@@ -178,19 +179,19 @@ const mapDbOrderToFrontend = (dbOrd) => {
       isItemServed = true;
     } else if (isSavedReady || isSavedPrep) {
       isItemServed = false;
-    } else if (i.status === 'SERVED' || i.status === 'served') {
+    } else if (rawItemStatus === 'served') {
       isItemServed = true;
-    } else if (dbOrd.status === 'COMPLETED' || dbOrd.status === 'SETTLED' || (!hasSpecificStates && (dbOrd.status === 'SERVED' || itemStates['all'] === 'served'))) {
+    } else if (dbOrd.status === 'COMPLETED' || dbOrd.status === 'SETTLED') {
       isItemServed = true;
     }
 
-    let isItemReady = isItemServed;
+    let isItemReady = false;
     if (!isItemServed) {
       if (isSavedReady) {
         isItemReady = true;
-      } else if (isSavedPrep) {
+      } else if (isSavedPrep || rawItemStatus === 'placed' || rawItemStatus === 'preparing' || rawItemStatus === 'cooking') {
         isItemReady = false;
-      } else if (i.status === 'READY' || i.status === 'ready') {
+      } else if (rawItemStatus === 'ready') {
         isItemReady = true;
       } else if (!hasSpecificStates && (dbOrd.status === 'READY' || itemStates['all'] === 'ready')) {
         isItemReady = true;
@@ -199,7 +200,7 @@ const mapDbOrderToFrontend = (dbOrd) => {
 
     const kitchenStatus = isItemServed 
       ? 'served' 
-      : (isItemReady ? 'ready' : (savedState === 'preparing' || i.status === 'PREPARING' ? 'preparing' : 'placed'));
+      : (isItemReady ? 'ready' : (savedState === 'preparing' || rawItemStatus === 'preparing' || rawItemStatus === 'cooking' ? 'preparing' : 'placed'));
 
     return {
       id: i.id,
@@ -1719,17 +1720,25 @@ export default function App() {
               const cust = newOrd.customer_name || 'Guest';
 
               if (currentRole === 'chef' || currentRole === 'admin') {
+                const isAddon = isAddonUpdate || Boolean(newOrd.is_addon || (newOrd.round && newOrd.round > 1));
+                const addonSummary = newOrd.newly_added_summary || 
+                  (Array.isArray(newOrd.newly_added_items) && newOrd.newly_added_items.length > 0
+                    ? newOrd.newly_added_items.map(i => `${i.qty || i.quantity || 1} ${i.name}`).join(', ')
+                    : '');
                 triggerStaffOrderNotification({
                   tableNumber: tbl,
                   orderNumber: ordNum,
                   customerName: cust,
                   paymentMode: newOrd.payment_method || 'Cash',
-                  isAddon: isAddonUpdate
+                  itemsSummary: isAddon ? (addonSummary || 'Add-on items') : (newOrd.items_summary || ''),
+                  isAddon: isAddon
                 });
                 setActiveToast({
                   id: `ord_${Date.now()}`,
-                  title: isAddonUpdate ? `🚨 Table ${tbl} — Add-On Order Placed!` : `🚨 Table ${tbl} — New KOT Placed!`,
-                  message: `Order #${ordNum} (${newOrd.payment_method || 'Cash'}) from ${cust}. Start prep now!`,
+                  title: isAddon ? `🚨 Table ${tbl} — Add-On Order Placed!` : `🚨 Table ${tbl} — New KOT Placed!`,
+                  message: isAddon
+                    ? `Table ${tbl}: Added ${addonSummary || 'new items'}. Start prep now!`
+                    : `Order #${ordNum} (${newOrd.payment_method || 'Cash'}) from ${cust}. Start prep now!`,
                   type: 'order',
                   time: 'Just now',
                   orderId: ordNum
@@ -1878,17 +1887,25 @@ export default function App() {
               const cust = payload.customer_name || 'Guest';
 
               if (currentRole === 'chef' || currentRole === 'admin') {
+                const isAddon = Boolean(payload.is_addon || payload.round > 1);
+                const addonSummary = payload.newly_added_summary || 
+                  (Array.isArray(payload.newly_added_items) && payload.newly_added_items.length > 0
+                    ? payload.newly_added_items.map(i => `${i.qty || i.quantity || 1} ${i.name}`).join(', ')
+                    : '');
                 triggerStaffOrderNotification({
                   tableNumber: tbl,
                   orderNumber: ordNum,
                   customerName: cust,
+                  itemsSummary: isAddon ? (addonSummary || 'Add-on items') : (payload.items_summary || ''),
                   paymentMode: payload.payment_mode || 'Cash',
-                  isAddon: payload.is_addon || false
+                  isAddon: isAddon
                 });
                 setActiveToast({
                   id: `ord_${Date.now()}`,
-                  title: payload.is_addon ? `🚨 Table ${tbl} — Add-On Order Placed!` : `🚨 Table ${tbl} — New KOT Placed!`,
-                  message: `Order #${ordNum} (${payload.payment_mode || 'Cash'}) from ${cust}. Start prep now!`,
+                  title: isAddon ? `🚨 Table ${tbl} — Add-On Order Placed!` : `🚨 Table ${tbl} — New KOT Placed!`,
+                  message: isAddon
+                    ? `Table ${tbl}: Added ${addonSummary || 'new items'}. Start prep now!`
+                    : `Order #${ordNum} (${payload.payment_mode || 'Cash'}) from ${cust}. Start prep now!`,
                   type: 'order',
                   time: 'Just now',
                   orderId: ordNum
@@ -2057,8 +2074,8 @@ export default function App() {
                   };
                 });
                 const allReady = items.length > 0 && items.every(i => i.kitchen_status === 'ready' || i.is_served);
-                const hasReady = items.some(i => i.kitchen_status === 'ready');
-                const nextStatus = allReady ? 'Ready' : (hasReady ? 'Ready' : o.status);
+                const anyPrepOrReady = items.some(i => i.kitchen_status === 'ready' || i.kitchen_status === 'preparing');
+                const nextStatus = allReady ? 'Ready' : (anyPrepOrReady ? 'Preparing' : o.status);
                 return {
                   ...o,
                   items,

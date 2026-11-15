@@ -363,7 +363,7 @@ export default function WaiterView({
     const hasExplicitItemStatuses = (order.items || []).some(it => it.kitchen_status);
 
     (order.items || []).forEach((item, itemIdx) => {
-      const isItemReady = (item.kitchen_status === 'ready' || item.kitchen_status === 'prepared') || (!hasExplicitItemStatuses && isOrderReady);
+      const isItemReady = (item.kitchen_status === 'ready' || item.kitchen_status === 'prepared');
       if (isItemReady && !item.is_served) {
         acc.push({
           orderId: order.id,
@@ -2660,7 +2660,7 @@ export default function WaiterView({
                 name: m ? m[2].trim() : part,
                 qty: m ? parseInt(m[1], 10) : 1,
                 price: 0,
-                kitchen_status: ord.status === 'Ready' ? 'ready' : 'placed',
+                kitchen_status: 'placed',
                 is_served: false,
                 round: 1
               };
@@ -2668,9 +2668,8 @@ export default function WaiterView({
           }
 
           list.forEach((it, idx) => {
-            const hasExplicitStatuses = list.some(i => i.kitchen_status);
             const isItemServed = Boolean(it.is_served);
-            const isItemReady = !isItemServed && (it.kitchen_status === 'ready' || it.kitchen_status === 'prepared' || (!hasExplicitStatuses && ord.status === 'Ready'));
+            const isItemReady = !isItemServed && (it.kitchen_status === 'ready' || it.kitchen_status === 'prepared');
             allDishes.push({
               ...it,
               orderId: ord.id,
