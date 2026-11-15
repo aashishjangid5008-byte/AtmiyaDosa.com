@@ -1,4 +1,4 @@
-import { supabase, RESTAURANT_ID } from './supabase';
+import { supabase, RESTAURANT_ID, purgeAllMenuFromSupabase } from './supabase';
 
 // Supabase Cloud Configuration
 export { supabase, RESTAURANT_ID };
@@ -7,6 +7,17 @@ export { supabase, RESTAURANT_ID };
 // LocalStorage Persistence Layer with Real-Time Event Dispatching
 export const getLocalStore = (key, fallback) => {
   try {
+    const isCleared = typeof localStorage !== 'undefined' && localStorage.getItem('restaurant_menu_cleared') === 'true';
+    if (isCleared && (key === 'menu_items' || key === 'categories')) {
+      const rawCleared = localStorage.getItem(`restaurant_${key}`) || localStorage.getItem(`atmiya_${key}`);
+      if (!rawCleared) return [];
+      try {
+        const p = JSON.parse(rawCleared);
+        return Array.isArray(p) ? p : [];
+      } catch {
+        return [];
+      }
+    }
     const raw = localStorage.getItem(`restaurant_${key}`) || localStorage.getItem(`atmiya_${key}`);
     if (raw === null || raw === undefined) return fallback;
     const parsed = JSON.parse(raw);
@@ -215,6 +226,9 @@ export const clearAllMenuData = () => {
   } catch (e) {}
   window.dispatchEvent(new Event('restaurant_data_updated'));
   window.dispatchEvent(new Event('atmiya_data_updated'));
+  try {
+    purgeAllMenuFromSupabase();
+  } catch (e) {}
   recordEmployeeActivity('Admin Owner', 'Admin', 'MENU_CLEARED_ALL', 'Cleared all menu items and categories for fresh menu creation');
   return { menu_items: [], categories: [] };
 };

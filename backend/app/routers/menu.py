@@ -14,12 +14,16 @@ from app.schemas.menu import (
     CategoryResponse,
     ImageUploadRequest
 )
+import uuid
 from app.database import (
     CANONICAL_MENU,
     CANONICAL_CATEGORIES,
     RESTAURANT_ID,
     log_admin_action,
-    save_custom_menu
+    save_custom_menu,
+    save_custom_categories,
+    purge_menu_and_categories,
+    load_authentic_sample_menu
 )
 from app.security import get_current_user, get_current_user_optional, require_roles
 
@@ -156,12 +160,129 @@ async def get_categories():
         ))
     return {"success": True, "categories": result}
 
+@router.post("/categories", summary="Create Menu Category")
+async def create_category(
+    request: Request,
+    current_user: Optional[dict] = Depends(get_current_user_optional)
+):
+    body = await request.json()
+    cat_id = body.get("id") or str(uuid.uuid4())
+    cat_name = (body.get("name") or "").strip()
+    if not cat_name:
+        raise HTTPException(status_code=400, detail="Category name is required")
+    
+    new_cat = {
+        "id": cat_id,
+        "name": cat_name,
+        "gujarati_name": (body.get("gujarati") or body.get("gujarati_name") or cat_name).strip(),
+        "icon": body.get("icon", "Utensils"),
+        "image_url": body.get("image_url") or body.get("image") or None,
+        "display_order": int(body.get("display_order", len(CANONICAL_CATEGORIES) + 1)),
+        "is_active": True
+    }
+
+    if settings.SUPABASE_SERVICE_ROLE_KEY and settings.SUPABASE_URL:
+        try:
+            api_key = settings.SUPABASE_SERVICE_ROLE_KEY
+            headers = {
+                "apikey": api_key,
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=representation"
+            }
+            base_url = f"{settings.SUPABASE_URL}/rest/v1"
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                await client.post(
+                    f"{base_url}/menu_categories",
+                    headers=headers,
+                    json={
+                        "id": new_cat["id"],
+                        "restaurant_id": RESTAURANT_ID,
+                        "name": new_cat["name"],
+                        "gujarati_name": new_cat["gujarati_name"],
+                        "icon": new_cat["icon"],
+                        "display_order": new_cat["display_order"],
+                        "is_active": True
+                    }
+                )
+        except Exception as sup_err:
+            print(f"[SUPABASE CATEGORY] Insert error: {sup_err}")
+
+    CANONICAL_CATEGORIES[:] = [c for c in CANONICAL_CATEGORIES if c.get("name", "").lower() != cat_name.lower()]
+    CANONICAL_CATEGORIES.append(new_cat)
+    save_custom_categories()
+
+    return {"success": True, "category": new_cat}
+
+@router.delete("/categories/{category_id}", summary="Delete Menu Category")
+async def delete_category(
+    category_id: str,
+    current_user: Optional[dict] = Depends(get_current_user_optional)
+):
+    CANONICAL_CATEGORIES[:] = [c for c in CANONICAL_CATEGORIES if str(c.get("id")) != category_id and c.get("name", "").lower() != category_id.lower()]
+    save_custom_categories()
+
+    if settings.SUPABASE_SERVICE_ROLE_KEY and settings.SUPABASE_URL:
+        try:
+            api_key = settings.SUPABASE_SERVICE_ROLE_KEY
+            headers = {
+                "apikey": api_key,
+                "Authorization": f"Bearer {api_key}"
+            }
+            base_url = f"{settings.SUPABASE_URL}/rest/v1"
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                await client.delete(f"{base_url}/menu_categories?id=eq.{category_id}", headers=headers)
+                await client.delete(f"{base_url}/menu_categories?name=eq.{category_id}", headers=headers)
+        except Exception as sup_err:
+            print(f"[SUPABASE CATEGORY] Delete error: {sup_err}")
+
+    return {"success": True, "message": f"Category {category_id} deleted successfully"}
+
+@router.delete("/purge", summary="Purge All Menu Items and Categories (Clean Slate)")
+async def purge_all_menu_and_categories(
+    current_user: Optional[dict] = Depends(get_current_user_optional)
+):
+    """
+    Completely purges all menu items and categories from memory, disk, and Supabase Cloud.
+    """
+    if settings.SUPABASE_SERVICE_ROLE_KEY and settings.SUPABASE_URL:
+        try:
+            api_key = settings.SUPABASE_SERVICE_ROLE_KEY
+            headers = {
+                "apikey": api_key,
+                "Authorization": f"Bearer {api_key}"
+            }
+            base_url = f"{settings.SUPABASE_URL}/rest/v1"
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.patch(
+                    f"{base_url}/order_items?menu_item_id=not.is.null",
+                    headers=headers,
+                    json={"menu_item_id": None}
+                )
+                await client.delete(f"{base_url}/menu_items?id=neq.00000000-0000-0000-0000-000000000000", headers=headers)
+                await client.delete(f"{base_url}/menu_categories?id=neq.00000000-0000-0000-0000-000000000000", headers=headers)
+        except Exception as sup_err:
+            print(f"[SUPABASE PURGE] Error: {sup_err}")
+
+    purge_menu_and_categories()
+
+    emp_name = current_user.get("name", "Admin") if current_user else "Admin"
+    emp_role = current_user.get("role", "Admin") if current_user else "Admin"
+    await log_admin_action(
+        employee_name=emp_name,
+        employee_role=emp_role,
+        action_type="MENU_PURGED_ALL",
+        details="Purged all dishes and categories for fresh menu creation"
+    )
+
+    return {"success": True, "message": "All menu items and categories purged successfully"}
+
 @router.post("", response_model=MenuItemResponse, status_code=status.HTTP_201_CREATED, summary="Add New Menu Item (Admin/Kitchen)")
 async def create_menu_item(
     body: MenuItemCreate,
     current_user: Optional[dict] = Depends(get_current_user_optional)
 ):
-    item_id = body.id if body.id else f"item_atmiya_{int(time.time() * 1000)}"
+    item_id = body.id if (body.id and len(str(body.id)) == 36) else str(uuid.uuid4())
     new_item = {
         "id": item_id,
         "name": body.name.strip(),

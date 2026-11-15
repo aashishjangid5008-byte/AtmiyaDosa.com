@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://sfrnxmzrjfxcqqwsjnka.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmcm54bXpyamZ4Y3Fxd3NqbmthIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM4NzU0MzksImV4cCI6MjEwOTQ1MTQzOX0.QSLqOmTHisq3NrmUaHFqr3AGzAAR2K8d9wijqwpe0kI';
+export const SUPABASE_SERVICE_ROLE_KEY = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmcm54bXpyamZ4Y3Fxd3NqbmthIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5Mzg3NTQzOSwiZXhwIjoyMTA5NDUxNDM5fQ.Kcr3rh0nQ0KlueI67jmga2Qhe3jpDKhZHeYzkonT5Ag';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
@@ -12,6 +13,13 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     params: {
       eventsPerSecond: 10,
     },
+  },
+});
+
+export const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
   },
 });
 
@@ -31,11 +39,22 @@ export const API_BASE_URL = (() => {
 
 export const getLocalStore = (key, fallback) => {
   try {
+    const isMenuCleared = typeof localStorage !== 'undefined' && localStorage.getItem('restaurant_menu_cleared') === 'true';
+    if (isMenuCleared && (key === 'menu_items' || key === 'categories')) {
+      const rawCleared = localStorage.getItem(`atmiya_${key}`) || localStorage.getItem(`restaurant_${key}`);
+      if (!rawCleared) return [];
+      try {
+        const p = JSON.parse(rawCleared);
+        return Array.isArray(p) ? p : [];
+      } catch {
+        return [];
+      }
+    }
     const raw = localStorage.getItem(`atmiya_${key}`) || localStorage.getItem(`restaurant_${key}`);
     if (!raw) return fallback;
     const parsed = JSON.parse(raw);
     if (key === 'menu_items' && Array.isArray(parsed)) {
-      if (parsed.length === 0) return fallback;
+      if (parsed.length === 0) return isMenuCleared ? [] : fallback;
       return parsed.map(dish => {
         const photo = dish.image_url || dish.imageUrl || dish.image || dish.photo || null;
         return {
@@ -1011,6 +1030,164 @@ export const fetchLiveOrdersFromSupabase = async () => {
  * Includes both available and out-of-stock items so availability toggles are 100% cloud-authoritative.
  * Fallback to FastAPI backend /api/menu if Supabase network is unavailable.
  */
+export const purgeAllMenuFromSupabase = async () => {
+  try {
+    // 1. Unlink order_items first so foreign key constraints are not violated
+    await supabaseAdmin
+      .from('order_items')
+      .update({ menu_item_id: null })
+      .not('menu_item_id', 'is', null);
+
+    // 2. Delete all menu_items
+    await supabaseAdmin
+      .from('menu_items')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    // 3. Delete all menu_categories
+    await supabaseAdmin
+      .from('menu_categories')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    console.log('[SUPABASE MENU] Successfully purged all menu items & categories from cloud.');
+  } catch (err) {
+    console.error('[SUPABASE MENU] Error purging cloud menu:', err);
+  }
+
+  // 4. Also call backend /api/menu/purge if backend running
+  try {
+    await fetch(`${API_BASE_URL}/menu/purge`, { method: 'DELETE' });
+  } catch (e) {}
+};
+
+export const saveCategoryToSupabaseCloud = async (catObj) => {
+  if (!catObj || !catObj.name) return null;
+  const catId = catObj.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : null);
+
+  const payload = {
+    id: catId,
+    restaurant_id: RESTAURANT_ID,
+    name: catObj.name.trim(),
+    gujarati_name: (catObj.gujarati || catObj.gujarati_name || catObj.name).trim(),
+    icon: catObj.icon || 'Utensils',
+    image_url: catObj.image_url || catObj.imageUrl || catObj.image || catObj.photo || null,
+    display_order: catObj.display_order || 1,
+    is_active: true
+  };
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('menu_categories')
+      .upsert(payload)
+      .select();
+    if (!error && data && data.length > 0) {
+      console.log(`[SUPABASE CATEGORY] Saved "${payload.name}" (${payload.id})`);
+    } else if (error) {
+      console.warn('[SUPABASE CATEGORY] Upsert notice:', error);
+    }
+  } catch (err) {
+    console.warn('[SUPABASE CATEGORY] Exception:', err);
+  }
+
+  try {
+    await fetch(`${API_BASE_URL}/menu/categories`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (e) {}
+
+  return payload;
+};
+
+export const deleteCategoryFromSupabaseCloud = async (catId) => {
+  if (!catId) return;
+  try {
+    await supabaseAdmin
+      .from('menu_categories')
+      .delete()
+      .or(`id.eq.${catId},name.eq.${catId}`);
+  } catch (e) {
+    console.warn('[SUPABASE CATEGORY] Delete notice:', e);
+  }
+
+  try {
+    await fetch(`${API_BASE_URL}/menu/categories/${encodeURIComponent(catId)}`, { method: 'DELETE' });
+  } catch (e) {}
+};
+
+export const saveMenuItemToSupabaseCloud = async (itemObj, categoryId = null) => {
+  if (!itemObj || !itemObj.name) return null;
+  const itemId = itemObj.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : null);
+
+  const photo = itemObj.image_url || itemObj.imageUrl || itemObj.image || itemObj.photo || null;
+  const priceNum = parseFloat(itemObj.price) || 0;
+
+  const payload = {
+    id: itemId,
+    restaurant_id: RESTAURANT_ID,
+    category_id: categoryId || itemObj.category_id || null,
+    name: itemObj.name.trim(),
+    gujarati_name: (itemObj.gujarati_name || itemObj.gujarati || itemObj.name).trim(),
+    description: itemObj.description || '',
+    price: priceNum,
+    image_url: photo,
+    is_available: itemObj.is_available !== false,
+    is_jain_available: Boolean(itemObj.is_jain_available),
+    prep_time_mins: itemObj.prep_time_mins || itemObj.prepTimeMins || 10,
+    tags: itemObj.tags || ['New Item']
+  };
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('menu_items')
+      .upsert(payload)
+      .select();
+    if (!error && data && data.length > 0) {
+      console.log(`[SUPABASE DISH] Saved "${payload.name}" (${payload.id})`);
+    } else if (error) {
+      console.warn('[SUPABASE DISH] Upsert notice:', error);
+    }
+  } catch (err) {
+    console.warn('[SUPABASE DISH] Exception:', err);
+  }
+
+  try {
+    await fetch(`${API_BASE_URL}/menu`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...payload,
+        category: itemObj.category
+      })
+    });
+  } catch (e) {}
+
+  return payload;
+};
+
+export const deleteMenuItemFromSupabaseCloud = async (itemId) => {
+  if (!itemId) return;
+  try {
+    await supabaseAdmin
+      .from('menu_items')
+      .delete()
+      .or(`id.eq.${itemId},name.eq.${itemId}`);
+  } catch (e) {
+    console.warn('[SUPABASE DISH] Delete notice:', e);
+  }
+
+  try {
+    await fetch(`${API_BASE_URL}/menu/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
+  } catch (e) {}
+};
+
+/**
+ * Fetches all active menu categories and menu items directly from Supabase Cloud.
+ * Cloud is authoritative. If Supabase returns empty (e.g. menu was cleared),
+ * it returns empty categories and items rather than reviving 177 legacy items.
+ */
 export const fetchLiveMenuFromSupabase = async () => {
   try {
     const [catsRes, itemsRes] = await Promise.all([
@@ -1024,13 +1201,14 @@ export const fetchLiveMenuFromSupabase = async () => {
         .order('name', { ascending: true })
     ]);
 
-    if (!catsRes.error && catsRes.data && catsRes.data.length > 0 &&
-        !itemsRes.error && itemsRes.data && itemsRes.data.length > 0) {
-      
-      const catMap = {};
-      catsRes.data.forEach(c => { catMap[c.id] = c.name; });
+    if (!catsRes.error && !itemsRes.error) {
+      const catRows = catsRes.data || [];
+      const itemRows = itemsRes.data || [];
 
-      const mappedCategories = catsRes.data.map(c => ({
+      const catMap = {};
+      catRows.forEach(c => { catMap[c.id] = c.name; });
+
+      const mappedCategories = catRows.map(c => ({
         id: c.id,
         name: c.name,
         gujarati: c.gujarati_name || c.name,
@@ -1038,7 +1216,7 @@ export const fetchLiveMenuFromSupabase = async () => {
         display_order: c.display_order || 1
       }));
 
-      const mappedItems = itemsRes.data.map((item, idx) => {
+      const mappedItems = itemRows.map((item, idx) => {
         const photo = item.image_url || null;
         const priceNum = parseFloat(item.price) || 0;
         return {
@@ -1082,24 +1260,31 @@ export const fetchLiveMenuFromSupabase = async () => {
     console.warn('[SUPABASE MENU] Supabase query notice:', err.message);
   }
 
-  // Fallback to FastAPI backend /api/menu
+  // Fallback to FastAPI backend /api/menu if Supabase network failure
   try {
-    const res = await fetch(`${API_BASE_URL}/menu`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.items && Array.isArray(data.items) && data.items.length > 0) {
-        return {
-          items: data.items,
-          categories: null,
-          source: 'backend_api'
-        };
+    const isMenuCleared = typeof localStorage !== 'undefined' && localStorage.getItem('restaurant_menu_cleared') === 'true';
+    if (!isMenuCleared) {
+      const res = await fetch(`${API_BASE_URL}/menu`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.items && Array.isArray(data.items)) {
+          return {
+            items: data.items,
+            categories: null,
+            source: 'backend_api'
+          };
+        }
       }
     }
   } catch (err) {
     console.warn('[BACKEND MENU] Fallback notice:', err.message);
   }
 
-  return null;
+  return {
+    categories: [],
+    items: [],
+    source: 'empty'
+  };
 };
 
 // ---------------------------------------------------------------------------

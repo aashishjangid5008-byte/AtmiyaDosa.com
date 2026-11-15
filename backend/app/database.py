@@ -10,371 +10,100 @@ from app.security import get_password_hash
 # CANONICAL IN-MEMORY REPOSITORY (SERVER OF RECORD)
 # -------------------------------------------------------------------------
 
-CANONICAL_MENU: Dict[str, Dict[str, Any]] = {
-    # Mysore Dosa
-    "item_atmiya_01": {
-        "id": "item_atmiya_01",
-        "name": "Mysore Masala Dosa",
-        "gujarati_name": "માયસોર મસાલા ઢોસા",
-        "price": 130.0,
-        "category": "Mysore Dosa",
-        "description": "Crisp golden dosa coated with spicy red garlic chutney, filled with potato bhaji.",
-        "is_available": True,
-        "is_jain_available": True,
-        "prep_time_mins": 10,
-        "tags": ["Bestseller", "Spicy"]
-    },
-    "item_atmiya_02": {
-        "id": "item_atmiya_02",
-        "name": "Paneer Mysore Dosa",
-        "gujarati_name": "પનીર માયસોર ઢોસા",
-        "price": 150.0,
-        "category": "Mysore Dosa",
-        "description": "Stuffed with fresh malai paneer and Mysore spices.",
-        "is_available": True,
-        "is_jain_available": True,
-        "prep_time_mins": 10,
-        "tags": ["Chef Special"]
-    },
-    "item_atmiya_03": {
-        "id": "item_atmiya_03",
-        "name": "Cheese Mysore Dosa",
-        "gujarati_name": "ચીઝ માયસોર ઢોસા",
-        "price": 160.0,
-        "category": "Mysore Dosa",
-        "description": "Generously loaded with melted Amul cheese and Mysore paste.",
-        "is_available": True,
-        "is_jain_available": True,
-        "prep_time_mins": 11,
-        "tags": ["Kids Favorite"]
-    },
-    "item_atmiya_04": {
-        "id": "item_atmiya_04",
-        "name": "S.P. Atmiya Mysore",
-        "gujarati_name": "સ્પે. આત્મીય માયસોર",
-        "price": 210.0,
-        "category": "Mysore Dosa",
-        "description": "House signature double butter, paneer, dry fruits, and rich cheese filling.",
-        "is_available": True,
-        "is_jain_available": True,
-        "prep_time_mins": 13,
-        "tags": ["Signature", "Must Try"]
-    },
-    "item_atmiya_05": {
-        "id": "item_atmiya_05",
-        "name": "Cheese Bhurji Mysore",
-        "gujarati_name": "ચીઝ ભુરજી માયસોર",
-        "price": 230.0,
-        "category": "Mysore Dosa",
-        "description": "Shredded paneer and Amul cheese tossed with capsicum and Mysore masala.",
-        "is_available": True,
-        "is_jain_available": True,
-        "prep_time_mins": 12,
-        "tags": ["Rich"]
-    },
+import json
+import os
 
-    # Fancy Dosa
-    "item_atmiya_06": {
-        "id": "item_atmiya_06",
-        "name": "Jini Roll Dosa",
-        "gujarati_name": "જીની રોલ ઢોસા",
-        "price": 200.0,
-        "category": "Fancy Dosa",
-        "description": "Sliced crispy dosa rolls topped with sweet and spicy chutneys and shredded cheese.",
-        "is_available": True,
-        "is_jain_available": True,
-        "prep_time_mins": 12,
-        "tags": ["Trending"]
-    },
-    "item_atmiya_07": {
-        "id": "item_atmiya_07",
-        "name": "Chinese Dosa",
-        "gujarati_name": "ચાઈનીઝ ઢોસા",
-        "price": 200.0,
-        "category": "Fancy Dosa",
-        "description": "Fusion dosa filled with Hakka noodles, cabbage, and Manchurian sauce.",
-        "is_available": True,
-        "is_jain_available": False,
-        "prep_time_mins": 12,
-        "tags": ["Fusion"]
-    },
-    "item_atmiya_08": {
-        "id": "item_atmiya_08",
-        "name": "Spring Roll Dosa",
-        "gujarati_name": "સ્પ્રિંગ રોલ ઢોસા",
-        "price": 250.0,
-        "category": "Fancy Dosa",
-        "description": "Crispy rolled dosa stuffed with sautéed Asian veggies and Schezwan sauce.",
-        "is_available": True,
-        "is_jain_available": False,
-        "prep_time_mins": 14,
-        "tags": ["Crunchy"]
-    },
-    "item_atmiya_09": {
-        "id": "item_atmiya_09",
-        "name": "Surti Gotala Dosa",
-        "gujarati_name": "સુરતી ગોટાળા ઢોસા",
-        "price": 220.0,
-        "category": "Fancy Dosa",
-        "description": "Surat specialty spicy gravy with mashed vegetables, paneer, and two crisp dosas.",
-        "is_available": True,
-        "is_jain_available": True,
-        "prep_time_mins": 15,
-        "tags": ["Famous"]
-    },
-    "item_atmiya_10": {
-        "id": "item_atmiya_10",
-        "name": "Bahubali Dosa",
-        "gujarati_name": "બાહુબલી ઢોસા",
-        "price": 350.0,
-        "category": "Fancy Dosa",
-        "description": "Enormous family-sized grand dosa platter with four specialty gravies and rich toppings.",
-        "is_available": True,
-        "is_jain_available": True,
-        "prep_time_mins": 18,
-        "tags": ["Family Pack", "Grand"]
-    },
-    "item_atmiya_11": {
-        "id": "item_atmiya_11",
-        "name": "Mataka Dosa",
-        "gujarati_name": "મટકા ઢોસા",
-        "price": 300.0,
-        "category": "Fancy Dosa",
-        "description": "Clay pot-infused steaming cheese-butter gravy poured over fresh rolled dosas.",
-        "is_available": True,
-        "is_jain_available": True,
-        "prep_time_mins": 16,
-        "tags": ["Unique"]
-    },
+CANONICAL_MENU: Dict[str, Dict[str, Any]] = {}
+CANONICAL_CATEGORIES: List[Dict[str, Any]] = []
 
-    # Plain & Paper Dosa
-    "item_atmiya_12": {
-        "id": "item_atmiya_12",
-        "name": "Plain Paper Dosa",
-        "gujarati_name": "સાદા પેપર ઢોસા",
-        "price": 60.0,
-        "category": "Plain Paper Dosa",
-        "description": "Classic thin, super-crispy wafer dosa served with coconut chutney and hot sambhar.",
-        "is_available": True,
-        "is_jain_available": True,
-        "prep_time_mins": 7,
-        "tags": ["Classic"]
-    },
-    "item_atmiya_13": {
-        "id": "item_atmiya_13",
-        "name": "Butter Paper Dosa",
-        "gujarati_name": "બટર પેપર ઢોસા",
-        "price": 75.0,
-        "category": "Plain Paper Dosa",
-        "description": "Thin crispy paper dosa brushed with pure Amul butter.",
-        "is_available": True,
-        "is_jain_available": True,
-        "prep_time_mins": 8,
-        "tags": ["Popular"]
-    },
-    "item_atmiya_14": {
-        "id": "item_atmiya_14",
-        "name": "Cheese Paper Dosa",
-        "gujarati_name": "ચીઝ પેપર ઢોસા",
-        "price": 90.0,
-        "category": "Plain Paper Dosa",
-        "description": "Crispy paper dosa filled with melted mozzarella and processed cheese.",
-        "is_available": True,
-        "is_jain_available": True,
-        "prep_time_mins": 9,
-        "tags": ["Cheesy"]
-    },
-
-    # Pav Bhaji & Pulao
-    "item_atmiya_15": {
-        "id": "item_atmiya_15",
-        "name": "Amul Butter Pav Bhaji",
-        "gujarati_name": "અમૂલ બટર પાવભાજી",
-        "price": 80.0,
-        "category": "Pav Bhaji & Pulao",
-        "description": "Slow-cooked mashed vegetable gravy topped with Amul butter slab and toasted pavs.",
-        "is_available": True,
-        "is_jain_available": True,
-        "prep_time_mins": 8,
-        "tags": ["Comfort Food"]
-    },
-    "item_atmiya_16": {
-        "id": "item_atmiya_16",
-        "name": "Cheese Pav Bhaji",
-        "gujarati_name": "ચીઝ પાવભાજી",
-        "price": 140.0,
-        "category": "Pav Bhaji & Pulao",
-        "description": "Creamy Pav Bhaji blanketed with grated Amul cheese.",
-        "is_available": True,
-        "is_jain_available": True,
-        "prep_time_mins": 9,
-        "tags": ["Bestseller"]
-    },
-    "item_atmiya_17": {
-        "id": "item_atmiya_17",
-        "name": "Sp. Atmiya Pulao",
-        "gujarati_name": "સ્પે. આત્મીય પુલાવ",
-        "price": 150.0,
-        "category": "Pav Bhaji & Pulao",
-        "description": "Fragrant Basmati rice stir-fried on the tawa with aromatic spices, paneer, and veggies.",
-        "is_available": True,
-        "is_jain_available": True,
-        "prep_time_mins": 10,
-        "tags": ["Tawa Pulao"]
-    },
-
-    # Chinese & Starters
-    "item_atmiya_18": {
-        "id": "item_atmiya_18",
-        "name": "Veg Manchurian Dry",
-        "gujarati_name": "વેજ મંચુરિયન ડ્રાય",
-        "price": 120.0,
-        "category": "Chinese & Starters",
-        "description": "Crispy vegetable dumplings tossed in garlic, ginger, and soy glaze.",
-        "is_available": True,
-        "is_jain_available": False,
-        "prep_time_mins": 10,
-        "tags": ["Starters"]
-    },
-    "item_atmiya_19": {
-        "id": "item_atmiya_19",
-        "name": "Hakka Noodles",
-        "gujarati_name": "હક્કા નૂડલ્સ",
-        "price": 120.0,
-        "category": "Chinese & Starters",
-        "description": "Wok-tossed noodles with crunchy capsicum, cabbage, and carrots.",
-        "is_available": True,
-        "is_jain_available": False,
-        "prep_time_mins": 10,
-        "tags": ["Wok Fresh"]
-    },
-    "item_atmiya_20": {
-        "id": "item_atmiya_20",
-        "name": "Paneer Chilli Dry",
-        "gujarati_name": "પનીર ચીલી ડ્રાય",
-        "price": 160.0,
-        "category": "Chinese & Starters",
-        "description": "Wok-seared paneer cubes with green chilies, bell peppers, and scallions.",
-        "is_available": True,
-        "is_jain_available": False,
-        "prep_time_mins": 11,
-        "tags": ["Spicy Starters"]
-    },
-
-    # Beverages
-    "item_atmiya_21": {
-        "id": "item_atmiya_21",
-        "name": "Masala Chaas",
-        "gujarati_name": "મસાલા છાશ",
-        "price": 25.0,
-        "category": "Beverages",
-        "description": "Chilled roasted-cumin spiced buttermilk.",
-        "is_available": True,
-        "is_jain_available": True,
-        "prep_time_mins": 2,
-        "tags": ["Refreshing"]
-    },
-    "item_atmiya_22": {
-        "id": "item_atmiya_22",
-        "name": "Cold Drink",
-        "gujarati_name": "ઠંડુ પીણું",
-        "price": 40.0,
-        "category": "Beverages",
-        "description": "Assorted chilled sodas (Coke, Thums Up, Sprite - 300ml).",
-        "is_available": True,
-        "is_jain_available": True,
-        "prep_time_mins": 1,
-        "tags": ["Chilled"]
-    },
-    "item_atmiya_23": {
-        "id": "item_atmiya_23",
-        "name": "Packaged Water (1L)",
-        "gujarati_name": "મિનરલ વોટર",
-        "price": 20.0,
-        "category": "Beverages",
-        "description": "Sealed mineral water bottle.",
-        "is_available": False,
-        "waiter_only": True,
-        "is_jain_available": True,
-        "prep_time_mins": 1,
-        "tags": ["Waiter Add-On Only"]
-    }
-}
-
-# Auto-load all 177 authentic dishes from the 7 physical menu cards into server repository
-try:
-    import json, os
-    _auth_file = os.path.join(os.path.dirname(__file__), "authentic_menu_data.json")
-    if os.path.exists(_auth_file):
-        with open(_auth_file, "r", encoding="utf-8") as _f:
-            _data = json.load(_f)
-            for _item in _data.get("items", []):
-                _iid = _item.get("id")
-                CANONICAL_MENU[_iid] = {
-                    "id": _iid,
-                    "name": _item.get("english_name") or _item.get("name"),
-                    "gujarati_name": _item.get("gujarati_name"),
-                    "price": float(_item.get("finalPrice") or _item.get("price")),
-                    "category": _item.get("category"),
-                    "description": _item.get("description", ""),
-                    "is_available": _item.get("is_available", True),
-                    "is_jain_available": True,
-                    "prep_time_mins": _item.get("prepTimeMins", 10),
-                    "tags": ["Authentic", _item.get("category")]
-                }
-            if _data.get("categories"):
-                CANONICAL_CATEGORIES = _data.get("categories")
-except Exception as _ex:
-    print(f"Warning: could not load authentic_menu_data.json: {_ex}")
-
-CUSTOM_MENU_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "custom_menu.json"))
+CUSTOM_MENU_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'custom_menu.json'))
+CUSTOM_CATEGORIES_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'custom_categories.json'))
 
 def save_custom_menu():
     """Persist all custom created and updated menu items with their photos to disk."""
     try:
         os.makedirs(os.path.dirname(CUSTOM_MENU_FILE), exist_ok=True)
-        with open(CUSTOM_MENU_FILE, "w", encoding="utf-8") as f:
+        with open(CUSTOM_MENU_FILE, 'w', encoding='utf-8') as f:
             json.dump(CANONICAL_MENU, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"Notice: Failed to persist custom menu to disk: {e}")
+        print(f'Notice: Failed to persist custom menu to disk: {e}')
 
 def load_custom_menu():
     """Load previously saved custom menu items and photos into memory."""
+    global CANONICAL_MENU
     try:
         if os.path.exists(CUSTOM_MENU_FILE):
-            with open(CUSTOM_MENU_FILE, "r", encoding="utf-8") as f:
+            with open(CUSTOM_MENU_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 if isinstance(data, dict):
-                    for k, v in data.items():
-                        CANONICAL_MENU[k] = v
-            print(f"[MENU PERSISTENCE] Loaded {len(CANONICAL_MENU)} items (including custom items/photos) from disk.")
+                    CANONICAL_MENU.clear()
+                    CANONICAL_MENU.update(data)
+            print(f'[MENU PERSISTENCE] Loaded {len(CANONICAL_MENU)} items from disk.')
     except Exception as e:
-        print(f"Notice: Failed to load custom menu: {e}")
+        print(f'Notice: Failed to load custom menu: {e}')
 
-# Load custom items on startup
+def save_custom_categories():
+    """Persist all custom categories to disk."""
+    try:
+        os.makedirs(os.path.dirname(CUSTOM_CATEGORIES_FILE), exist_ok=True)
+        with open(CUSTOM_CATEGORIES_FILE, 'w', encoding='utf-8') as f:
+            json.dump(CANONICAL_CATEGORIES, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f'Notice: Failed to persist custom categories to disk: {e}')
+
+def load_custom_categories():
+    """Load custom categories from disk."""
+    global CANONICAL_CATEGORIES
+    try:
+        if os.path.exists(CUSTOM_CATEGORIES_FILE):
+            with open(CUSTOM_CATEGORIES_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    CANONICAL_CATEGORIES.clear()
+                    CANONICAL_CATEGORIES.extend(data)
+            print(f'[CATEGORIES PERSISTENCE] Loaded {len(CANONICAL_CATEGORIES)} categories from disk.')
+    except Exception as e:
+        print(f'Notice: Failed to load custom categories: {e}')
+
+def purge_menu_and_categories():
+    """Wipe all in-memory and on-disk menu items and categories."""
+    CANONICAL_MENU.clear()
+    CANONICAL_CATEGORIES.clear()
+    save_custom_menu()
+    save_custom_categories()
+
+def load_authentic_sample_menu():
+    """Restores sample menu from authentic_menu_data.json if explicitly requested."""
+    try:
+        _auth_file = os.path.join(os.path.dirname(__file__), "authentic_menu_data.json")
+        if os.path.exists(_auth_file):
+            with open(_auth_file, "r", encoding="utf-8") as _f:
+                _data = json.load(_f)
+                for _item in _data.get("items", []):
+                    _iid = _item.get("id")
+                    CANONICAL_MENU[_iid] = {
+                        "id": _iid,
+                        "name": _item.get("english_name") or _item.get("name"),
+                        "gujarati_name": _item.get("gujarati_name"),
+                        "price": float(_item.get("finalPrice") or _item.get("price")),
+                        "category": _item.get("category"),
+                        "description": _item.get("description", ""),
+                        "is_available": _item.get("is_available", True),
+                        "is_jain_available": True,
+                        "prep_time_mins": _item.get("prepTimeMins", 10),
+                        "tags": ["Authentic", _item.get("category")]
+                    }
+                if _data.get("categories"):
+                    CANONICAL_CATEGORIES.clear()
+                    CANONICAL_CATEGORIES.extend(_data.get("categories"))
+                save_custom_menu()
+                save_custom_categories()
+    except Exception as _ex:
+        print(f"Notice: Failed to load authentic sample menu: {_ex}")
+
+# Load custom items and categories on startup
 load_custom_menu()
-
-
-CANONICAL_CATEGORIES = [
-    {"id": "cat_mysore", "name": "Mysore Dosa", "icon": "Flame"},
-    {"id": "cat_fancy", "name": "Fancy Dosa", "icon": "Sparkles"},
-    {"id": "cat_special", "name": "Spacial Item", "icon": "Award"},
-    {"id": "cat_paper", "name": "Plain Paper Dosa", "icon": "Layers"},
-    {"id": "cat_masala", "name": "Masala Dosa", "icon": "Utensils"},
-    {"id": "cat_pavbhaji", "name": "Pavu Bhaji", "icon": "UtensilsCrossed"},
-    {"id": "cat_pulav", "name": "Pulav", "icon": "Soup"},
-    {"id": "cat_chineserice", "name": "Chinese Rice", "icon": "ShoppingBag"},
-    {"id": "cat_stater", "name": "Stater", "icon": "Flame"},
-    {"id": "cat_noodles", "name": "Noodles", "icon": "Utensils"},
-    {"id": "cat_maggi", "name": "Maggi", "icon": "Flame"},
-    {"id": "cat_soup", "name": "Soup", "icon": "Coffee"},
-    {"id": "cat_uttapam", "name": "Uttapam", "icon": "Layers"},
-    {"id": "cat_idali", "name": "Idali", "icon": "Circle"},
-    {"id": "cat_vadadhokala", "name": "Vada & Dhokala", "icon": "Sun"},
-    {"id": "cat_papad", "name": "Papad & French Fries", "icon": "Sparkles"},
-    {"id": "cat_unlimited", "name": "Unlimited Meal Plans", "icon": "HeartHandshake"},
-    {"id": "cat_beverages", "name": "Beverages", "icon": "Coffee"}
-]
+load_custom_categories()
 
 CANONICAL_COUPONS = {
     "WELCOME50": {"code": "WELCOME50", "discount": 50.0, "discount_type": "flat", "min_order": 250.0, "active": True, "description": "Flat ₹50 OFF on orders above ₹250"},

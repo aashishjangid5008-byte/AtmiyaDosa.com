@@ -71,6 +71,11 @@ import {
   saveTableToSupabaseApi,
   deleteTableFromSupabaseApi,
   updateTableInSupabaseApi,
+  purgeAllMenuFromSupabase,
+  saveCategoryToSupabaseCloud,
+  deleteCategoryFromSupabaseCloud,
+  saveMenuItemToSupabaseCloud,
+  deleteMenuItemFromSupabaseCloud,
   API_BASE_URL
 } from './lib/supabase';
 import { getDishCuisine } from './lib/cuisines';
@@ -1402,248 +1407,25 @@ export default function App() {
     let alertsChannel = null;
 
     async function syncFromSupabase() {
-      // 1. Always sync live authoritative menu & uploaded photos from Backend (/api/menu)
       try {
-        const bRes = await fetch(`${API_BASE_URL}/menu`);
-        if (bRes.ok) {
-          const bData = await bRes.json();
-          if (bData?.items && Array.isArray(bData.items) && bData.items.length > 0) {
-            setMenuItems(prev => {
-              const updatedList = [...prev];
-              bData.items.forEach(bItem => {
-                const idx = updatedList.findIndex(m => m.id === bItem.id || (m.name && bItem.name && m.name.toLowerCase().trim() === bItem.name.toLowerCase().trim()));
-                const bPhoto = bItem.image_url || bItem.image || null;
-                if (idx >= 0) {
-                  if (bPhoto) {
-                    updatedList[idx].image_url = bPhoto;
-                    updatedList[idx].imageUrl = bPhoto;
-                    updatedList[idx].image = bPhoto;
-                    updatedList[idx].photo = bPhoto;
-                  }
-                  if (bItem.price !== undefined) {
-                    updatedList[idx].price = Number(bItem.price);
-                    updatedList[idx].originalPrice = Number(bItem.price);
-                    updatedList[idx].finalPrice = Number(bItem.price);
-                  }
-                  if (bItem.is_available !== undefined) {
-                    updatedList[idx].is_available = bItem.is_available;
-                    updatedList[idx].isAvailable = bItem.is_available;
-                  }
-                  if (bItem.category) updatedList[idx].category = bItem.category;
-                } else {
-                  updatedList.push({
-                    ...bItem,
-                    english_name: bItem.name,
-                    gujarati_name: bItem.gujarati_name || bItem.name,
-                    price: Number(bItem.price),
-                    originalPrice: Number(bItem.price),
-                    finalPrice: Number(bItem.price),
-                    image_url: bPhoto,
-                    imageUrl: bPhoto,
-                    image: bPhoto,
-                    photo: bPhoto,
-                    cuisine: getDishCuisine(bItem),
-                    orders_count: 10,
-                    rating: 4.8,
-                    prepTimeMins: bItem.prep_time_mins || 10
-                  });
-                }
-              });
-              setLocalStore('menu_items', updatedList);
-              return updatedList;
-            });
-          }
+        // 1. Sync live authoritative menu and categories from Supabase Cloud
+      try {
+        const liveMenu = await fetchLiveMenuFromSupabase();
+        if (liveMenu && Array.isArray(liveMenu.categories) && Array.isArray(liveMenu.items)) {
+          setCategories(liveMenu.categories);
+          setLocalStore('categories', liveMenu.categories);
+          setMenuItems(liveMenu.items);
+          setLocalStore('menu_items', liveMenu.items);
+          try {
+            localStorage.setItem('atmiya_categories', JSON.stringify(liveMenu.categories));
+            localStorage.setItem('restaurant_categories', JSON.stringify(liveMenu.categories));
+            localStorage.setItem('atmiya_menu_items', JSON.stringify(liveMenu.items));
+            localStorage.setItem('restaurant_menu_items', JSON.stringify(liveMenu.items));
+          } catch (e) {}
         }
-      } catch (bErr) {
-        console.warn('[MENU SYNC] Server fetch notice:', bErr);
+      } catch (mErr) {
+        console.warn('[MENU SYNC] Live menu sync notice:', mErr);
       }
-
-      try {
-        const { data: supaCategories, error: catErr } = await supabase
-          .from('menu_categories')
-          .select('*')
-          .eq('is_active', true)
-          .order('display_order', { ascending: true });
-
-        const { data: supaItems, error: itemErr } = await supabase
-          .from('menu_items')
-          .select('*')
-          .order('name', { ascending: true });
-
-        const isMenuCleared = typeof localStorage !== 'undefined' && localStorage.getItem('restaurant_menu_cleared') === 'true';
-        if (!isMenuCleared && !catErr && supaCategories && supaCategories.length > 0) {
-          const catMap = {};
-          supaCategories.forEach(c => { catMap[c.id] = c.name; });
-
-          if (!itemErr && supaItems && supaItems.length > 0) {
-            const mappedItems = supaItems.map((item, idx) => {
-              const photo = item.image_url || null;
-              const priceNum = parseFloat(item.price) || 0;
-              return {
-                id: item.id,
-                name: item.name,
-                english_name: item.name,
-                gujarati_name: item.gujarati_name || item.name,
-                category: catMap[item.category_id] || 'Other',
-                price: priceNum,
-                originalPrice: priceNum,
-                finalPrice: priceNum,
-                hasDiscount: false,
-                discountPercent: 0,
-                description: item.description || '',
-                image_url: photo,
-                image: photo,
-                imageUrl: photo,
-                photo: photo,
-                is_veg: true,
-                is_spicy: (item.name || '').toLowerCase().includes('sezwan') || 
-                          (item.name || '').toLowerCase().includes('chilly') || 
-                          (item.name || '').toLowerCase().includes('garlic'),
-                is_available: item.is_available !== false,
-                isAvailable: item.is_available !== false,
-                is_jain_available: Boolean(item.is_jain_available),
-                orders_count: 20 + (idx % 30),
-                prepTimeMins: item.prep_time_mins || 10,
-                rating: 4.8,
-                notes: ''
-              };
-            });
-
-            // CLOUD-AUTHORITATIVE PRESERVATION MERGE:
-            // Supabase Cloud is the single source of truth for items, prices, and live availability.
-            // Local store only enriches images and promotional discounts.
-            const currentLocal = getLocalStore('menu_items', INITIAL_MENU_ITEMS) || [];
-            const localById = new Map();
-            const localByName = new Map();
-            currentLocal.forEach(it => {
-              if (it.id) localById.set(it.id, it);
-              if (it.name) localByName.set(it.name.toLowerCase().trim(), it);
-            });
-
-            const mergedItems = mappedItems.map(supaItem => {
-              const matchedLocal = localById.get(supaItem.id) || localByName.get(supaItem.name.toLowerCase().trim());
-              if (matchedLocal) {
-                const photo = supaItem.image_url || matchedLocal.image_url || matchedLocal.imageUrl || matchedLocal.image || matchedLocal.photo || null;
-                const cuisine = matchedLocal.cuisine || getDishCuisine(matchedLocal);
-                const basePrice = (supaItem.price !== undefined && supaItem.price !== null) ? supaItem.price : (matchedLocal.price || 0);
-                const hasDisc = matchedLocal.hasDiscount === true;
-                const discPct = matchedLocal.discountPercent || 0;
-                const finalP = hasDisc ? Math.max(0, Math.round(basePrice * (1 - discPct / 100))) : basePrice;
-
-                return {
-                  ...supaItem,
-                  image_url: photo,
-                  image: photo,
-                  imageUrl: photo,
-                  photo: photo,
-                  cuisine: cuisine,
-                  price: finalP,
-                  originalPrice: basePrice,
-                  finalPrice: finalP,
-                  hasDiscount: hasDisc,
-                  discountPercent: discPct,
-                  is_available: supaItem.is_available,
-                  isAvailable: supaItem.is_available,
-                  orders_count: matchedLocal.orders_count || supaItem.orders_count,
-                  description: supaItem.description || matchedLocal.description
-                };
-              }
-              const photo = supaItem.image_url;
-              return {
-                ...supaItem,
-                image: photo,
-                imageUrl: photo,
-                photo: photo,
-                cuisine: getDishCuisine(supaItem),
-                isAvailable: supaItem.is_available
-              };
-            });
-
-            // Keep locally added dishes that are not in Supabase yet (e.g. m_1729...)
-            currentLocal.forEach(locIt => {
-              const exists = mergedItems.some(m => m.id === locIt.id || (m.name && locIt.name && m.name.toLowerCase().trim() === locIt.name.toLowerCase().trim()));
-              if (!exists) {
-                const photo = locIt.image_url || locIt.imageUrl || locIt.image || locIt.photo || null;
-                mergedItems.push({
-                  ...locIt,
-                  image_url: photo,
-                  image: photo,
-                  imageUrl: photo,
-                  photo: photo,
-                  cuisine: locIt.cuisine || getDishCuisine(locIt),
-                  is_available: locIt.is_available !== false,
-                  isAvailable: locIt.is_available !== false
-                });
-              }
-            });
-
-            // Also merge any dishes from backend /menu (e.g. dishes added via POS/Admin API)
-            try {
-              const bRes = await fetch(`${API_BASE_URL}/menu`);
-              if (bRes.ok) {
-                const bData = await bRes.json();
-                if (bData?.items && Array.isArray(bData.items)) {
-                  bData.items.forEach(bItem => {
-                    const idx = mergedItems.findIndex(m => m.id === bItem.id || (m.name && bItem.name && m.name.toLowerCase().trim() === bItem.name.toLowerCase().trim()));
-                    const bPhoto = bItem.image_url || null;
-                    if (idx >= 0) {
-                      if (bPhoto) {
-                        mergedItems[idx].image_url = bPhoto;
-                        mergedItems[idx].imageUrl = bPhoto;
-                        mergedItems[idx].image = bPhoto;
-                        mergedItems[idx].photo = bPhoto;
-                      }
-                      if (bItem.price !== undefined) {
-                        mergedItems[idx].price = bItem.price;
-                        mergedItems[idx].originalPrice = bItem.price;
-                        mergedItems[idx].finalPrice = bItem.price;
-                      }
-                      if (bItem.is_available !== undefined) {
-                        mergedItems[idx].is_available = bItem.is_available;
-                        mergedItems[idx].isAvailable = bItem.is_available;
-                      }
-                      if (bItem.category) mergedItems[idx].category = bItem.category;
-                    } else {
-                      mergedItems.push({
-                        ...bItem,
-                        english_name: bItem.name,
-                        gujarati_name: bItem.gujarati_name || bItem.name,
-                        originalPrice: bItem.price,
-                        finalPrice: bItem.price,
-                        image_url: bPhoto,
-                        imageUrl: bPhoto,
-                        image: bPhoto,
-                        photo: bPhoto,
-                        cuisine: getDishCuisine(bItem),
-                        orders_count: 10,
-                        rating: 4.8,
-                        prepTimeMins: bItem.prep_time_mins || 10
-                      });
-                    }
-                  });
-                }
-              }
-            } catch (bErr) {
-              // backend optional
-            }
-
-            setMenuItems(mergedItems);
-            setLocalStore('menu_items', mergedItems);
-            try {
-              localStorage.setItem('atmiya_menu_items', JSON.stringify(mergedItems));
-            } catch (e) {}
-
-            const mappedCategories = supaCategories.map(c => ({
-              id: c.id,
-              name: c.name,
-              gujarati: c.gujarati_name || c.name,
-              icon: c.icon || 'Utensils',
-              percentage: 10
-            }));
-            setCategories(mappedCategories);
-            setLocalStore('categories', mappedCategories);
-          }
-        }
 
         // Live Orders initial sync from Supabase
         await refreshOrdersFromSupabase();
@@ -4201,37 +3983,8 @@ export default function App() {
       });
     } catch (e) {}
 
-    // Asynchronous background sync to Supabase Cloud & Backend API
-    try {
-      supabase.from('menu_items').update({
-        name: normalized.name,
-        gujarati_name: normalized.gujarati_name || null,
-        price: normalized.finalPrice || normalized.price,
-        description: normalized.description || '',
-        image_url: photoUrl,
-        is_available: normalized.is_available
-      }).eq('id', normalized.id).then(({ error }) => {
-        if (error) console.warn('[SUPABASE] Menu update notice:', error.message);
-      });
-    } catch (err) {
-      console.warn('[SUPABASE] Sync notice:', err);
-    }
-
-    try {
-      fetch(`${API_BASE_URL}/menu/${normalized.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: normalized.name,
-          gujarati_name: normalized.gujarati_name || null,
-          price: normalized.finalPrice || normalized.price,
-          category: normalized.category,
-          description: normalized.description || '',
-          image_url: photoUrl,
-          is_available: normalized.is_available
-        })
-      }).catch(() => {});
-    } catch (e) {}
+    // Cloud persistence via supabaseAdmin & backend
+    saveMenuItemToSupabaseCloud(normalized);
 
     recordEmployeeActivity({
       employeeName: authUser?.name || 'Admin Owner',
@@ -4249,9 +4002,13 @@ export default function App() {
     const photoUrl = itemData.image_url || itemData.image || itemData.imageUrl || itemData.photo || null;
     const determinedCuisine = itemData.cuisine || getDishCuisine(itemData);
     const priceNum = Number(itemData.price);
+    const itemId = itemData.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `item_${Date.now()}`);
+    const matchedCategory = categories.find(c => c.name === itemData.category);
+
     const itemObj = {
       ...itemData,
-      id: itemData.id || `m_${Date.now()}`,
+      id: itemId,
+      category_id: matchedCategory?.id || null,
       originalPrice: priceNum,
       finalPrice: priceNum,
       price: priceNum,
@@ -4273,6 +4030,7 @@ export default function App() {
     setMenuItems(updated);
     setLocalStore('menu_items', updated);
     try {
+      localStorage.removeItem('restaurant_menu_cleared');
       localStorage.setItem('atmiya_menu_items', JSON.stringify(updated));
     } catch (e) {}
 
@@ -4280,8 +4038,6 @@ export default function App() {
     window.dispatchEvent(new CustomEvent('atmiya_menu_updated', { detail: { items: updated } }));
     window.dispatchEvent(new Event('restaurant_data_updated'));
 
-    // Realtime Broadcast to all connected customer phones & staff terminals
-    // Omit massive 177-item catalog from payload to stay strictly under Supabase's 256KB ceiling
     try {
       supabase.channel('restaurant_alerts').send({
         type: 'broadcast',
@@ -4293,46 +4049,8 @@ export default function App() {
       });
     } catch (e) {}
 
-    // Asynchronous cloud persistence to Supabase PostgreSQL & Permanent Storage
-    try {
-      fetch(`${API_BASE_URL}/menu`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: itemObj.id,
-          name: itemObj.name,
-          gujarati_name: itemObj.gujarati_name || null,
-          price: itemObj.price,
-          category: itemObj.category || 'Mysore Dosa',
-          description: itemObj.description || '',
-          image_url: photoUrl,
-          is_available: true
-        })
-      })
-      .then(res => res.ok ? res.json() : null)
-      .then(saved => {
-        if (saved?.id) {
-          setMenuItems(prev => {
-            const remapped = prev.map(m => m.id === itemObj.id ? { 
-              ...m, 
-              id: saved.id, 
-              image_url: saved.image_url || m.image_url, 
-              imageUrl: saved.image_url || m.imageUrl, 
-              image: saved.image_url || m.image, 
-              photo: saved.image_url || m.photo 
-            } : m);
-            setLocalStore('menu_items', remapped);
-            try {
-              localStorage.setItem('atmiya_menu_items', JSON.stringify(remapped));
-            } catch (e) {}
-            return remapped;
-          });
-        }
-      })
-      .catch(err => {
-        console.warn('[MENU SYNC] Server menu sync notice:', err);
-      });
-    } catch (e) {}
+    // Cloud Authoritative persistence to Supabase PostgreSQL & Backend
+    await saveMenuItemToSupabaseCloud(itemObj, matchedCategory?.id);
 
     recordEmployeeActivity({
       employeeName: authUser?.name || 'Admin',
@@ -4346,7 +4064,7 @@ export default function App() {
     playSound('success');
   };
 
-  const handleDeleteMenuItem = (id) => {
+  const handleDeleteMenuItem = async (id) => {
     const targetItem = menuItems.find(item => item.id === id);
     if (!window.confirm(`Remove "${targetItem?.name || 'this dish'}" from the menu?`)) return;
     const updated = menuItems.filter(item => item.id !== id);
@@ -4370,14 +4088,8 @@ export default function App() {
       });
     } catch (e) {}
 
-    // Asynchronous sync to Supabase Cloud & Backend API
-    try {
-      supabase.from('menu_items').delete().eq('id', id).then();
-    } catch (e) {}
-
-    try {
-      fetch(`${API_BASE_URL}/menu/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
-    } catch (e) {}
+    // Asynchronous cloud delete from Supabase Cloud & Backend API
+    await deleteMenuItemFromSupabaseCloud(id);
 
     recordEmployeeActivity({
       employeeName: authUser?.name || 'Admin',
@@ -4390,10 +4102,10 @@ export default function App() {
     });
   };
 
-  const handleAddCategory = (categoryData) => {
+  const handleAddCategory = async (categoryData) => {
     const catName = (categoryData.name || '').trim();
     if (!catName) return null;
-    const catId = categoryData.id || `cat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const catId = categoryData.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `cat_${Date.now()}`);
     const photoUrl = categoryData.image_url || categoryData.imageUrl || categoryData.image || categoryData.photo || null;
     const newCategory = {
       id: catId,
@@ -4427,16 +4139,8 @@ export default function App() {
       });
     } catch (e) {}
 
-    try {
-      supabase.from('menu_categories').insert({
-        id: newCategory.id,
-        name: newCategory.name,
-        gujarati_name: newCategory.gujarati,
-        icon: newCategory.icon,
-        image_url: photoUrl,
-        is_active: true
-      }).then();
-    } catch (e) {}
+    // Cloud Authoritative persistence to Supabase Cloud & Backend
+    await saveCategoryToSupabaseCloud(newCategory);
 
     recordEmployeeActivity({
       employeeName: authUser?.name || 'Admin',
@@ -4451,7 +4155,7 @@ export default function App() {
     return newCategory;
   };
 
-  const handleUpdateCategory = (categoryId, updatedData) => {
+  const handleUpdateCategory = async (categoryId, updatedData) => {
     const oldCat = categories.find(c => c.id === categoryId);
     if (!oldCat) return;
     const oldName = oldCat.name;
@@ -4494,6 +4198,9 @@ export default function App() {
     window.dispatchEvent(new CustomEvent('atmiya_categories_updated', { detail: { categories: updatedCats } }));
     window.dispatchEvent(new Event('restaurant_data_updated'));
 
+    // Cloud Authoritative persistence
+    await saveCategoryToSupabaseCloud(updatedCat);
+
     recordEmployeeActivity({
       employeeName: authUser?.name || 'Admin',
       employeeRole: authUser?.role || 'Admin',
@@ -4506,7 +4213,7 @@ export default function App() {
     playSound('success');
   };
 
-  const handleDeleteCategory = (categoryId) => {
+  const handleDeleteCategory = async (categoryId) => {
     const targetCat = categories.find(c => c.id === categoryId);
     if (!targetCat) return;
     const catDishes = menuItems.filter(m => m.category === targetCat.name);
@@ -4537,9 +4244,8 @@ export default function App() {
     window.dispatchEvent(new CustomEvent('atmiya_categories_updated', { detail: { categories: updatedCats } }));
     window.dispatchEvent(new Event('restaurant_data_updated'));
 
-    try {
-      supabase.from('menu_categories').delete().eq('id', categoryId).then();
-    } catch (e) {}
+    // Cloud delete from Supabase Cloud & Backend
+    await deleteCategoryFromSupabaseCloud(categoryId);
 
     recordEmployeeActivity({
       employeeName: authUser?.name || 'Admin',
@@ -4553,7 +4259,7 @@ export default function App() {
     playSound('trash');
   };
 
-  const handleClearAllMenuAndCategories = () => {
+  const handleClearAllMenuAndCategories = async () => {
     setMenuItems([]);
     setCategories([]);
     setLocalStore('menu_items', []);
@@ -4578,6 +4284,9 @@ export default function App() {
         payload: { action: 'clear_all' }
       });
     } catch (e) {}
+
+    // Cloud Authoritative Purge
+    await purgeAllMenuFromSupabase();
 
     recordEmployeeActivity({
       employeeName: authUser?.name || 'Admin Owner',
