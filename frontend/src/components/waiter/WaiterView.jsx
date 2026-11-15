@@ -314,8 +314,8 @@ export default function WaiterView({
     if (audioEnabled) playSound('success');
   };
 
-  const handleAddDishToOrder = (orderId, menuItem) => {
-    const targetOrder = orders.find(o => o.id === orderId || o.order_number === orderId);
+  const handleAddDishToOrder = (orderId, menuItem, tableNumber = null) => {
+    const targetOrder = findTargetOrder(orderId, tableNumber);
     if (!targetOrder || !onUpdateOrderItems) return;
     const currentItems = targetOrder.items || [];
     const existingIdx = currentItems.findIndex(i => i.id === menuItem.id || i.name === menuItem.name);
@@ -336,11 +336,13 @@ export default function WaiterView({
         category: menuItem.category || 'General',
         image_url: menuItem.image_url || menuItem.imageUrl || null,
         kitchen_status: 'placed',
-        is_served: false
+        is_served: false,
+        is_addon: true,
+        round: (targetOrder.round || 1) + 1
       };
       updated = [...currentItems, newItem];
     }
-    onUpdateOrderItems(orderId, updated, activeWaiterName, 'Waiter');
+    onUpdateOrderItems(targetOrder.id || orderId, updated, activeWaiterName, 'Waiter');
     if (audioEnabled) playSound('click');
   };
 

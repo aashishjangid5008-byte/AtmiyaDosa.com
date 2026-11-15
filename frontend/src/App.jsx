@@ -25,7 +25,9 @@ import {
   Moon,
   Clock,
   ShieldAlert,
-  Check
+  Check,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 
 import { 
@@ -94,7 +96,10 @@ import {
   triggerStaffServiceNotification, 
   triggerTableTurnoverNotification,
   triggerWaiterFoodReadyNotification,
-  speakTableCleanAlert
+  speakTableCleanAlert,
+  isVoiceNotificationEnabled,
+  setVoiceNotificationEnabled,
+  speakSystemTestAlert
 } from './lib/notifications';
 
 import AuthPage from './components/auth/AuthPage';
@@ -656,6 +661,32 @@ export default function App() {
     }
   }, [activeToast]);
 
+  // Admin & Staff Voice Notifications Toggle State
+  const [isVoiceEnabled, setIsVoiceEnabled] = useState(() => isVoiceNotificationEnabled());
+
+  const handleToggleVoiceNotifications = () => {
+    const nextVal = !isVoiceEnabled;
+    setIsVoiceEnabled(nextVal);
+    setVoiceNotificationEnabled(nextVal);
+    if (nextVal) {
+      playSound('success');
+      speakSystemTestAlert();
+      setActiveToast({
+        title: '🔊 Voice Notifications Enabled',
+        message: 'Kitchen & staff voice speech alerts are now active.',
+        type: 'success'
+      });
+    } else {
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      playSound('click');
+      setActiveToast({
+        title: '🔇 Voice Notifications Muted',
+        message: 'Voice speech announcements are disabled. Visual & chime alerts remain active.',
+        type: 'info'
+      });
+    }
+  };
+
   // Continuously sanitize service calls: purge stale food_ready calls for tables that are available or orders that are settled/completed
   useEffect(() => {
     setServiceCalls(prev => {
@@ -1103,13 +1134,12 @@ export default function App() {
           );
           if (!localMatch) return mo;
 
-          // Merge item ready/served states so locally updated dishes NEVER revert to 'placed'
-          // If items were recently modified locally (e.g. add-on placed or item deleted by waiter), protect against stale sync
-          const isRecentlyModified = localMatch.last_modified_at && (syncNow - new Date(localMatch.last_modified_at).getTime() < 30000);
-          const hasMoreLocalItems = Array.isArray(localMatch.items) && localMatch.items.length > (mo.items?.length || 0);
-          const dbItems = ((isRecentlyModified || hasMoreLocalItems) && Array.isArray(localMatch.items) && localMatch.items.length > 0)
-            ? localMatch.items 
-            : ((mo.items && mo.items.length > 0) ? mo.items : (localMatch.items || []));
+          // If items were recently modified on this local client (<15s), briefly protect in-flight changes
+          const isRecentlyModified = localMatch.last_modified_at && (syncNow - new Date(localMatch.last_modified_at).getTime() < 15000);
+          // DB is the authoritative source of truth for the list of items; deleted items are never resurrected
+          const dbItems = (mo.items && mo.items.length > 0)
+            ? mo.items
+            : ((isRecentlyModified && Array.isArray(localMatch.items) && localMatch.items.length > 0) ? localMatch.items : (mo.items || []));
           const mergedItems = dbItems.map((dbItem, idx) => {
             const localItem = localMatch.items?.[idx] || (localMatch.items || []).find(it => it.name === dbItem.name && (it.round === dbItem.round || !dbItem.round));
             const isLocalPreparing = Boolean(localItem && (localItem.kitchen_status === 'preparing' || localItem.status === 'PREPARING'));
@@ -1167,10 +1197,10 @@ export default function App() {
             newly_added_summary: hasUnserved ? (localMatch.newly_added_summary || mo.newly_added_summary) : null,
             last_addon_at: localMatch.last_addon_at || mo.last_addon_at || null,
             last_modified_at: localMatch.last_modified_at || mo.last_modified_at || null,
-            subtotal: (isRecentlyModified || hasMoreLocalItems) ? (localMatch.subtotal || mo.subtotal) : mo.subtotal,
-            total: (isRecentlyModified || hasMoreLocalItems) ? (localMatch.total || mo.total) : mo.total,
-            total_amount: (isRecentlyModified || hasMoreLocalItems) ? (localMatch.total_amount || mo.total_amount) : mo.total_amount,
-            items_summary: (isRecentlyModified || hasMoreLocalItems) ? (localMatch.items_summary || mo.items_summary) : mo.items_summary,
+            subtotal: isRecentlyModified ? (localMatch.subtotal || mo.subtotal) : mo.subtotal,
+            total: isRecentlyModified ? (localMatch.total || mo.total) : mo.total,
+            total_amount: isRecentlyModified ? (localMatch.total_amount || mo.total_amount) : mo.total_amount,
+            items_summary: isRecentlyModified ? (localMatch.items_summary || mo.items_summary) : mo.items_summary,
             payment_status: preservedStatus === 'Completed' ? 'Paid' : (mo.payment_status || localMatch.payment_status),
             settled_at: orderSettledAt,
             completed_at: orderSettledAt
@@ -1758,6 +1788,72 @@ export default function App() {
             console.log('[SUPABASE REALTIME] Incoming new order broadcast:', payload);
             if (!payload) return;
 
+            // Instantly apply new order or add-on items to in-memory orders state across ALL screens
+            if (payload && (payload.order_id || payload.order_number || payload.items)) {
+              setOrders(prevOrders => {
+                const targetNum = String(payload.order_number || payload.order_id || '').replace('#', '');
+                const targetTbl = String(payload.table_number || '').replace(/\D/g, '');
+                const hasExisting = prevOrders.some(o => 
+                  matchesOrderId(o, payload.order_id) || 
+                  matchesOrderId(o, payload.order_number) ||
+                  (targetTbl && String(o.table_number || '').replace(/\D/g, '') === targetTbl && o.status !== 'Completed' && o.status !== 'Cancelled')
+                );
+
+                if (hasExisting && payload.items && payload.items.length > 0) {
+                  return prevOrders.map(o => {
+                    const isMatch = matchesOrderId(o, payload.order_id) || 
+                                    matchesOrderId(o, payload.order_number) ||
+                                    (targetTbl && String(o.table_number || '').replace(/\D/g, '') === targetTbl && o.status !== 'Completed' && o.status !== 'Cancelled');
+                    if (isMatch) {
+                      return {
+                        ...o,
+                        items: payload.items,
+                        order_items: payload.items,
+                        subtotal: payload.subtotal !== undefined ? payload.subtotal : o.subtotal,
+                        tax: payload.tax !== undefined ? payload.tax : o.tax,
+                        total: payload.total !== undefined ? payload.total : o.total,
+                        total_amount: payload.total !== undefined ? payload.total : o.total_amount,
+                        items_summary: payload.items_summary || o.items_summary,
+                        status: payload.status || 'Placed',
+                        kds_cleared: false,
+                        round: payload.round || o.round || 1,
+                        is_addon: Boolean(payload.is_addon || o.is_addon),
+                        newly_added_items: payload.newly_added_items || null,
+                        last_addon_at: payload.last_addon_at || new Date().toISOString(),
+                        last_modified_at: new Date().toISOString()
+                      };
+                    }
+                    return o;
+                  });
+                } else if (!hasExisting && payload.items && payload.items.length > 0) {
+                  const newOrdObj = {
+                    id: payload.order_id ? (String(payload.order_id).startsWith('#') ? payload.order_id : `#${payload.order_id}`) : `#ORD${Date.now().toString().slice(-4)}`,
+                    order_number: targetNum || Date.now().toString().slice(-4),
+                    table_number: payload.table_number,
+                    customer_name: payload.customer_name || 'Guest',
+                    items: payload.items,
+                    order_items: payload.items,
+                    subtotal: payload.subtotal || payload.total || 0,
+                    tax: payload.tax || 0,
+                    total: payload.total || 0,
+                    total_amount: payload.total || 0,
+                    items_summary: payload.items_summary || payload.items.map(i => `${i.qty || 1}x ${i.name}`).join(', '),
+                    status: payload.status || 'Placed',
+                    round: payload.round || 1,
+                    is_addon: Boolean(payload.is_addon),
+                    payment_mode: payload.payment_mode || 'Cash',
+                    payment_status: 'Pending Cash',
+                    placed_at: payload.placed_at || new Date().toISOString(),
+                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    kds_cleared: false,
+                    last_modified_at: new Date().toISOString()
+                  };
+                  return [newOrdObj, ...prevOrders];
+                }
+                return prevOrders;
+              });
+            }
+
             const isCustomerScreen = viewModeRef.current === 'customer' || Boolean(scannedTable);
             const isStaffLoggedIn = Boolean(authUserRef.current) && !isCustomerScreen;
             const currentRole = isStaffLoggedIn ? (authUserRef.current?.role || 'admin') : 'customer';
@@ -1800,7 +1896,70 @@ export default function App() {
             loadFreshState();
             await refreshOrdersFromSupabase();
           })
-          .on('broadcast', { event: 'order_status_updated' }, async () => {
+          .on('broadcast', { event: 'order_status_updated' }, async ({ payload }) => {
+            console.log('[SUPABASE REALTIME] Order status update broadcast:', payload);
+            if (payload && (payload.orderId || payload.orderNumber || payload.tableNumber)) {
+              setOrders(prevOrders => {
+                const targetNum = String(payload.orderNumber || payload.orderId || '').replace('#', '');
+                const targetTbl = String(payload.tableNumber || '').replace(/\D/g, '');
+                return prevOrders.map(o => {
+                  const oNum = String(o.order_number || o.id || '').replace('#', '');
+                  const oTbl = String(o.table_number || '').replace(/\D/g, '');
+                  const isMatch = (payload.orderId && matchesOrderId(o, payload.orderId)) ||
+                                  (targetNum && oNum === targetNum) ||
+                                  (targetTbl && oTbl === targetTbl && o.status !== 'Completed' && o.status !== 'Cancelled');
+                  if (isMatch) {
+                    const isCancelled = payload.status === 'Cancelled' || String(payload.status).toLowerCase() === 'cancelled';
+                    return {
+                      ...o,
+                      ...(payload.items ? { items: payload.items, order_items: payload.items } : {}),
+                      ...(payload.subtotal !== undefined ? { subtotal: payload.subtotal } : {}),
+                      ...(payload.tax !== undefined ? { tax: payload.tax } : {}),
+                      ...(payload.total !== undefined ? { total: payload.total, total_amount: payload.total } : {}),
+                      ...(payload.items_summary ? { items_summary: payload.items_summary } : (payload.items ? { items_summary: payload.items.map(i => `${i.qty || 1}x ${i.name}`).join(', ') } : {})),
+                      ...(payload.status ? { status: payload.status } : {}),
+                      ...(isCancelled ? { payment_status: 'Void', cancel_reason: payload.reason || o.cancel_reason } : {}),
+                      kds_cleared: isCancelled ? true : false,
+                      last_modified_at: new Date().toISOString()
+                    };
+                  }
+                  return o;
+                });
+              });
+            }
+            await refreshOrdersFromSupabase();
+          })
+          .on('broadcast', { event: 'order_items_updated' }, async ({ payload }) => {
+            console.log('[SUPABASE REALTIME] Order items updated broadcast:', payload);
+            if (payload && (payload.orderId || payload.orderNumber || payload.tableNumber)) {
+              setOrders(prevOrders => {
+                const targetNum = String(payload.orderNumber || payload.orderId || '').replace('#', '');
+                const targetTbl = String(payload.tableNumber || '').replace(/\D/g, '');
+                return prevOrders.map(o => {
+                  const oNum = String(o.order_number || o.id || '').replace('#', '');
+                  const oTbl = String(o.table_number || '').replace(/\D/g, '');
+                  const isMatch = (payload.orderId && matchesOrderId(o, payload.orderId)) ||
+                                  (targetNum && oNum === targetNum) ||
+                                  (targetTbl && oTbl === targetTbl && o.status !== 'Completed' && o.status !== 'Cancelled');
+                  if (isMatch) {
+                    return {
+                      ...o,
+                      items: payload.items || o.items,
+                      order_items: payload.items || o.order_items,
+                      subtotal: payload.subtotal !== undefined ? payload.subtotal : o.subtotal,
+                      tax: payload.tax !== undefined ? payload.tax : o.tax,
+                      total: payload.total !== undefined ? payload.total : o.total,
+                      total_amount: payload.total !== undefined ? payload.total : o.total_amount,
+                      items_summary: payload.items_summary || (payload.items ? payload.items.map(i => `${i.qty || 1}x ${i.name}`).join(', ') : o.items_summary),
+                      status: payload.status || o.status,
+                      kds_cleared: false,
+                      last_modified_at: new Date().toISOString()
+                    };
+                  }
+                  return o;
+                });
+              });
+            }
             await refreshOrdersFromSupabase();
           })
           .on('broadcast', { event: 'table_session_settled' }, async () => {
@@ -2909,7 +3068,14 @@ export default function App() {
       channel.send({
         type: 'broadcast',
         event: 'order_status_updated',
-        payload: { orderId: targetOrder.id, status: 'Cancelled', reason }
+        payload: {
+          orderId: targetOrder.id,
+          orderNumber: targetOrder.order_number,
+          tableNumber: targetOrder.table_number,
+          status: 'Cancelled',
+          reason,
+          total: 0
+        }
       });
     } catch (e) {}
 
@@ -2918,7 +3084,7 @@ export default function App() {
   };
 
   // Waiter & Admin Order Ticket Modifier: Add, remove, or modify items within an order
-  const handleUpdateOrderItems = (orderId, newItems, staffName = null, staffRole = null) => {
+  const handleUpdateOrderItems = async (orderId, newItems, staffName = null, staffRole = null) => {
     if (!orderId) return;
     const targetOrder = orders.find(o => matchesOrderId(o, orderId));
     if (!targetOrder) return;
@@ -2962,74 +3128,95 @@ export default function App() {
     setOrders(updated);
     setLocalStore('orders', updated);
 
-    // Sync to Supabase Cloud DB: Update orders AND re-sync order_items
+    // Sync to Supabase Cloud DB: Update orders, order_items AND table_sessions
     try {
       const ordUuid = targetOrder.supabase_order_id || targetOrder.id;
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ordUuid);
       const cleanOrderNumber = String(targetOrder.order_number || targetOrder.id).replace('#', '');
 
-      (async () => {
-        try {
-          let resolvedOrderUuid = isUuid ? ordUuid : null;
-          if (!resolvedOrderUuid) {
-            const { data: ord } = await supabase.from('orders').select('id').eq('order_number', cleanOrderNumber).maybeSingle();
-            if (ord) resolvedOrderUuid = ord.id;
-          }
+      let resolvedOrderUuid = isUuid ? ordUuid : null;
+      if (!resolvedOrderUuid) {
+        const { data: ord } = await supabase.from('orders').select('id').eq('order_number', cleanOrderNumber).maybeSingle();
+        if (ord) resolvedOrderUuid = ord.id;
+      }
 
-          if (resolvedOrderUuid) {
-            // 1. Update orders table
-            await supabase.from('orders').update({
-              subtotal,
-              tax_amount: tax,
-              total_amount: total,
-              status: nextStatus.toUpperCase()
-            }).eq('id', resolvedOrderUuid);
+      if (resolvedOrderUuid) {
+        // 1. Update orders table with new subtotal, total, status AND items_summary
+        await supabase.from('orders').update({
+          subtotal,
+          tax_amount: tax,
+          total_amount: total,
+          items_summary: summaryStr,
+          status: nextStatus.toUpperCase()
+        }).eq('id', resolvedOrderUuid);
 
-            // 2. Clear old order_items and insert updated items
-            await supabase.from('order_items').delete().eq('order_id', resolvedOrderUuid);
+        // 2. Re-sync order_items table
+        await supabase.from('order_items').delete().eq('order_id', resolvedOrderUuid);
 
-            const orderItemRows = newItems.map(item => {
-              const isItemUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id);
-              const qty = parseInt(item.qty || item.quantity, 10) || 1;
-              const unitPrice = parseFloat(item.price || item.unit_price) || 0;
-              const rawStatus = String(item.kitchen_status || item.status || 'PLACED').toUpperCase();
-              const safeItemStatus = (rawStatus === 'PREPARING' || rawStatus === 'COOKING')
-                ? 'PREPARING'
-                : ((rawStatus === 'READY' || rawStatus === 'SERVED' || rawStatus === 'DELIVERED' || item.is_served) ? 'READY' : 'PLACED');
+        const orderItemRows = newItems.map(item => {
+          const isItemUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id);
+          const qty = parseInt(item.qty || item.quantity, 10) || 1;
+          const unitPrice = parseFloat(item.price || item.unit_price) || 0;
+          const rawStatus = String(item.kitchen_status || item.status || 'PLACED').toUpperCase();
+          const safeItemStatus = (rawStatus === 'PREPARING' || rawStatus === 'COOKING')
+            ? 'PREPARING'
+            : ((rawStatus === 'READY' || rawStatus === 'SERVED' || rawStatus === 'DELIVERED' || item.is_served) ? 'READY' : 'PLACED');
 
-              return {
-                order_id: resolvedOrderUuid,
-                menu_item_id: isItemUuid ? item.id : null,
-                item_name: item.name || item.item_name || 'Dish Item',
-                quantity: qty,
-                unit_price: unitPrice,
-                total_price: parseFloat((unitPrice * qty).toFixed(2)),
-                cooking_note: item.cooking_note || item.note || item.customizations || null,
-                status: safeItemStatus
-              };
-            });
+          return {
+            order_id: resolvedOrderUuid,
+            menu_item_id: isItemUuid ? item.id : null,
+            item_name: item.name || item.item_name || 'Dish Item',
+            quantity: qty,
+            unit_price: unitPrice,
+            total_price: parseFloat((unitPrice * qty).toFixed(2)),
+            cooking_note: item.cooking_note || item.note || item.customizations || null,
+            status: safeItemStatus
+          };
+        });
 
-            if (orderItemRows.length > 0) {
-              await supabase.from('order_items').insert(orderItemRows);
-            }
-            console.log(`[SUPABASE] Successfully updated items for Order #${cleanOrderNumber} (${newItems.length} items)`);
-          }
-        } catch (dbErr) {
-          console.warn('[SUPABASE] Failed to persist modified order_items:', dbErr);
+        if (orderItemRows.length > 0) {
+          await supabase.from('order_items').insert(orderItemRows);
         }
-      })();
+
+        // 3. Update table_sessions running total if present
+        if (targetOrder.session_id) {
+          try {
+            await supabase.from('table_sessions').update({
+              total_amount: total,
+              items_summary: summaryStr
+            }).eq('id', targetOrder.session_id);
+          } catch (sessErr) {
+            console.warn('[SUPABASE] Session total update notice:', sessErr);
+          }
+        }
+
+        console.log(`[SUPABASE] Successfully updated items for Order #${cleanOrderNumber} (${newItems.length} items, Total: ₹${total})`);
+      }
+
+      // Broadcast updated order items and total to all connected staff & customer terminals
+      const alertPayload = {
+        orderId: targetOrder.id,
+        orderNumber: targetOrder.order_number,
+        tableNumber: targetOrder.table_number,
+        items: newItems,
+        subtotal,
+        tax,
+        total,
+        items_summary: summaryStr,
+        status: nextStatus,
+        last_modified_at: new Date().toISOString()
+      };
 
       const channel = supabase.channel('restaurant_alerts');
       channel.send({
         type: 'broadcast',
+        event: 'order_items_updated',
+        payload: alertPayload
+      });
+      channel.send({
+        type: 'broadcast',
         event: 'order_status_updated',
-        payload: {
-          orderId: targetOrder.id,
-          orderNumber: targetOrder.order_number,
-          tableNumber: targetOrder.table_number,
-          items: newItems,
-          total
-        }
+        payload: alertPayload
       });
     } catch (e) {
       console.warn('Sync order items error:', e);
@@ -3371,21 +3558,39 @@ export default function App() {
     // Realtime cross-device broadcast: Instantly pops ticket on Kitchen POS & Waiter Terminals
     try {
       const alertChannel = supabase.channel('restaurant_alerts');
+      const orderBroadcastPayload = {
+        order_id: finalOrder.id,
+        order_number: finalOrder.order_number || finalOrder.id,
+        orderId: finalOrder.id,
+        orderNumber: finalOrder.order_number || finalOrder.id,
+        table_number: finalOrder.table_number,
+        tableNumber: finalOrder.table_number,
+        customer_name: finalOrder.customer_name,
+        customerName: finalOrder.customer_name,
+        items: finalOrder.items || [],
+        order_items: finalOrder.items || [],
+        items_summary: finalOrder.items_summary || (newOrder.items || []).map(i => `${i.qty || i.quantity || 1}x ${i.name}`).join(', '),
+        subtotal: finalOrder.subtotal,
+        tax: finalOrder.tax,
+        total: finalOrder.total || finalOrder.total_amount || 0,
+        status: finalOrder.status,
+        payment_mode: finalOrder.payment_mode || 'Cash',
+        is_addon: isAddonOrder,
+        round: roundNumber,
+        newly_added_items: finalOrder.newly_added_items || [],
+        last_addon_at: finalOrder.last_addon_at || new Date().toISOString(),
+        placed_at: new Date().toISOString()
+      };
+
       alertChannel.send({
         type: 'broadcast',
         event: 'new_order_placed',
-        payload: {
-          order_id: finalOrder.id,
-          order_number: finalOrder.order_number || finalOrder.id,
-          table_number: finalOrder.table_number,
-          customer_name: finalOrder.customer_name,
-          items_summary: newOrder.items_summary || (newOrder.items || []).map(i => `${i.qty || i.quantity || 1}x ${i.name}`).join(', '),
-          total: finalOrder.total || finalOrder.total_amount || 0,
-          payment_mode: finalOrder.payment_mode || 'Cash',
-          is_addon: isAddonOrder,
-          round: roundNumber,
-          placed_at: new Date().toISOString()
-        }
+        payload: orderBroadcastPayload
+      });
+      alertChannel.send({
+        type: 'broadcast',
+        event: 'order_items_updated',
+        payload: orderBroadcastPayload
       });
     } catch (bcErr) {
       console.warn('[SUPABASE] Broadcast new_order_placed notice:', bcErr);
@@ -5526,6 +5731,31 @@ export default function App() {
                 </button>
               )}
 
+              {/* Voice Notification Toggle Button */}
+              <button
+                type="button"
+                onClick={handleToggleVoiceNotifications}
+                className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer shrink-0 shadow-2xs active:scale-95 ${
+                  isVoiceEnabled
+                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300 ring-1 ring-emerald-500/20'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-500 border-slate-300'
+                }`}
+                title={isVoiceEnabled ? 'Voice Alerts Active (Click to Mute Voice)' : 'Voice Alerts Muted (Click to Enable Voice)'}
+                aria-label="Toggle Voice Alerts"
+              >
+                {isVoiceEnabled ? (
+                  <>
+                    <Volume2 className="w-3.5 h-3.5 text-emerald-600 animate-pulse shrink-0" />
+                    <span className="hidden md:inline font-mono text-[11px] font-black uppercase text-emerald-800">Voice: ON</span>
+                  </>
+                ) : (
+                  <>
+                    <VolumeX className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span className="hidden md:inline font-mono text-[11px] font-black uppercase text-slate-500">Voice: OFF</span>
+                  </>
+                )}
+              </button>
+
               {/* Single Unified Smart Notification Bell (ALWAYS VISIBLE & PROMINENT) */}
               <div className="relative shrink-0">
                 <button
@@ -5706,6 +5936,8 @@ export default function App() {
                 currentLang={currentLang}
                 theme={theme}
                 restaurantSettings={settings}
+                isVoiceEnabled={isVoiceEnabled}
+                onToggleVoiceNotifications={handleToggleVoiceNotifications}
               />
             ) : (
               <WaiterView
@@ -5809,6 +6041,8 @@ export default function App() {
               currentLang={currentLang}
               theme={theme}
               restaurantSettings={settings}
+              isVoiceEnabled={isVoiceEnabled}
+              onToggleVoiceNotifications={handleToggleVoiceNotifications}
             />
           )}
 

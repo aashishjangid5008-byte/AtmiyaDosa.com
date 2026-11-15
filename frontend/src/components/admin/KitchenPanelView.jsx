@@ -135,7 +135,9 @@ export default function KitchenPanelView({
   onExitKitchenMode,
   currentLang = 'en',
   theme = 'light',
-  restaurantSettings = {}
+  restaurantSettings = {},
+  isVoiceEnabled = true,
+  onToggleVoiceNotifications = null
 }) {
   // Navigation & Tab state - Strict 4 Kitchen Stages ('all' removed as requested)
   const [activeTab, setActiveTab] = useState('new'); // 'new' | 'cooking' | 'ready' | 'history'
@@ -159,7 +161,7 @@ export default function KitchenPanelView({
   });
 
   const audioEnabled = true;
-  const voiceAlertsEnabled = true;
+  const voiceAlertsEnabled = isVoiceEnabled;
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [newOrderAlert, setNewOrderAlert] = useState(null); // Real-time banner alert
   const [soundTestSuccess, setSoundTestSuccess] = useState(false);
@@ -646,6 +648,23 @@ export default function KitchenPanelView({
           {/* Clean Controls */}
           <div className="flex items-center space-x-1.5">
             
+            {/* Voice Notifications Toggle Button */}
+            {onToggleVoiceNotifications && (
+              <button
+                type="button"
+                onClick={onToggleVoiceNotifications}
+                className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer active:scale-95 ${
+                  isVoiceEnabled
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 ring-1 ring-emerald-500/20'
+                    : 'bg-slate-100 text-slate-500 border-slate-200'
+                }`}
+                title={isVoiceEnabled ? 'Voice Announcements ON (Tap to Mute)' : 'Voice Announcements Muted (Tap to Enable)'}
+              >
+                {isVoiceEnabled ? <Volume2 className="w-3.5 h-3.5 text-emerald-600 animate-pulse" /> : <VolumeX className="w-3.5 h-3.5 text-slate-400" />}
+                <span className="font-mono text-[11px] font-bold uppercase">{isVoiceEnabled ? 'Voice ON' : 'Voice OFF'}</span>
+              </button>
+            )}
+
             {/* Audio Toggle / Test Button */}
             <button
               type="button"

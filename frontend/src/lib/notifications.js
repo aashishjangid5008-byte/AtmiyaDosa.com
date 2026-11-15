@@ -42,13 +42,29 @@ export const requestNotificationPermission = async () => {
 };
 
 /**
- * Speaks an urgent voice announcement for the kitchen & floor staff.
+ * Voice notification preference helpers (backed by localStorage)
  */
+export const isVoiceNotificationEnabled = () => {
+  try {
+    const val = localStorage.getItem('voice_notifications_enabled');
+    return val === null ? true : val === 'true';
+  } catch (e) {
+    return true;
+  }
+};
+
+export const setVoiceNotificationEnabled = (enabled) => {
+  try {
+    localStorage.setItem('voice_notifications_enabled', String(enabled));
+  } catch (e) {}
+};
+
 /**
  * Speaks an urgent voice announcement for the kitchen & floor staff.
  */
 export const speakOrderAlert = (tableNumber, isAddon = false, itemsSummary = '') => {
   try {
+    if (!isVoiceNotificationEnabled()) return;
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel(); // Stop any pending speech
       const digits = String(tableNumber || '').replace(/\D/g, '');
@@ -167,6 +183,7 @@ export const triggerStaffOrderNotification = async ({
  */
 export const speakServiceAlert = (tableNumber, label = 'Assistance') => {
   try {
+    if (!isVoiceNotificationEnabled()) return;
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       const text = `Attention staff: Table ${tableNumber} has requested ${label}!`;
@@ -187,6 +204,7 @@ export const speakServiceAlert = (tableNumber, label = 'Assistance') => {
  */
 export const speakTableCleanAlert = (tableNumber) => {
   try {
+    if (!isVoiceNotificationEnabled()) return;
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       const text = `Attention floor waiter: Table ${tableNumber} needs cleaning! Please clean and reset Table ${tableNumber}.`;
@@ -294,7 +312,7 @@ export const triggerTableTurnoverNotification = async ({
 
   // 2. Spoken voice announcement
   try {
-    if ('speechSynthesis' in window) {
+    if (isVoiceNotificationEnabled() && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       const text = `Attention floor manager: ${minutesElapsed} minutes have elapsed since food was served at Table ${displayTable}. Please check if the table is empty.`;
       const utterance = new SpeechSynthesisUtterance(text);
@@ -357,6 +375,7 @@ export const triggerTableTurnoverNotification = async ({
  */
 export const speakFoodReadyAlert = (tableNumber, itemsSummary = '') => {
   try {
+    if (!isVoiceNotificationEnabled()) return;
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       const text = `Attention floor runner: Food for Table ${tableNumber} is ready on the counter! Please collect and deliver to table.`;
