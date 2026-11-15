@@ -364,17 +364,19 @@ export default function ReportsAnalytics({ orders = [], restaurantSettings = {} 
           <span className="text-xs text-emerald-600 font-bold mt-1 inline-block">Excluding tax liabilities</span>
         </div>
 
-        {/* Total 5% GST Collected */}
+        {/* Total GST Collected */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider">5% GST Collected</span>
+            <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
+              {totalTax > 0 ? '5% GST Collected' : 'GST Collected (0%)'}
+            </span>
             <span className="px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 text-[10px] font-bold">Statutory Tax</span>
           </div>
           <div className="text-2xl font-black text-orange-600 mt-2 font-heading tabular-nums">
             ₹{totalTax.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div className="text-[11px] text-slate-500 font-mono mt-1 font-bold">
-            CGST: ₹{cgst.toFixed(2)} | SGST: ₹{sgst.toFixed(2)}
+            {totalTax > 0 ? `CGST: ₹${cgst.toFixed(2)} | SGST: ₹${sgst.toFixed(2)}` : '0% GST on Food'}
           </div>
         </div>
 
@@ -519,14 +521,23 @@ export default function ReportsAnalytics({ orders = [], restaurantSettings = {} 
               <span>Net Food:</span>
               <span className="font-bold">₹{netSales.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between">
-              <span>CGST (2.5%):</span>
-              <span className="font-bold">₹{cgst.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>SGST (2.5%):</span>
-              <span className="font-bold">₹{sgst.toFixed(2)}</span>
-            </div>
+            {totalTax > 0 ? (
+              <>
+                <div className="flex justify-between">
+                  <span>CGST (2.5%):</span>
+                  <span className="font-bold">₹{cgst.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>SGST (2.5%):</span>
+                  <span className="font-bold">₹{sgst.toFixed(2)}</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex justify-between text-slate-500">
+                <span>GST (0% Food):</span>
+                <span className="font-bold">₹0.00</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span>Discounts:</span>
               <span className="font-bold">-₹{totalDiscount.toFixed(2)}</span>
@@ -661,7 +672,7 @@ export default function ReportsAnalytics({ orders = [], restaurantSettings = {} 
                 <th className="p-3.5 sm:p-4">Guest</th>
                 <th className="p-3.5 sm:p-4">Dishes & Volume</th>
                 <th className="p-3.5 sm:p-4">Subtotal</th>
-                <th className="p-3.5 sm:p-4">5% GST</th>
+                <th className="p-3.5 sm:p-4">Tax / GST</th>
                 <th className="p-3.5 sm:p-4">Tender Mode</th>
                 <th className="p-3.5 sm:p-4">Status</th>
                 <th className="p-3.5 sm:p-4 text-right">Gross Total</th>

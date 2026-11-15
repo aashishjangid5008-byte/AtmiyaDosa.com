@@ -54,6 +54,7 @@ import {
 import { getTranslation, getCategoryLabel, getDishDisplayName } from '../../lib/translations';
 import { playSound } from '../../lib/sound';
 import { supabase, RESTAURANT_ID, recordEmployeeActivity } from '../../lib/supabase';
+import { printSinglePageReceipt, downloadSinglePageBillPdf } from '../../lib/generateBillPdf';
 
 // Clean & normalize dish names across DB records, POS cart strings, and item codes
 export function normalizeItemName(rawName) {
@@ -2356,10 +2357,15 @@ export default function ExecutiveDashboard({
                         customer_name: session.customer_name,
                         customer_phone: session.customer_phone,
                         items_summary: session.items_summary,
+                        items: session.items || session.order_items || [],
+                        subtotal: session.subtotal || session.total_amount,
+                        discount: session.discount || 0,
+                        tax: 0,
                         total_amount: session.total_amount,
                         payment_method: session.payment_method,
                         payment_status: session.payment_status,
-                        placed_at: session.opened_at
+                        placed_at: session.opened_at,
+                        session: session
                       })}
                       className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer"
                       title="Download or Print Receipt"
@@ -2561,12 +2567,14 @@ export default function ExecutiveDashboard({
             <div id="printable-receipt" className="p-5 rounded-2xl bg-white border border-slate-200 font-mono text-xs space-y-3 text-slate-900">
               <div className="text-center space-y-1">
                 <h4 className="font-bold text-base uppercase tracking-wide text-slate-900 font-heading">
-                  ATMIYA DOSA HUB
+                  {restaurantSettings?.name || 'ATMIYA DOSA HUB'}
                 </h4>
                 <p className="text-[10px] text-slate-500">
-                  Opp. New Bus Station, Station Road, Petlad, Anand, Gujarat - 388450
+                  {restaurantSettings?.address || 'Opp. New Bus Station, Station Road, Petlad, Anand, Gujarat - 388450'}
                 </p>
-                <p className="text-[10px] text-slate-500">GSTIN: 24AAACA1234A1Z5 • Phone: +91 98765 43210</p>
+                <p className="text-[10px] text-slate-500">
+                  {restaurantSettings?.gstin ? `GSTIN: ${restaurantSettings.gstin} • ` : ''}Phone: {restaurantSettings?.phone || '+91 98765 43210'}
+                </p>
                 <div className="border-b border-dashed border-slate-300 pt-2"></div>
               </div>
 
@@ -2590,43 +2598,73 @@ export default function ExecutiveDashboard({
                   <span>Item</span>
                   <span>Amount</span>
                 </div>
-                <div className="flex justify-between text-slate-700">
-                  <span>{selectedReceiptOrder.items_summary || 'Mysore Masala Dosa + Pav Bhaji'}</span>
-                  <span>₹{selectedReceiptOrder.total_amount}</span>
-                </div>
+                {Array.isArray(selectedReceiptOrder.items) && selectedReceiptOrder.items.length > 0 ? (
+                  selectedReceiptOrder.items.map((it, idx) => (
+                    <div key={idx} className="flex justify-between text-slate-700">
+                      <span>{it.qty || it.quantity || 1}x {it.name || 'Dish'}</span>
+                      <span>₹{(Number(it.price || it.unit_price || 0) * (it.qty || it.quantity || 1)).toFixed(2)}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex justify-between text-slate-700">
+                    <span>{selectedReceiptOrder.items_summary || 'Food Items'}</span>
+                    <span>₹{Number(selectedReceiptOrder.total_amount || 0).toFixed(2)}</span>
+                  </div>
+                )}
               </div>
 
               <div className="border-b border-dashed border-slate-300"></div>
 
-              {/* Calculations */}
+              {/* Calculations - Clean 0% Food GST */}
               <div className="space-y-1 text-[11px]">
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
-                  <span>₹{(selectedReceiptOrder.total_amount * 0.952).toFixed(2)}</span>
+                  <span>₹{Number(selectedReceiptOrder.subtotal || selectedReceiptOrder.total_amount || 0).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-[10px] text-slate-500">
-                  <span>GST (5% Included):</span>
-                  <span>₹{(selectedReceiptOrder.total_amount * 0.048).toFixed(2)}</span>
-                </div>
+                {Number(selectedReceiptOrder.discount || 0) > 0 && (
+                  <div className="flex justify-between text-rose-600 font-bold">
+                    <span>Discount:</span>
+                    <span>-₹{Number(selectedReceiptOrder.discount).toFixed(2)}</span>
+                  </div>
+                )}
+                {Number(selectedReceiptOrder.tax || selectedReceiptOrder.tax_amount || 0) > 0 && (
+                  <div className="flex justify-between text-[10px] text-slate-500">
+                    <span>GST:</span>
+                    <span>₹{Number(selectedReceiptOrder.tax || selectedReceiptOrder.tax_amount).toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-sm pt-1 border-t border-slate-300 text-slate-900 tabular-nums">
                   <span>NET TOTAL:</span>
-                  <span>₹{selectedReceiptOrder.total_amount.toFixed(2)}</span>
+                  <span>₹{Number(selectedReceiptOrder.total_amount || 0).toFixed(2)}</span>
                 </div>
               </div>
 
               <div className="border-b border-dashed border-slate-300"></div>
 
               <div className="text-center text-[10px] text-slate-500">
-                Payment: {selectedReceiptOrder.payment_method} ({selectedReceiptOrder.payment_status})
+                Payment: {selectedReceiptOrder.payment_method || 'CASH'} ({selectedReceiptOrder.payment_status || 'PAID'})
                 <br />
-                Thank you for dining with Atmiya Dosa Hub! Visit again.
+                Thank you for dining with {restaurantSettings?.name || 'Atmiya Dosa Hub'}! Visit again.
               </div>
             </div>
 
             {/* Buttons */}
             <div className="flex items-center space-x-2 pt-1">
               <button
-                onClick={() => window.print()}
+                onClick={() => {
+                  try {
+                    printSinglePageReceipt({
+                      order: selectedReceiptOrder.session || selectedReceiptOrder,
+                      items: selectedReceiptOrder.items || [],
+                      customerName: selectedReceiptOrder.customer_name,
+                      customerPhone: selectedReceiptOrder.customer_phone,
+                      currentTable: selectedReceiptOrder.table_number,
+                      restaurantSettings
+                    });
+                  } catch {
+                    window.print();
+                  }
+                }}
                 className="flex-1 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-orange-600/20 cursor-pointer"
               >
                 <Printer className="w-4 h-4" />
@@ -2634,13 +2672,24 @@ export default function ExecutiveDashboard({
               </button>
               <button
                 onClick={() => {
-                  alert('Tax Invoice downloaded to receipts folder.');
+                  try {
+                    downloadSinglePageBillPdf({
+                      order: selectedReceiptOrder.session || selectedReceiptOrder,
+                      items: selectedReceiptOrder.items || [],
+                      customerName: selectedReceiptOrder.customer_name,
+                      customerPhone: selectedReceiptOrder.customer_phone,
+                      currentTable: selectedReceiptOrder.table_number,
+                      restaurantSettings
+                    });
+                  } catch (e) {
+                    console.error('PDF error:', e);
+                  }
                   setSelectedReceiptOrder(null);
                 }}
                 className="py-2.5 px-4 rounded-xl border bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200 font-bold text-xs flex items-center justify-center space-x-1 cursor-pointer"
               >
                 <Download className="w-4 h-4" />
-                <span>{t('downloadInvoice') || 'Download'}</span>
+                <span>{t('downloadInvoice') || 'Download PDF'}</span>
               </button>
             </div>
 
