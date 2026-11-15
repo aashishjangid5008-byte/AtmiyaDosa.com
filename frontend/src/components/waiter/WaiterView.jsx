@@ -232,7 +232,7 @@ export default function WaiterView({
       if (oCode !== tCode) return false;
       const st = String(o.status || '').toLowerCase().trim();
       const paySt = String(o.payment_status || '').toLowerCase().trim();
-      if (st === 'cancelled' || paySt === 'void') return false;
+      if (st === 'cancelled' || st === 'completed' || st === 'settled' || paySt === 'void' || paySt === 'paid') return false;
       const orderTime = new Date(o.placed_at || o.created_at || o.timestamp || 0).getTime();
       if (orderTime > 0 && (Date.now() - orderTime) > 2.5 * 60 * 60 * 1000) return false;
       return true;

@@ -407,9 +407,19 @@ export default function CustomerMenu({
     if (!order) return false;
     const st = String(order.status || '').toLowerCase().trim();
     const paySt = String(order.payment_status || '').toLowerCase().trim();
-    if (st === 'cancelled' || paySt === 'void') {
+
+    // 1. Explicitly non-active statuses
+    if (st === 'cancelled' || st === 'completed' || st === 'settled' || paySt === 'void') {
       return false;
     }
+
+    // 2. Paid / Settled: An already-paid order means the session was finished and paid!
+    // It must NEVER lock a new guest scanning the table QR.
+    if (paySt === 'paid') {
+      return false;
+    }
+
+    // 3. Stale order timeout: Older than 2.5 hours expires automatically
     const orderTime = new Date(order.placed_at || order.created_at || order.timestamp || 0).getTime();
     if (orderTime > 0 && (Date.now() - orderTime) > 2.5 * 60 * 60 * 1000) {
       return false;
@@ -419,6 +429,12 @@ export default function CustomerMenu({
 
   // Active table order in the kitchen queue (Locks QR to table session)
   const activeTableOrder = React.useMemo(() => {
+    // If the table is marked vacant/available in restaurant tables and has no current order, no active session!
+    const tableObj = (tables || []).find(t => isTableMatch(t.number, currentTable) || t.id === currentTable);
+    if (tableObj && (tableObj.status === 'available' || tableObj.status === 'vacant') && !tableObj.current_order_id) {
+      return null;
+    }
+
     const tableOrders = orders.filter(o => 
       isTableMatch(o.table_number, currentTable) && isOrderActive(o)
     );
@@ -429,18 +445,19 @@ export default function CustomerMenu({
     }
     tableOrders.sort((a, b) => new Date(b.placed_at || b.created_at || 0) - new Date(a.placed_at || a.created_at || 0));
     return tableOrders[0];
-  }, [orders, currentTable, placedOrderId]);
+  }, [orders, currentTable, placedOrderId, tables]);
 
   const activeOrderDisplayId = activeTableOrder?.id 
     ? (String(activeTableOrder.id).startsWith('#') ? activeTableOrder.id : `#${activeTableOrder.id}`)
     : '';
 
-  // Check for any recent cancelled order for this table
-  const recentCancelledOrder = orders.find(o => 
-    isTableMatch(o.table_number, currentTable) && 
-    (o.status || '').toLowerCase() === 'cancelled' && 
-    o.cancel_reason
-  );
+  // Check for any recent cancelled order for this table (< 15 mins)
+  const recentCancelledOrder = orders.find(o => {
+    if (!isTableMatch(o.table_number, currentTable)) return false;
+    if ((o.status || '').toLowerCase() !== 'cancelled' || !o.cancel_reason) return false;
+    const orderTime = new Date(o.placed_at || o.created_at || o.timestamp || 0).getTime();
+    return orderTime > 0 && (Date.now() - orderTime) < 15 * 60 * 1000;
+  });
 
   // Real-time synchronization of placed order & official bill state with live orders
   const activeBillOrder = React.useMemo(() => {

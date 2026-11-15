@@ -1834,7 +1834,10 @@ export default function App() {
             }
             await refreshOrdersFromSupabase();
           })
-          .on('broadcast', { event: 'table_session_settled' }, async () => {
+          .on('broadcast', { event: 'table_session_settled' }, async ({ payload }) => {
+            try {
+              window.dispatchEvent(new CustomEvent('table_session_terminated', { detail: payload || {} }));
+            } catch (e) {}
             await refreshOrdersFromSupabase();
             await refreshTablesFromSupabase();
           })
@@ -3270,9 +3273,16 @@ export default function App() {
     // Locate active live order for this table session
     let activeParent = null;
 
+    const isOrderEligibleParent = (o) => {
+      if (!o) return false;
+      const st = String(o.status || '').toLowerCase().trim();
+      const paySt = String(o.payment_status || '').toLowerCase().trim();
+      return st !== 'cancelled' && st !== 'completed' && st !== 'settled' && paySt !== 'paid' && paySt !== 'void';
+    };
+
     // Check 1: Direct match by order ID if passed
     if (newOrder.id) {
-      activeParent = orders.find(o => matchesOrderId(o, newOrder.id) && String(o.status || '').toLowerCase() !== 'cancelled');
+      activeParent = orders.find(o => matchesOrderId(o, newOrder.id) && isOrderEligibleParent(o));
     }
 
     // Check 2: Match by table occupancy & recent orders (< 2.5 hours)
@@ -3281,13 +3291,13 @@ export default function App() {
       const tblObj = tables.find(t => normalizeTbl(t.number) === normTarget || t.id === newOrder.table_number);
 
       if (tblObj && tblObj.current_order_id) {
-        activeParent = orders.find(o => matchesOrderId(o, tblObj.current_order_id) && String(o.status || '').toLowerCase() !== 'cancelled');
+        activeParent = orders.find(o => matchesOrderId(o, tblObj.current_order_id) && isOrderEligibleParent(o));
       }
 
       if (!activeParent) {
         const candidateOrders = orders.filter(o => {
           if (normalizeTbl(o.table_number) !== normTarget) return false;
-          if (String(o.status || '').toLowerCase() === 'cancelled') return false;
+          if (!isOrderEligibleParent(o)) return false;
           const orderTime = new Date(o.placed_at || o.created_at || 0).getTime();
           return orderTime > 0 && (Date.now() - orderTime) < 2.5 * 60 * 60 * 1000;
         });
