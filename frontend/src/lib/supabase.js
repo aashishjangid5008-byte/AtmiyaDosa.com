@@ -1183,18 +1183,72 @@ export const deleteCategoryFromSupabaseCloud = async (catId, fallbackCatId = nul
 /**
  * Reassigns one or multiple menu items to a target category in Supabase Cloud.
  */
-export const assignDishesToCategoryCloud = async (dishIds, categoryId) => {
+export const assignDishesToCategoryCloud = async (dishIds, categoryId, categoryName = null) => {
   if (!dishIds || !Array.isArray(dishIds) || dishIds.length === 0) return;
-  const safeCatId = isValidUuid(categoryId) ? categoryId : null;
+  
+  let validCatId = isValidUuid(categoryId) ? categoryId : null;
+  const cleanCatName = (categoryName || '').trim();
+
+  // 1. Verify if validCatId actually exists in menu_categories
+  if (validCatId) {
+    try {
+      const { data: existingCat } = await supabaseAdmin
+        .from('menu_categories')
+        .select('id')
+        .eq('id', validCatId)
+        .maybeSingle();
+      if (!existingCat) {
+        validCatId = null;
+      }
+    } catch (e) {
+      validCatId = null;
+    }
+  }
+
+  // 2. If validCatId is still null, look up or create by name
+  if (!validCatId && cleanCatName && cleanCatName !== 'Uncategorized' && cleanCatName !== 'All') {
+    try {
+      const { data: matchedCat } = await supabaseAdmin
+        .from('menu_categories')
+        .select('id')
+        .ilike('name', cleanCatName)
+        .maybeSingle();
+
+      if (matchedCat?.id) {
+        validCatId = matchedCat.id;
+      } else {
+        const newCatUuid = generateUuid();
+        const { data: createdCat } = await supabaseAdmin
+          .from('menu_categories')
+          .insert({
+            id: newCatUuid,
+            restaurant_id: RESTAURANT_ID,
+            name: cleanCatName,
+            gujarati_name: cleanCatName,
+            icon: 'Utensils',
+            display_order: 10,
+            is_active: true
+          })
+          .select('id')
+          .maybeSingle();
+        if (createdCat?.id) validCatId = createdCat.id;
+      }
+    } catch (e) {
+      console.warn('[SUPABASE DISH ASSIGN] Category lookup error:', e);
+    }
+  }
+
   try {
-    const { error } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from('menu_items')
-      .update({ category_id: safeCatId })
-      .in('id', dishIds);
+      .update({ category_id: validCatId })
+      .in('id', dishIds)
+      .select('id, name, category_id');
+
     if (error) {
       console.error('[SUPABASE DISH ASSIGN] Error updating category_id in Supabase:', error);
     } else {
-      console.log(`[SUPABASE DISH ASSIGN] Successfully assigned ${dishIds.length} dishes to category ${safeCatId}`);
+      console.log(`[SUPABASE DISH ASSIGN] Successfully assigned ${dishIds.length} dishes to category ${validCatId}:`, data);
     }
   } catch (e) {
     console.warn('[SUPABASE DISH ASSIGN] Exception:', e);
@@ -1212,7 +1266,23 @@ export const saveMenuItemToSupabaseCloud = async (itemObj, categoryId = null) =>
   let resolvedCatId = isValidUuid(categoryId) ? categoryId : (isValidUuid(itemObj.category_id) ? itemObj.category_id : null);
   const catName = (itemObj.category || '').trim();
 
-  // If no valid UUID yet but category name is known, look up or auto-create in menu_categories!
+  // 1. Verify if resolvedCatId exists in DB
+  if (resolvedCatId) {
+    try {
+      const { data: exists } = await supabaseAdmin
+        .from('menu_categories')
+        .select('id')
+        .eq('id', resolvedCatId)
+        .maybeSingle();
+      if (!exists) {
+        resolvedCatId = null;
+      }
+    } catch (e) {
+      resolvedCatId = null;
+    }
+  }
+
+  // 2. If no valid UUID in DB yet but category name is known, look up or auto-create in menu_categories!
   if (!resolvedCatId && catName && catName !== 'All' && catName !== 'Uncategorized') {
     try {
       const { data: matchedCat } = await supabaseAdmin
@@ -1236,7 +1306,7 @@ export const saveMenuItemToSupabaseCloud = async (itemObj, categoryId = null) =>
             display_order: 10,
             is_active: true
           })
-          .select()
+          .select('id')
           .maybeSingle();
 
         if (createdCat?.id) {

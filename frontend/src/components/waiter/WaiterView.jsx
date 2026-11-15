@@ -683,7 +683,7 @@ export default function WaiterView({
   };
 
   const handlePadAddDish = (item) => {
-    if (!item.is_available) return;
+    if (!item || item.is_available === false || item.isAvailable === false) return;
     setOrderPadCart(prev => {
       const existing = prev.find(i => i.id === item.id);
       if (existing) {

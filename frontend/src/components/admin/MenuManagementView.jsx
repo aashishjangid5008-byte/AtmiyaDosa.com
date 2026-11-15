@@ -210,6 +210,11 @@ export default function MenuManagementView({
   const [quickCatGujarati, setQuickCatGujarati] = useState('');
   const [quickCatImage, setQuickCatImage] = useState(null);
 
+  // Quick Direct Add to Category State
+  const [quickDishName, setQuickDishName] = useState('');
+  const [quickDishPrice, setQuickDishPrice] = useState('');
+  const [isQuickAdding, setIsQuickAdding] = useState(false);
+
   // Inline Quick Price Edit State
   const [inlineEditingId, setInlineEditingId] = useState(null);
   const [inlinePriceVal, setInlinePriceVal] = useState('');
@@ -603,13 +608,21 @@ export default function MenuManagementView({
     if (!dishIds || dishIds.length === 0) return;
     setIsAssigning(true);
     try {
+      const cleanCatName = (targetCatName || '').trim();
+      const matchedCat = categories.find(c => 
+        (targetCatId && c.id === targetCatId) || 
+        (cleanCatName && (c.name || '').toLowerCase().trim() === cleanCatName.toLowerCase().trim())
+      );
+      const resolvedCatId = matchedCat?.id || (isValidUuid(targetCatId) ? targetCatId : null);
+      const resolvedCatName = matchedCat?.name || cleanCatName || 'Uncategorized';
+
       if (onAssignDishesToCategory) {
-        await onAssignDishesToCategory(dishIds, targetCatId, targetCatName);
+        await onAssignDishesToCategory(dishIds, resolvedCatId, resolvedCatName);
       } else if (onUpdateMenuItem) {
         for (const id of dishIds) {
           const item = menuItems.find(m => m.id === id);
           if (item) {
-            await onUpdateMenuItem({ ...item, category_id: targetCatId, category: targetCatName });
+            await onUpdateMenuItem({ ...item, category_id: resolvedCatId, category: resolvedCatName });
           }
         }
       }
@@ -619,6 +632,42 @@ export default function MenuManagementView({
       console.error('Assign dishes error:', err);
     } finally {
       setIsAssigning(false);
+    }
+  };
+
+  const handleDirectQuickAddDish = async (e) => {
+    if (e) e.preventDefault();
+    if (!quickDishName.trim() || !quickDishPrice) return;
+    const pNum = parseFloat(quickDishPrice);
+    if (isNaN(pNum) || pNum <= 0) return;
+
+    const targetCategory = (selectedCat !== 'All' ? selectedCat : (uniqueCategories[0] || 'Uncategorized')).trim();
+    const matchedCat = categories.find(c => (c.name || '').toLowerCase().trim() === targetCategory.toLowerCase().trim());
+    const resolvedCatId = matchedCat?.id || null;
+
+    setIsQuickAdding(true);
+    try {
+      await onAddMenuItem({
+        name: quickDishName.trim(),
+        english_name: quickDishName.trim(),
+        category: targetCategory,
+        category_id: resolvedCatId,
+        price: pNum,
+        finalPrice: pNum,
+        originalPrice: pNum,
+        cuisine: matchedCat?.cuisine || 'south_indian',
+        is_available: true,
+        isAvailable: true,
+        is_veg: true,
+        prepTimeMins: 10
+      });
+      setQuickDishName('');
+      setQuickDishPrice('');
+      playSound('success');
+    } catch (err) {
+      console.error('Quick add dish error:', err);
+    } finally {
+      setIsQuickAdding(false);
     }
   };
 
@@ -673,17 +722,19 @@ export default function MenuManagementView({
     playSound('success');
   };
 
-  const handleOpenAddModal = () => {
+  const handleOpenAddModal = (presetCategory = null) => {
     setImagePreview('');
     setShowInlineAddCat(false);
-    const defaultCatName = uniqueCategories[0] || 'Uncategorized';
-    const matched = categories.find(c => c.name === defaultCatName);
+    const targetCat = (typeof presetCategory === 'string' && presetCategory && presetCategory !== 'All')
+      ? presetCategory
+      : (selectedCat !== 'All' ? selectedCat : (uniqueCategories[0] || 'Uncategorized'));
+    const matched = categories.find(c => (c.name || '').toLowerCase().trim() === targetCat.toLowerCase().trim());
     setNewItem({
       name: '',
       gujarati_name: '',
-      category: defaultCatName,
+      category: targetCat,
       category_id: matched ? matched.id : null,
-      cuisine: 'south_indian',
+      cuisine: matched?.cuisine || 'south_indian',
       price: '',
       description: '',
       is_veg: true,
@@ -701,8 +752,11 @@ export default function MenuManagementView({
     const priceNum = parseFloat(newItem.price);
     const photoUrl = newItem.image_url || imagePreview || null;
     const determinedCuisine = newItem.cuisine || getDishCuisine(newItem);
-    const finalCategory = (newItem.category || uniqueCategories[0] || 'Uncategorized').trim();
-    const matchedCategory = categories.find(c => c.name === finalCategory || c.id === newItem.category_id);
+    const finalCategory = (newItem.category || (selectedCat !== 'All' ? selectedCat : uniqueCategories[0]) || 'Uncategorized').trim();
+    const matchedCategory = categories.find(c => 
+      (c.name || '').toLowerCase().trim() === finalCategory.toLowerCase().trim() || 
+      (newItem.category_id && c.id === newItem.category_id)
+    );
     
     onAddMenuItem({
       ...newItem,
@@ -734,8 +788,8 @@ export default function MenuManagementView({
     setNewItem({
       name: '',
       gujarati_name: '',
-      category: uniqueCategories[0] || '',
-      category_id: null,
+      category: finalCategory,
+      category_id: matchedCategory?.id || null,
       cuisine: 'south_indian',
       price: '',
       description: '',
@@ -1120,18 +1174,30 @@ export default function MenuManagementView({
             <span>Manage Categories</span>
           </button>
           {selectedCat !== 'All' && (
-            <button
-              onClick={() => {
-                const found = categories.find(c => (c.name || '').toLowerCase().trim() === selectedCat.toLowerCase().trim()) || { id: null, name: selectedCat };
-                setAssignCatModal(found);
-                playSound('click');
-              }}
-              className="px-3 py-1 rounded-full text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 transition cursor-pointer flex items-center space-x-1.5 shadow-xs active:scale-95"
-              title={`Pick and add dishes from other categories into ${selectedCat}`}
-            >
-              <ListPlus className="w-3.5 h-3.5 text-orange-400" />
-              <span>+ Pick Dishes into {selectedCat}</span>
-            </button>
+            <div className="flex items-center space-x-1.5 flex-wrap gap-1">
+              <button
+                type="button"
+                onClick={() => handleOpenAddModal(selectedCat)}
+                className="px-3 py-1 rounded-full text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 transition cursor-pointer flex items-center space-x-1 shadow-xs active:scale-95"
+                title={`Create a new dish directly in ${selectedCat}`}
+              >
+                <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                <span>+ Direct Add to {selectedCat}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const found = categories.find(c => (c.name || '').toLowerCase().trim() === selectedCat.toLowerCase().trim()) || { id: null, name: selectedCat };
+                  setAssignCatModal(found);
+                  playSound('click');
+                }}
+                className="px-3 py-1 rounded-full text-xs font-bold text-slate-800 bg-orange-100 hover:bg-orange-200 border border-orange-300 transition cursor-pointer flex items-center space-x-1 shadow-xs active:scale-95"
+                title={`Pick and add dishes from other categories into ${selectedCat}`}
+              >
+                <ListPlus className="w-3.5 h-3.5 text-orange-600" />
+                <span>+ Pick Dishes into {selectedCat}</span>
+              </button>
+            </div>
           )}
         </div>
 
@@ -1162,7 +1228,7 @@ export default function MenuManagementView({
               <span>+ Create Categories</span>
             </button>
             <button
-              onClick={handleOpenAddModal}
+              onClick={() => handleOpenAddModal(null)}
               className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-md transition flex items-center space-x-2 cursor-pointer active:scale-95"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
@@ -1188,23 +1254,91 @@ export default function MenuManagementView({
         </div>
       ) : filteredItems.length === 0 ? (
         <div className="bg-white rounded-3xl p-8 border border-slate-200/90 text-center shadow-2xs my-4 space-y-3">
-          <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 mx-auto flex items-center justify-center text-2xl">
-            🔍
+          <div className="w-14 h-14 rounded-2xl bg-orange-50 text-orange-500 mx-auto flex items-center justify-center text-2xl shadow-inner">
+            {selectedCat !== 'All' ? '📂' : '🔍'}
           </div>
           <h3 className="text-base font-black text-slate-900 font-heading">
-            No dishes match your filter
+            {selectedCat !== 'All' ? `No dishes in "${selectedCat}" yet` : 'No dishes match your filter'}
           </h3>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            Try switching category to "All Categories" or clearing your search query.
+            {selectedCat !== 'All' 
+              ? `You can directly create dishes in "${selectedCat}" or pick and add existing dishes from other categories.`
+              : 'Try switching category to "All Categories" or clearing your search query.'}
           </p>
-          <button
-            onClick={() => { setSelectedCat('All'); setSearch(''); setStatusFilter('all'); }}
-            className="px-3 py-1.5 rounded-xl bg-orange-600 text-white font-bold text-xs hover:bg-orange-700 transition cursor-pointer"
-          >
-            Reset Filters
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+            {selectedCat !== 'All' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddModal(selectedCat)}
+                  className="px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-xs transition flex items-center space-x-1.5 cursor-pointer active:scale-95"
+                >
+                  <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                  <span>+ Direct Add Dish to {selectedCat}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const found = categories.find(c => (c.name || '').toLowerCase().trim() === selectedCat.toLowerCase().trim()) || { id: null, name: selectedCat };
+                    setAssignCatModal(found);
+                    playSound('click');
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-xs transition flex items-center space-x-1.5 cursor-pointer active:scale-95"
+                >
+                  <ListPlus className="w-3.5 h-3.5 text-orange-400" />
+                  <span>+ Pick Dishes into {selectedCat}</span>
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => { setSelectedCat('All'); setSearch(''); setStatusFilter('all'); }}
+              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+            >
+              Show All Categories
+            </button>
+          </div>
         </div>
       ) : null}
+
+      {/* Quick Direct Add to Category Inline Bar */}
+      {selectedCat !== 'All' && (
+        <form onSubmit={handleDirectQuickAddDish} className="p-3 bg-gradient-to-r from-orange-50/90 via-amber-50/70 to-white rounded-2xl border border-orange-200/90 shadow-2xs flex flex-wrap items-center gap-2 mb-3">
+          <div className="flex items-center space-x-1.5 shrink-0">
+            <span className="text-base">⚡</span>
+            <span className="text-xs font-black text-slate-900 font-heading">
+              Direct Add to <span className="text-orange-600 font-black">{selectedCat}</span>:
+            </span>
+          </div>
+          <input
+            type="text"
+            required
+            placeholder={`Dish name (e.g. Special ${selectedCat})`}
+            value={quickDishName}
+            onChange={(e) => setQuickDishName(e.target.value)}
+            className="flex-1 min-w-[180px] px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500 shadow-2xs"
+          />
+          <div className="w-24 shrink-0 relative">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-slate-400">₹</span>
+            <input
+              type="number"
+              required
+              placeholder="Price"
+              value={quickDishPrice}
+              onChange={(e) => setQuickDishPrice(e.target.value)}
+              className="w-full pl-6 pr-2 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold font-mono focus:outline-none focus:border-orange-500 shadow-2xs"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isQuickAdding || !quickDishName.trim() || !quickDishPrice}
+            className="px-3.5 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-bold text-xs shadow-xs transition flex items-center space-x-1 cursor-pointer active:scale-95 shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[3]" />
+            <span>{isQuickAdding ? 'Adding...' : 'Direct Add'}</span>
+          </button>
+        </form>
+      )}
 
       {/* MODE A: DYNAMIC CARDS VIEW (PRO-MAX RESPONSIVE, 0 TEXT OVERFLOW) */}
       {menuItems.length > 0 && filteredItems.length > 0 && viewMode === 'cards' && (

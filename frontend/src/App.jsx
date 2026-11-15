@@ -4431,14 +4431,21 @@ export default function App() {
 
   const handleAssignDishesToCategory = async (dishIds, targetCatId, targetCatName) => {
     if (!dishIds || !Array.isArray(dishIds) || dishIds.length === 0) return;
-    const safeCatId = ensureValidUuid(targetCatId);
+
+    // Resolve category against existing categories list
+    const matchedCategory = categories.find(c => 
+      (targetCatId && c.id === targetCatId) || 
+      (targetCatName && (c.name || '').toLowerCase().trim() === targetCatName.toLowerCase().trim())
+    );
+    const resolvedCatId = matchedCategory?.id || (isValidUuid(targetCatId) ? targetCatId : null);
+    const resolvedCatName = matchedCategory?.name || targetCatName || 'Uncategorized';
 
     const updatedDishes = menuItems.map(item => {
       if (dishIds.includes(item.id)) {
         return {
           ...item,
-          category: targetCatName,
-          category_id: safeCatId
+          category: resolvedCatName,
+          category_id: resolvedCatId
         };
       }
       return item;
@@ -4457,18 +4464,18 @@ export default function App() {
       supabase.channel('restaurant_alerts').send({
         type: 'broadcast',
         event: 'category_dishes_reassigned',
-        payload: { dishIds, category_id: safeCatId, category_name: targetCatName }
+        payload: { dishIds, category_id: resolvedCatId, category_name: resolvedCatName }
       });
     } catch (e) {}
 
-    await assignDishesToCategoryCloud(dishIds, safeCatId);
+    await assignDishesToCategoryCloud(dishIds, resolvedCatId, resolvedCatName);
 
     recordEmployeeActivity({
       employeeName: authUser?.name || 'Admin',
       employeeRole: authUser?.role || 'Admin',
       tableNumber: 'Menu',
       actionType: 'CATEGORY_UPDATED',
-      details: `Assigned ${dishIds.length} dishes to category "${targetCatName}"`,
+      details: `Assigned ${dishIds.length} dishes to category "${resolvedCatName}"`,
       type: 'menu',
       color: 'emerald'
     });
