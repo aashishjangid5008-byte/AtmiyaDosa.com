@@ -741,18 +741,61 @@ export default function CustomerMenu({
     return false;
   };
 
-  // Dynamically compute available sub-categories scoped to currently selected cuisine (excluding water)
-  const availableCategories = React.useMemo(() => {
-    const pool = (selectedCuisine === 'all' 
+  // Active, orderable dishes in current cuisine (excluding water)
+  const catPool = React.useMemo(() => {
+    return (selectedCuisine === 'all' 
       ? menuItems 
       : menuItems.filter(m => getDishCuisine(m) === selectedCuisine)
-    ).filter(m => !isWaterItem(m));
-    const uniqueCats = Array.from(new Set([
-      ...(categories || []).map(c => c.name),
-      ...pool.map(m => m.category)
-    ].filter(Boolean)));
-    return ['All', ...uniqueCats];
-  }, [menuItems, selectedCuisine, categories]);
+    ).filter(m => !isWaterItem(m) && m.is_available !== false && m.isAvailable !== false);
+  }, [menuItems, selectedCuisine]);
+
+  // Dynamically compute available sub-categories scoped to currently selected cuisine (excluding water)
+  // Only shows categories that actually contain active, orderable dishes (filters out 0-dish & empty categories)
+  const availableCategories = React.useMemo(() => {
+    const catDishMap = {};
+    catPool.forEach(m => {
+      const catName = (m.category || '').trim();
+      if (catName && catName !== 'Uncategorized') {
+        const key = catName.toLowerCase();
+        if (!catDishMap[key]) {
+          catDishMap[key] = { displayName: catName, count: 0 };
+        }
+        catDishMap[key].count += 1;
+      }
+    });
+
+    const result = [];
+    const addedSet = new Set();
+
+    // Preserve the ordering from categories prop, but only include if dishes actually exist
+    (categories || []).forEach(c => {
+      const name = c.name?.trim();
+      if (name) {
+        const key = name.toLowerCase();
+        if (catDishMap[key]?.count > 0 && !addedSet.has(key)) {
+          result.push(name);
+          addedSet.add(key);
+        }
+      }
+    });
+
+    // Add any remaining categories from dishes that weren't in categories prop
+    Object.keys(catDishMap).forEach(key => {
+      if (!addedSet.has(key) && catDishMap[key].count > 0) {
+        result.push(catDishMap[key].displayName);
+        addedSet.add(key);
+      }
+    });
+
+    return ['All', ...result];
+  }, [catPool, categories]);
+
+  // Keep selectedCategory synchronized if categories change
+  React.useEffect(() => {
+    if (selectedCategory !== 'All' && !availableCategories.some(c => c.toLowerCase() === selectedCategory.toLowerCase())) {
+      setSelectedCategory('All');
+    }
+  }, [availableCategories, selectedCategory]);
 
   // Filter items
   const filteredItems = menuItems.filter(item => {
@@ -762,8 +805,12 @@ export default function CustomerMenu({
     if (item.is_available === false || item.isAvailable === false) return false;
     // Master Cuisine Filter (South Indian, Chinese, Gujarati, Beverages)
     if (selectedCuisine !== 'all' && getDishCuisine(item) !== selectedCuisine) return false;
-    // Sub-Category Filter
-    if (selectedCategory !== 'All' && item.category !== selectedCategory) return false;
+    // Sub-Category Filter (case-insensitive & trimmed)
+    if (selectedCategory !== 'All') {
+      const itemCat = (item.category || '').toLowerCase().trim();
+      const selCat = selectedCategory.toLowerCase().trim();
+      if (itemCat !== selCat) return false;
+    }
     if (vegOnly && !item.is_veg) return false;
     if (spicyOnly && !item.is_spicy) return false;
     if (jainOnly) {
@@ -1584,17 +1631,20 @@ export default function CustomerMenu({
           {availableCategories.length > 1 && (
             <div className="flex items-center space-x-1.5 overflow-x-auto pb-0.5 no-scrollbar scroll-smooth pt-1 border-t border-slate-100">
               {availableCategories.map(cat => {
-                const catObj = (categories || []).find(c => c.name === cat);
+                const catObj = (categories || []).find(c => (c.name || '').toLowerCase().trim() === cat.toLowerCase().trim());
                 const catImg = catObj?.image_url || catObj?.imageUrl || catObj?.photo || catObj?.image || null;
-                const isSelected = selectedCategory === cat;
+                const isSelected = (selectedCategory || '').toLowerCase().trim() === cat.toLowerCase().trim();
+                const dishCount = cat === 'All'
+                  ? catPool.length
+                  : catPool.filter(m => (m.category || '').toLowerCase().trim() === cat.toLowerCase().trim()).length;
                 return (
                   <button
                     key={cat}
                     type="button"
                     onClick={() => setSelectedCategory(cat)}
-                    className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-[11px] font-bold transition whitespace-nowrap shrink-0 cursor-pointer ${
+                    className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-[11px] font-bold transition whitespace-nowrap shrink-0 cursor-pointer shadow-2xs active:scale-95 ${
                       isSelected
-                        ? 'bg-orange-500 text-white shadow-xs'
+                        ? 'bg-orange-500 text-white shadow-xs font-black'
                         : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 font-semibold'
                     }`}
                   >
@@ -1607,6 +1657,11 @@ export default function CustomerMenu({
                       />
                     ) : null}
                     <span>{getCategoryLabel(cat, currentLang)}</span>
+                    <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold ${
+                      isSelected ? 'bg-white/30 text-white' : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      {dishCount}
+                    </span>
                   </button>
                 );
               })}

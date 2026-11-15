@@ -1136,20 +1136,41 @@ export const saveCategoryToSupabaseCloud = async (catObj) => {
   return { ...catObj, id: catId };
 };
 
-export const deleteCategoryFromSupabaseCloud = async (catId) => {
+export const deleteCategoryFromSupabaseCloud = async (catId, fallbackCatId = null) => {
   if (!catId) return;
   const isUuid = isValidUuid(catId);
+  const safeFallbackId = isValidUuid(fallbackCatId) ? fallbackCatId : null;
   try {
     if (isUuid) {
+      // 1. Unlink or reassign any items referencing this category first to avoid foreign key constraint error
+      await supabaseAdmin
+        .from('menu_items')
+        .update({ category_id: safeFallbackId })
+        .eq('category_id', catId);
+
+      // 2. Delete the category safely
       await supabaseAdmin
         .from('menu_categories')
         .delete()
         .eq('id', catId);
     } else {
-      await supabaseAdmin
+      const { data: matched } = await supabaseAdmin
         .from('menu_categories')
-        .delete()
-        .eq('name', String(catId));
+        .select('id')
+        .ilike('name', String(catId))
+        .maybeSingle();
+
+      if (matched?.id) {
+        await supabaseAdmin
+          .from('menu_items')
+          .update({ category_id: safeFallbackId })
+          .eq('category_id', matched.id);
+
+        await supabaseAdmin
+          .from('menu_categories')
+          .delete()
+          .eq('id', matched.id);
+      }
     }
   } catch (e) {
     console.warn('[SUPABASE CATEGORY] Delete notice:', e);
@@ -1158,6 +1179,27 @@ export const deleteCategoryFromSupabaseCloud = async (catId) => {
   try {
     await fetch(`${API_BASE_URL}/menu/categories/${encodeURIComponent(catId)}`, { method: 'DELETE' });
   } catch (e) {}
+};
+
+/**
+ * Reassigns one or multiple menu items to a target category in Supabase Cloud.
+ */
+export const assignDishesToCategoryCloud = async (dishIds, categoryId) => {
+  if (!dishIds || !Array.isArray(dishIds) || dishIds.length === 0) return;
+  const safeCatId = isValidUuid(categoryId) ? categoryId : null;
+  try {
+    const { error } = await supabaseAdmin
+      .from('menu_items')
+      .update({ category_id: safeCatId })
+      .in('id', dishIds);
+    if (error) {
+      console.error('[SUPABASE DISH ASSIGN] Error updating category_id in Supabase:', error);
+    } else {
+      console.log(`[SUPABASE DISH ASSIGN] Successfully assigned ${dishIds.length} dishes to category ${safeCatId}`);
+    }
+  } catch (e) {
+    console.warn('[SUPABASE DISH ASSIGN] Exception:', e);
+  }
 };
 
 export const saveMenuItemToSupabaseCloud = async (itemObj, categoryId = null) => {

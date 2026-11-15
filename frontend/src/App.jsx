@@ -74,6 +74,7 @@ import {
   purgeAllMenuFromSupabase,
   saveCategoryToSupabaseCloud,
   deleteCategoryFromSupabaseCloud,
+  assignDishesToCategoryCloud,
   saveMenuItemToSupabaseCloud,
   deleteMenuItemFromSupabaseCloud,
   ensureValidUuid,
@@ -4372,49 +4373,133 @@ export default function App() {
 
   const handleDeleteCategory = async (categoryId) => {
     const safeCatId = ensureValidUuid(categoryId);
-    const targetCat = categories.find(c => c.id === categoryId || c.id === safeCatId);
+    const targetCat = categories.find(c => 
+      c.id === categoryId || 
+      c.id === safeCatId || 
+      (c.name && c.name.toLowerCase().trim() === String(categoryId).toLowerCase().trim())
+    );
     if (!targetCat) return;
-    const catDishes = menuItems.filter(m => m.category === targetCat.name || m.category_id === safeCatId);
 
-    const updatedCats = categories.filter(c => c.id !== categoryId && c.id !== safeCatId);
-    setCategories(updatedCats);
-    setLocalStore('categories', updatedCats);
+    const remainingCats = categories.filter(c => 
+      c.id !== targetCat.id && 
+      c.id !== safeCatId && 
+      c.name.toLowerCase().trim() !== targetCat.name.toLowerCase().trim()
+    );
+    setCategories(remainingCats);
+    setLocalStore('categories', remainingCats);
     try {
-      localStorage.setItem('restaurant_categories', JSON.stringify(updatedCats));
-      localStorage.setItem('atmiya_categories', JSON.stringify(updatedCats));
+      localStorage.setItem('restaurant_categories', JSON.stringify(remainingCats));
+      localStorage.setItem('atmiya_categories', JSON.stringify(remainingCats));
     } catch (e) {}
 
-    if (catDishes.length > 0) {
-      const fallbackCatName = updatedCats.length > 0 ? updatedCats[0].name : 'Uncategorized';
-      const fallbackCatId = updatedCats.length > 0 ? updatedCats[0].id : null;
-      const updatedDishes = menuItems.map(item => {
-        if (item.category === targetCat.name || item.category_id === safeCatId) {
-          return { ...item, category: fallbackCatName, category_id: fallbackCatId };
-        }
-        return item;
-      });
-      setMenuItems(updatedDishes);
-      setLocalStore('menu_items', updatedDishes);
-      try {
-        localStorage.setItem('atmiya_menu_items', JSON.stringify(updatedDishes));
-      } catch (e) {}
-    }
+    const fallbackCat = remainingCats.length > 0 ? remainingCats[0] : null;
+    const fallbackCatName = fallbackCat ? fallbackCat.name : 'Uncategorized';
+    const fallbackCatId = fallbackCat ? fallbackCat.id : null;
 
-    window.dispatchEvent(new CustomEvent('atmiya_categories_updated', { detail: { categories: updatedCats } }));
+    const updatedDishes = menuItems.map(item => {
+      if (
+        (item.category && item.category.toLowerCase().trim() === targetCat.name.toLowerCase().trim()) || 
+        item.category_id === targetCat.id || 
+        item.category_id === safeCatId
+      ) {
+        return { ...item, category: fallbackCatName, category_id: fallbackCatId };
+      }
+      return item;
+    });
+    setMenuItems(updatedDishes);
+    setLocalStore('menu_items', updatedDishes);
+    try {
+      localStorage.setItem('atmiya_menu_items', JSON.stringify(updatedDishes));
+      localStorage.setItem('restaurant_menu_items', JSON.stringify(updatedDishes));
+    } catch (e) {}
+
+    window.dispatchEvent(new CustomEvent('atmiya_categories_updated', { detail: { categories: remainingCats } }));
+    window.dispatchEvent(new CustomEvent('atmiya_menu_updated', { detail: { items: updatedDishes } }));
     window.dispatchEvent(new Event('restaurant_data_updated'));
 
-    // Cloud delete from Supabase Cloud & Backend
-    await deleteCategoryFromSupabaseCloud(safeCatId);
+    // Cloud delete from Supabase Cloud (passes fallbackCatId to avoid foreign key errors)
+    await deleteCategoryFromSupabaseCloud(targetCat.id || safeCatId, fallbackCatId);
 
     recordEmployeeActivity({
       employeeName: authUser?.name || 'Admin',
       employeeRole: authUser?.role || 'Admin',
       tableNumber: 'Menu',
       actionType: 'CATEGORY_DELETED',
-      details: `Deleted category "${targetCat.name}" (${catDishes.length} dishes reassigned)`,
+      details: `Deleted category "${targetCat.name}"`,
       type: 'menu',
       color: 'rose'
     });
+    playSound('trash');
+  };
+
+  const handleAssignDishesToCategory = async (dishIds, targetCatId, targetCatName) => {
+    if (!dishIds || !Array.isArray(dishIds) || dishIds.length === 0) return;
+    const safeCatId = ensureValidUuid(targetCatId);
+
+    const updatedDishes = menuItems.map(item => {
+      if (dishIds.includes(item.id)) {
+        return {
+          ...item,
+          category: targetCatName,
+          category_id: safeCatId
+        };
+      }
+      return item;
+    });
+    setMenuItems(updatedDishes);
+    setLocalStore('menu_items', updatedDishes);
+    try {
+      localStorage.setItem('atmiya_menu_items', JSON.stringify(updatedDishes));
+      localStorage.setItem('restaurant_menu_items', JSON.stringify(updatedDishes));
+    } catch (e) {}
+
+    window.dispatchEvent(new CustomEvent('atmiya_menu_updated', { detail: { items: updatedDishes } }));
+    window.dispatchEvent(new Event('restaurant_data_updated'));
+
+    try {
+      supabase.channel('restaurant_alerts').send({
+        type: 'broadcast',
+        event: 'category_dishes_reassigned',
+        payload: { dishIds, category_id: safeCatId, category_name: targetCatName }
+      });
+    } catch (e) {}
+
+    await assignDishesToCategoryCloud(dishIds, safeCatId);
+
+    recordEmployeeActivity({
+      employeeName: authUser?.name || 'Admin',
+      employeeRole: authUser?.role || 'Admin',
+      tableNumber: 'Menu',
+      actionType: 'CATEGORY_UPDATED',
+      details: `Assigned ${dishIds.length} dishes to category "${targetCatName}"`,
+      type: 'menu',
+      color: 'emerald'
+    });
+    playSound('success');
+  };
+
+  const handleUnassignDishFromCategory = async (dishId) => {
+    const updatedDishes = menuItems.map(item => {
+      if (item.id === dishId) {
+        return {
+          ...item,
+          category: 'Uncategorized',
+          category_id: null
+        };
+      }
+      return item;
+    });
+    setMenuItems(updatedDishes);
+    setLocalStore('menu_items', updatedDishes);
+    try {
+      localStorage.setItem('atmiya_menu_items', JSON.stringify(updatedDishes));
+      localStorage.setItem('restaurant_menu_items', JSON.stringify(updatedDishes));
+    } catch (e) {}
+
+    window.dispatchEvent(new CustomEvent('atmiya_menu_updated', { detail: { items: updatedDishes } }));
+    window.dispatchEvent(new Event('restaurant_data_updated'));
+
+    await assignDishesToCategoryCloud([dishId], null);
     playSound('trash');
   };
 
@@ -6073,6 +6158,8 @@ export default function App() {
               onRestoreSampleMenu={handleRestoreSampleMenu}
               onApplyDiscount={handleApplyDiscount}
               onRemoveDiscount={handleRemoveDiscount}
+              onAssignDishesToCategory={handleAssignDishesToCategory}
+              onUnassignDishFromCategory={handleUnassignDishFromCategory}
               currentLang={currentLang}
             />
           )}

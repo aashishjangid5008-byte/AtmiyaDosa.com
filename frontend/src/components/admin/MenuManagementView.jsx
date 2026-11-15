@@ -35,7 +35,13 @@ import {
   FolderPlus,
   Folder,
   FolderTree,
-  AlertTriangle
+  AlertTriangle,
+  ListPlus,
+  MoveRight,
+  GripVertical,
+  CheckSquare,
+  Square,
+  ArrowRight
 } from 'lucide-react';
 import { getTranslation } from '../../lib/translations';
 import { loadAuthenticMenuCards, clearMenuItems, clearAllMenuData } from '../../lib/appwrite';
@@ -153,6 +159,8 @@ export default function MenuManagementView({
   onRestoreSampleMenu,
   onApplyDiscount, 
   onRemoveDiscount, 
+  onAssignDishesToCategory,
+  onUnassignDishFromCategory,
   currentLang 
 }) {
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'table' | 'stock'
@@ -172,6 +180,14 @@ export default function MenuManagementView({
   const [discountPercentInput, setDiscountPercentInput] = useState(15);
   const [imagePreview, setImagePreview] = useState('');
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
+  // Pick & Drop Dishes into Category Modal State
+  const [assignCatModal, setAssignCatModal] = useState(null);
+  const [assignSearch, setAssignSearch] = useState('');
+  const [assignCatFilter, setAssignCatFilter] = useState('All');
+  const [selectedDishesForMove, setSelectedDishesForMove] = useState(new Set());
+  const [isDropTargetActive, setIsDropTargetActive] = useState(false);
+  const [isAssigning, setIsAssigning] = useState(false);
 
   // Category Manager & Clear Modals State
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -302,8 +318,8 @@ export default function MenuManagementView({
   // Filter items by category, search term, and status
   const filteredItems = useMemo(() => {
     return enrichedItems.filter(item => {
-      // Category filter
-      if (selectedCat !== 'All' && item.category !== selectedCat) return false;
+      // Category filter (case-insensitive & trimmed)
+      if (selectedCat !== 'All' && (item.category || '').toLowerCase().trim() !== selectedCat.toLowerCase().trim()) return false;
 
       // Status filter
       if (statusFilter === 'in_stock' && item.is_available === false) return false;
@@ -361,27 +377,37 @@ export default function MenuManagementView({
   const discountedCount = menuItems.filter(i => i.hasDiscount).length;
   const totalMenuRevenue = enrichedItems.reduce((sum, i) => sum + i.revenue, 0);
 
-  // Category counts
+  // Clean, authoritative unique categories list (no phantom lowercase duplicates)
+  const uniqueCategories = useMemo(() => {
+    const list = [];
+    const seen = new Set();
+    (categories || []).forEach(c => {
+      const name = (c?.name || '').trim();
+      if (name && !seen.has(name.toLowerCase())) {
+        list.push(name);
+        seen.add(name.toLowerCase());
+      }
+    });
+    menuItems.forEach(m => {
+      const cat = (m?.category || '').trim();
+      if (cat && cat !== 'Uncategorized' && !seen.has(cat.toLowerCase())) {
+        list.push(cat);
+        seen.add(cat.toLowerCase());
+      }
+    });
+    return list;
+  }, [categories, menuItems]);
+
+  // Category counts mapped cleanly to uniqueCategories
   const categoryCounts = useMemo(() => {
     const counts = { All: menuItems.length };
     menuItems.forEach(i => {
-      const cat = (i.category && i.category.trim()) || 'Uncategorized';
-      counts[cat] = (counts[cat] || 0) + 1;
+      const rawCat = (i.category && i.category.trim()) || 'Uncategorized';
+      const matched = uniqueCategories.find(c => c.toLowerCase() === rawCat.toLowerCase()) || rawCat;
+      counts[matched] = (counts[matched] || 0) + 1;
     });
     return counts;
-  }, [menuItems]);
-
-  const uniqueCategories = useMemo(() => {
-    const set = new Set();
-    categories.forEach(c => {
-      if (c && c.name) set.add(c.name.trim());
-    });
-    menuItems.forEach(m => {
-      if (m && m.category) set.add(m.category.trim());
-      else set.add('Uncategorized');
-    });
-    return Array.from(set).filter(Boolean);
-  }, [categories, menuItems]);
+  }, [menuItems, uniqueCategories]);
 
   const compressImage = (file, maxWidth = 600, maxHeight = 600, quality = 0.78) => {
     return new Promise((resolve) => {
@@ -554,19 +580,65 @@ export default function MenuManagementView({
   };
 
   const handleDeleteCategoryModal = (cat) => {
-    const dishCount = menuItems.filter(m => m.category === cat.name).length;
+    const dishCount = menuItems.filter(m => 
+      (m.category && m.category.toLowerCase().trim() === (cat.name || '').toLowerCase().trim()) || 
+      (m.category_id && m.category_id === cat.id)
+    ).length;
     let msg = `Are you sure you want to delete category "${cat.name}"?`;
     if (dishCount > 0) {
       msg += `\nWarning: There are ${dishCount} dishes currently assigned to this category. They will be safely reassigned.`;
     }
     if (window.confirm(msg)) {
       if (onDeleteCategory) {
-        onDeleteCategory(cat.id);
+        onDeleteCategory(cat.id || cat.name);
       }
-      if (selectedCat === cat.name) {
+      if (selectedCat.toLowerCase().trim() === (cat.name || '').toLowerCase().trim()) {
         setSelectedCat('All');
       }
       playSound('trash');
+    }
+  };
+
+  const handleAssignDishes = async (dishIds, targetCatId, targetCatName) => {
+    if (!dishIds || dishIds.length === 0) return;
+    setIsAssigning(true);
+    try {
+      if (onAssignDishesToCategory) {
+        await onAssignDishesToCategory(dishIds, targetCatId, targetCatName);
+      } else if (onUpdateMenuItem) {
+        for (const id of dishIds) {
+          const item = menuItems.find(m => m.id === id);
+          if (item) {
+            await onUpdateMenuItem({ ...item, category_id: targetCatId, category: targetCatName });
+          }
+        }
+      }
+      setSelectedDishesForMove(new Set());
+      playSound('success');
+    } catch (err) {
+      console.error('Assign dishes error:', err);
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+
+  const handleUnassignDish = async (dishId) => {
+    if (!dishId) return;
+    setIsAssigning(true);
+    try {
+      if (onUnassignDishFromCategory) {
+        await onUnassignDishFromCategory(dishId);
+      } else if (onUpdateMenuItem) {
+        const item = menuItems.find(m => m.id === dishId);
+        if (item) {
+          await onUpdateMenuItem({ ...item, category_id: null, category: 'Uncategorized' });
+        }
+      }
+      playSound('trash');
+    } catch (err) {
+      console.error('Unassign dish error:', err);
+    } finally {
+      setIsAssigning(false);
     }
   };
 
@@ -1047,6 +1119,20 @@ export default function MenuManagementView({
             <Plus className="w-3 h-3 stroke-[2.5]" />
             <span>Manage Categories</span>
           </button>
+          {selectedCat !== 'All' && (
+            <button
+              onClick={() => {
+                const found = categories.find(c => (c.name || '').toLowerCase().trim() === selectedCat.toLowerCase().trim()) || { id: null, name: selectedCat };
+                setAssignCatModal(found);
+                playSound('click');
+              }}
+              className="px-3 py-1 rounded-full text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 transition cursor-pointer flex items-center space-x-1.5 shadow-xs active:scale-95"
+              title={`Pick and add dishes from other categories into ${selectedCat}`}
+            >
+              <ListPlus className="w-3.5 h-3.5 text-orange-400" />
+              <span>+ Pick Dishes into {selectedCat}</span>
+            </button>
+          )}
         </div>
 
       </div>
@@ -2728,7 +2814,19 @@ export default function MenuManagementView({
                             </div>
                           </div>
 
-                          <div className="flex items-center space-x-1 shrink-0">
+                          <div className="flex items-center space-x-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAssignCatModal(foundObj);
+                                playSound('click');
+                              }}
+                              className="px-2.5 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-700 font-bold text-[11px] transition flex items-center space-x-1 border border-orange-200 cursor-pointer shadow-2xs active:scale-95"
+                              title={`Pick & add dishes into ${foundObj.name}`}
+                            >
+                              <ListPlus className="w-3.5 h-3.5 text-orange-600" />
+                              <span>Pick Dishes ({dishCount})</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() => handleStartEditCategory(foundObj)}
@@ -2806,6 +2904,396 @@ export default function MenuManagementView({
           </div>
         </div>
       )}
+
+      {/* 10. PICK & DROP DISHES INTO CATEGORY MODAL */}
+      {assignCatModal && (() => {
+        const catTargetName = assignCatModal.name || '';
+        const catTargetGujarati = assignCatModal.gujarati || assignCatModal.gujarati_name || '';
+        const catTargetId = assignCatModal.id || null;
+
+        // Current dishes assigned to this category
+        const currentCategoryDishes = menuItems.filter(m => 
+          (catTargetId && m.category_id === catTargetId) || 
+          ((m.category || '').toLowerCase().trim() === catTargetName.toLowerCase().trim())
+        );
+        const currentCategoryDishIds = new Set(currentCategoryDishes.map(d => d.id));
+
+        // Available dishes from the rest of the menu
+        const availableDishesPool = menuItems.filter(m => !currentCategoryDishIds.has(m.id));
+
+        // Filtered available dishes by search & source category filter
+        const filteredAvailableDishes = availableDishesPool.filter(item => {
+          if (assignCatFilter !== 'All' && (item.category || '').toLowerCase().trim() !== assignCatFilter.toLowerCase().trim()) {
+            return false;
+          }
+          if (assignSearch.trim() !== '') {
+            const q = assignSearch.toLowerCase().trim();
+            const n = (item.name || '').toLowerCase();
+            const en = (item.english_name || '').toLowerCase();
+            const gn = (item.gujarati_name || '').toLowerCase();
+            const c = (item.category || '').toLowerCase();
+            return n.includes(q) || en.includes(q) || gn.includes(q) || c.includes(q);
+          }
+          return true;
+        });
+
+        const isAllFilteredSelected = filteredAvailableDishes.length > 0 && 
+          filteredAvailableDishes.every(d => selectedDishesForMove.has(d.id));
+
+        const toggleSelectDish = (dishId) => {
+          setSelectedDishesForMove(prev => {
+            const next = new Set(prev);
+            if (next.has(dishId)) next.delete(dishId);
+            else next.add(dishId);
+            return next;
+          });
+        };
+
+        const toggleSelectAllFiltered = () => {
+          if (isAllFilteredSelected) {
+            setSelectedDishesForMove(new Set());
+          } else {
+            const next = new Set(selectedDishesForMove);
+            filteredAvailableDishes.forEach(d => next.add(d.id));
+            setSelectedDishesForMove(next);
+          }
+        };
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs animate-fadeIn">
+            <div className="bg-white rounded-3xl max-w-5xl w-full border border-slate-200 shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-slate-900">
+              
+              {/* Modal Header */}
+              <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between gap-3 bg-gradient-to-r from-orange-50/70 via-white to-orange-50/70">
+                <div className="flex items-center space-x-3 min-w-0">
+                  {assignCatModal.image_url ? (
+                    <img 
+                      src={assignCatModal.image_url} 
+                      alt={catTargetName} 
+                      className="w-12 h-12 rounded-2xl object-cover shrink-0 border border-slate-200 shadow-xs"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-2xl bg-orange-500 text-white flex items-center justify-center font-bold shadow-xs shrink-0">
+                      <FolderTree className="w-6 h-6" />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="flex items-center space-x-2">
+                      <h3 className="text-base sm:text-lg font-black text-slate-900 font-heading truncate">
+                        Assign Dishes to: {catTargetName}
+                      </h3>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-orange-100 text-orange-700 shrink-0">
+                        {currentCategoryDishes.length} dishes
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 truncate">
+                      {catTargetGujarati && catTargetGujarati !== catTargetName ? `${catTargetGujarati} • ` : ''}
+                      Pick dishes from all menu cards to add here, or drag & drop. Changes save permanently to database!
+                    </p>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => {
+                    setAssignCatModal(null);
+                    setSelectedDishesForMove(new Set());
+                    setAssignSearch('');
+                  }}
+                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 cursor-pointer shrink-0 transition"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body: 2 Columns */}
+              <div className="flex-1 grid grid-cols-1 md:grid-cols-12 min-h-0 overflow-hidden divide-y md:divide-y-0 md:divide-x divide-slate-200">
+                
+                {/* LEFT COLUMN: Currently in this Category (5 cols) */}
+                <div 
+                  className={`md:col-span-5 flex flex-col p-4 sm:p-5 bg-slate-50/50 transition-colors ${
+                    isDropTargetActive ? 'bg-orange-100/50 ring-2 ring-orange-500 ring-inset' : ''
+                  }`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    setIsDropTargetActive(true);
+                  }}
+                  onDragLeave={() => setIsDropTargetActive(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDropTargetActive(false);
+                    const dishId = e.dataTransfer.getData('text/plain');
+                    if (dishId) {
+                      handleAssignDishes([dishId], catTargetId, catTargetName);
+                    }
+                  }}
+                >
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-200/80">
+                    <span className="text-xs font-black text-slate-900 uppercase tracking-wider font-heading flex items-center gap-1.5">
+                      <Folder className="w-3.5 h-3.5 text-orange-600" />
+                      <span>In Category ({currentCategoryDishes.length})</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      Drag & Drop Zone
+                    </span>
+                  </div>
+
+                  {isDropTargetActive && (
+                    <div className="my-2 p-2.5 rounded-2xl bg-orange-500 text-white text-center font-bold text-xs animate-pulse shadow-md">
+                      ⬇️ Release mouse to drop dish into {catTargetName}!
+                    </div>
+                  )}
+
+                  {/* List of Dishes currently in this Category */}
+                  <div className="flex-1 overflow-y-auto space-y-2 pr-1 pt-3">
+                    {currentCategoryDishes.length === 0 ? (
+                      <div className="p-8 rounded-2xl border-2 border-dashed border-slate-200 text-center space-y-2 mt-4">
+                        <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center mx-auto">
+                          <ListPlus className="w-5 h-5" />
+                        </div>
+                        <p className="text-xs font-bold text-slate-700">
+                          No dishes in this category yet!
+                        </p>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Click <strong>"+ Add"</strong> on dishes from the right panel, or drag them here to add them to {catTargetName}.
+                        </p>
+                      </div>
+                    ) : (
+                      currentCategoryDishes.map((dish, idx) => (
+                        <div
+                          key={dish.id || idx}
+                          className="p-2.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs hover:border-orange-300 flex items-center justify-between gap-2.5 transition"
+                        >
+                          <div className="flex items-center space-x-2.5 min-w-0">
+                            {dish.image_url || dish.image || dish.photo ? (
+                              <img
+                                src={dish.image_url || dish.image || dish.photo}
+                                alt={dish.name}
+                                className="w-10 h-10 rounded-xl object-cover shrink-0 border border-slate-200"
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                              />
+                            ) : (
+                              <span className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-base shrink-0">
+                                {getDishEmoji(dish)}
+                              </span>
+                            )}
+                            <div className="min-w-0">
+                              <span className="text-xs font-black text-slate-900 block truncate font-heading">
+                                {dish.name}
+                              </span>
+                              <div className="flex items-center space-x-2 text-[10px] text-slate-500">
+                                <span className="font-bold text-emerald-700">₹{dish.finalPrice || dish.price}</span>
+                                {dish.gujarati_name && dish.gujarati_name !== dish.name && (
+                                  <span className="truncate opacity-75">{dish.gujarati_name}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleUnassignDish(dish.id)}
+                            disabled={isAssigning}
+                            className="p-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer shrink-0 disabled:opacity-50"
+                            title="Remove from this category (moves to Uncategorized)"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* RIGHT COLUMN: Available Dishes from All Menu (7 cols) */}
+                <div className="md:col-span-7 flex flex-col p-4 sm:p-5 bg-white">
+                  
+                  {/* Top Search & Filter Bar */}
+                  <div className="space-y-2.5 pb-3 border-b border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-slate-900 uppercase tracking-wider font-heading flex items-center gap-1.5">
+                        <Utensils className="w-3.5 h-3.5 text-orange-600" />
+                        <span>Pick Dishes from All Menu ({filteredAvailableDishes.length})</span>
+                      </span>
+                      {selectedDishesForMove.size > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleAssignDishes(Array.from(selectedDishesForMove), catTargetId, catTargetName)}
+                          disabled={isAssigning}
+                          className="px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-xs shadow-md transition flex items-center space-x-1.5 cursor-pointer active:scale-95 disabled:opacity-50"
+                        >
+                          <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                          <span>Add Selected ({selectedDishesForMove.size})</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <div className="relative flex-1">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Search dish by name, price, keyword..."
+                          value={assignSearch}
+                          onChange={(e) => setAssignSearch(e.target.value)}
+                          className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none focus:bg-white focus:border-orange-500"
+                        />
+                      </div>
+
+                      <select
+                        value={assignCatFilter}
+                        onChange={(e) => setAssignCatFilter(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
+                      >
+                        <option value="All">All Categories ({availableDishesPool.length})</option>
+                        {uniqueCategories
+                          .filter(c => c.toLowerCase().trim() !== catTargetName.toLowerCase().trim())
+                          .map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))
+                        }
+                      </select>
+                    </div>
+
+                    {filteredAvailableDishes.length > 0 && (
+                      <div className="flex items-center justify-between text-[11px] text-slate-500 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={toggleSelectAllFiltered}
+                          className="flex items-center space-x-1.5 font-bold text-slate-700 hover:text-orange-600 cursor-pointer"
+                        >
+                          {isAllFilteredSelected ? (
+                            <CheckSquare className="w-3.5 h-3.5 text-orange-600" />
+                          ) : (
+                            <Square className="w-3.5 h-3.5 text-slate-400" />
+                          )}
+                          <span>{isAllFilteredSelected ? 'Deselect All' : 'Select All Filtered'}</span>
+                        </button>
+                        <span className="text-[10px] text-slate-400">
+                          Tip: Drag dish across or click "+ Add" button
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* List of Available Dishes to Pick */}
+                  <div className="flex-1 overflow-y-auto space-y-2 pr-1 pt-3">
+                    {filteredAvailableDishes.length === 0 ? (
+                      <div className="p-8 rounded-2xl bg-slate-50 border border-dashed border-slate-200 text-center space-y-1.5 mt-4">
+                        <p className="text-xs font-bold text-slate-700">
+                          No matching dishes available to add
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          {assignSearch || assignCatFilter !== 'All' 
+                            ? 'Try clearing the search query or changing category filter.' 
+                            : 'All dishes from your menu are already assigned to this category!'}
+                        </p>
+                      </div>
+                    ) : (
+                      filteredAvailableDishes.map((dish) => {
+                        const isSelected = selectedDishesForMove.has(dish.id);
+                        return (
+                          <div
+                            key={dish.id}
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData('text/plain', dish.id);
+                              e.dataTransfer.effectAllowed = 'move';
+                            }}
+                            className={`p-2.5 rounded-2xl border transition-all flex items-center justify-between gap-2.5 cursor-grab active:cursor-grabbing ${
+                              isSelected
+                                ? 'bg-orange-50/70 border-orange-400 shadow-xs'
+                                : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-2xs'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-2.5 min-w-0">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleSelectDish(dish.id);
+                                }}
+                                className="cursor-pointer text-slate-400 hover:text-orange-600"
+                              >
+                                {isSelected ? (
+                                  <CheckSquare className="w-4 h-4 text-orange-600" />
+                                ) : (
+                                  <Square className="w-4 h-4 text-slate-300" />
+                                )}
+                              </button>
+
+                              <GripVertical className="w-3.5 h-3.5 text-slate-300 shrink-0 hidden sm:block" />
+
+                              {dish.image_url || dish.image || dish.photo ? (
+                                <img
+                                  src={dish.image_url || dish.image || dish.photo}
+                                  alt={dish.name}
+                                  className="w-10 h-10 rounded-xl object-cover shrink-0 border border-slate-200"
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                />
+                              ) : (
+                                <span className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-base shrink-0">
+                                  {getDishEmoji(dish)}
+                                </span>
+                              )}
+
+                              <div className="min-w-0">
+                                <span className="text-xs font-black text-slate-900 block truncate font-heading">
+                                  {dish.name}
+                                </span>
+                                <div className="flex items-center space-x-2 text-[10px] text-slate-500">
+                                  <span className="font-bold text-emerald-700">₹{dish.finalPrice || dish.price}</span>
+                                  <span className="px-1.5 py-0.2 rounded-md bg-slate-100 text-slate-600 font-medium truncate max-w-[120px]">
+                                    {dish.category || 'Uncategorized'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleAssignDishes([dish.id], catTargetId, catTargetName)}
+                              disabled={isAssigning}
+                              className="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-orange-600 text-white font-bold text-xs transition flex items-center space-x-1 cursor-pointer active:scale-95 shrink-0 shadow-2xs disabled:opacity-50"
+                              title={`Add "${dish.name}" to category "${catTargetName}"`}
+                            >
+                              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                              <span>Add</span>
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+                <span className="text-xs text-slate-600 font-medium">
+                  <strong>{currentCategoryDishes.length}</strong> dishes currently in <strong>{catTargetName}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAssignCatModal(null);
+                    setSelectedDishesForMove(new Set());
+                    setAssignSearch('');
+                  }}
+                  className="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition cursor-pointer active:scale-95"
+                >
+                  Done
+                </button>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
+
 
     </div>
   );
