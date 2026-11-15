@@ -365,18 +365,22 @@ export default function MenuManagementView({
   const categoryCounts = useMemo(() => {
     const counts = { All: menuItems.length };
     menuItems.forEach(i => {
-      if (i.category) {
-        counts[i.category] = (counts[i.category] || 0) + 1;
-      }
+      const cat = (i.category && i.category.trim()) || 'Uncategorized';
+      counts[cat] = (counts[cat] || 0) + 1;
     });
     return counts;
   }, [menuItems]);
 
   const uniqueCategories = useMemo(() => {
-    return Array.from(new Set([
-      ...categories.map(c => c.name),
-      ...menuItems.map(m => m.category)
-    ].filter(Boolean)));
+    const set = new Set();
+    categories.forEach(c => {
+      if (c && c.name) set.add(c.name.trim());
+    });
+    menuItems.forEach(m => {
+      if (m && m.category) set.add(m.category.trim());
+      else set.add('Uncategorized');
+    });
+    return Array.from(set).filter(Boolean);
   }, [categories, menuItems]);
 
   const compressImage = (file, maxWidth = 600, maxHeight = 600, quality = 0.78) => {
@@ -566,7 +570,7 @@ export default function MenuManagementView({
     }
   };
 
-  const handleQuickSaveCategory = (target = 'add') => {
+  const handleQuickSaveCategory = async (target = 'add') => {
     if (!quickCatName.trim()) return;
     const finalPhoto = quickCatImage || null;
     const newCat = {
@@ -580,13 +584,15 @@ export default function MenuManagementView({
       cuisine: 'south_indian',
       percentage: 10
     };
+    let createdResult = null;
     if (onAddCategory) {
-      onAddCategory(newCat);
+      createdResult = await onAddCategory(newCat);
     }
+    const savedCatId = createdResult?.id || null;
     if (target === 'add') {
-      setNewItem(prev => ({ ...prev, category: newCat.name }));
+      setNewItem(prev => ({ ...prev, category: newCat.name, category_id: savedCatId }));
     } else if (target === 'edit') {
-      setEditingItem(prev => prev ? ({ ...prev, category: newCat.name }) : null);
+      setEditingItem(prev => prev ? ({ ...prev, category: newCat.name, category_id: savedCatId }) : null);
     }
     setQuickCatName('');
     setQuickCatGujarati('');
@@ -598,10 +604,13 @@ export default function MenuManagementView({
   const handleOpenAddModal = () => {
     setImagePreview('');
     setShowInlineAddCat(false);
+    const defaultCatName = uniqueCategories[0] || 'Uncategorized';
+    const matched = categories.find(c => c.name === defaultCatName);
     setNewItem({
       name: '',
       gujarati_name: '',
-      category: uniqueCategories[0] || '',
+      category: defaultCatName,
+      category_id: matched ? matched.id : null,
       cuisine: 'south_indian',
       price: '',
       description: '',
@@ -620,11 +629,13 @@ export default function MenuManagementView({
     const priceNum = parseFloat(newItem.price);
     const photoUrl = newItem.image_url || imagePreview || null;
     const determinedCuisine = newItem.cuisine || getDishCuisine(newItem);
-    const finalCategory = (newItem.category || uniqueCategories[0] || 'General').trim();
+    const finalCategory = (newItem.category || uniqueCategories[0] || 'Uncategorized').trim();
+    const matchedCategory = categories.find(c => c.name === finalCategory || c.id === newItem.category_id);
     
     onAddMenuItem({
       ...newItem,
       category: finalCategory,
+      category_id: matchedCategory?.id || newItem.category_id || null,
       english_name: newItem.name,
       gujarati_name: newItem.gujarati_name || null,
       name: newItem.gujarati_name ? `${newItem.name} (${newItem.gujarati_name})` : newItem.name,
@@ -652,6 +663,7 @@ export default function MenuManagementView({
       name: '',
       gujarati_name: '',
       category: uniqueCategories[0] || '',
+      category_id: null,
       cuisine: 'south_indian',
       price: '',
       description: '',
@@ -666,8 +678,12 @@ export default function MenuManagementView({
   const handleOpenEditModal = (item) => {
     const photo = item.image_url || item.imageUrl || item.image || item.photo || '';
     setShowInlineAddCat(false);
+    const itemCat = item.category || 'Uncategorized';
+    const matched = categories.find(c => c.name === itemCat || c.id === item.category_id);
     setEditingItem({ 
       ...item, 
+      category: itemCat,
+      category_id: matched ? matched.id : (item.category_id || null),
       price: item.originalPrice || item.price,
       cuisine: item.cuisine || getDishCuisine(item),
       image_url: photo
@@ -685,9 +701,14 @@ export default function MenuManagementView({
     const calcFinalPrice = hasDisc ? Math.round(priceNum * (1 - discPct / 100)) : priceNum;
     const photoUrl = editingItem.image_url || imagePreview || null;
     const determinedCuisine = editingItem.cuisine || getDishCuisine(editingItem);
+    const matchedCategory = categories.find(c => 
+      c.name === editingItem.category || c.id === editingItem.category_id
+    );
 
     onUpdateMenuItem({
       ...editingItem,
+      category: editingItem.category || matchedCategory?.name || 'Uncategorized',
+      category_id: matchedCategory?.id || editingItem.category_id || null,
       originalPrice: priceNum,
       finalPrice: calcFinalPrice,
       price: calcFinalPrice,
@@ -1847,7 +1868,13 @@ export default function MenuManagementView({
                         if (e.target.value === '__add_new__') {
                           setShowInlineAddCat(true);
                         } else {
-                          setEditingItem({ ...editingItem, category: e.target.value });
+                          const selectedVal = e.target.value;
+                          const matched = categories.find(c => c.name === selectedVal);
+                          setEditingItem({ 
+                            ...editingItem, 
+                            category: selectedVal, 
+                            category_id: matched ? matched.id : null 
+                          });
                         }
                       }}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500"
@@ -2165,7 +2192,13 @@ export default function MenuManagementView({
                         if (e.target.value === '__add_new__') {
                           setShowInlineAddCat(true);
                         } else {
-                          setNewItem({ ...newItem, category: e.target.value });
+                          const selectedVal = e.target.value;
+                          const matched = categories.find(c => c.name === selectedVal);
+                          setNewItem({ 
+                            ...newItem, 
+                            category: selectedVal, 
+                            category_id: matched ? matched.id : null 
+                          });
                         }
                       }}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:outline-none focus:border-orange-500"

@@ -76,6 +76,7 @@ import {
   deleteCategoryFromSupabaseCloud,
   saveMenuItemToSupabaseCloud,
   deleteMenuItemFromSupabaseCloud,
+  ensureValidUuid,
   API_BASE_URL
 } from './lib/supabase';
 import { getDishCuisine } from './lib/cuisines';
@@ -4038,8 +4039,19 @@ export default function App() {
   const handleUpdateMenuItem = async (updatedItem) => {
     const photoUrl = updatedItem.image_url || updatedItem.image || updatedItem.imageUrl || updatedItem.photo || null;
     const determinedCuisine = updatedItem.cuisine || getDishCuisine(updatedItem);
+    const safeItemId = ensureValidUuid(updatedItem.id);
+    const matchedCategory = categories.find(c => 
+      (updatedItem.category && c.name.toLowerCase().trim() === updatedItem.category.toLowerCase().trim()) || 
+      (updatedItem.category_id && c.id === updatedItem.category_id)
+    );
+    const resolvedCatId = matchedCategory?.id || (isValidUuid(updatedItem.category_id) ? updatedItem.category_id : null);
+    const resolvedCatName = matchedCategory?.name || (updatedItem.category && updatedItem.category.trim()) || 'Uncategorized';
+
     const normalized = {
       ...updatedItem,
+      id: safeItemId,
+      category: resolvedCatName,
+      category_id: resolvedCatId,
       image_url: photoUrl,
       image: photoUrl,
       imageUrl: photoUrl,
@@ -4050,7 +4062,7 @@ export default function App() {
     };
 
     const matchesUpdated = (item) => (
-      (item.id && updatedItem.id && item.id === updatedItem.id) ||
+      (item.id && (item.id === updatedItem.id || item.id === safeItemId)) ||
       (item.name && updatedItem.name && item.name.toLowerCase().trim() === updatedItem.name.toLowerCase().trim())
     );
     const updated = menuItems.map(item => matchesUpdated(item) ? normalized : item);
@@ -4065,7 +4077,6 @@ export default function App() {
     window.dispatchEvent(new Event('restaurant_data_updated'));
 
     // Realtime Broadcast to all connected customer phones & staff terminals
-    // Omit massive 177-item catalog from payload to stay strictly under Supabase's 256KB ceiling
     try {
       supabase.channel('restaurant_alerts').send({
         type: 'broadcast',
@@ -4078,14 +4089,14 @@ export default function App() {
     } catch (e) {}
 
     // Cloud persistence via supabaseAdmin & backend
-    saveMenuItemToSupabaseCloud(normalized);
+    await saveMenuItemToSupabaseCloud(normalized, resolvedCatId);
 
     recordEmployeeActivity({
       employeeName: authUser?.name || 'Admin Owner',
       employeeRole: authUser?.role || 'Admin',
       tableNumber: 'Menu',
       actionType: 'MENU_ITEM_UPDATED',
-      details: `Updated dish "${normalized.name}" (Price: ₹${normalized.finalPrice || normalized.price}) with photo`,
+      details: `Updated dish "${normalized.name}" (Price: ₹${normalized.finalPrice || normalized.price}, Category: ${resolvedCatName}) with photo`,
       type: 'menu',
       color: 'orange'
     });
@@ -4096,13 +4107,19 @@ export default function App() {
     const photoUrl = itemData.image_url || itemData.image || itemData.imageUrl || itemData.photo || null;
     const determinedCuisine = itemData.cuisine || getDishCuisine(itemData);
     const priceNum = Number(itemData.price);
-    const itemId = itemData.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `item_${Date.now()}`);
-    const matchedCategory = categories.find(c => c.name === itemData.category);
+    const itemId = ensureValidUuid(itemData.id);
+    const matchedCategory = categories.find(c => 
+      (itemData.category && c.name.toLowerCase().trim() === itemData.category.toLowerCase().trim()) || 
+      (itemData.category_id && c.id === itemData.category_id)
+    );
+    const resolvedCatId = matchedCategory?.id || (isValidUuid(itemData.category_id) ? itemData.category_id : null);
+    const resolvedCatName = matchedCategory?.name || (itemData.category && itemData.category.trim()) || 'Uncategorized';
 
     const itemObj = {
       ...itemData,
       id: itemId,
-      category_id: matchedCategory?.id || null,
+      category: resolvedCatName,
+      category_id: resolvedCatId,
       originalPrice: priceNum,
       finalPrice: priceNum,
       price: priceNum,
@@ -4144,7 +4161,7 @@ export default function App() {
     } catch (e) {}
 
     // Cloud Authoritative persistence to Supabase PostgreSQL & Backend
-    await saveMenuItemToSupabaseCloud(itemObj, matchedCategory?.id);
+    await saveMenuItemToSupabaseCloud(itemObj, resolvedCatId);
 
     recordEmployeeActivity({
       employeeName: authUser?.name || 'Admin',
@@ -4199,7 +4216,7 @@ export default function App() {
   const handleAddCategory = async (categoryData) => {
     const catName = (categoryData.name || '').trim();
     if (!catName) return null;
-    const catId = categoryData.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `cat_${Date.now()}`);
+    const catId = ensureValidUuid(categoryData.id);
     const photoUrl = categoryData.image_url || categoryData.imageUrl || categoryData.image || categoryData.photo || null;
     const newCategory = {
       id: catId,
@@ -4250,7 +4267,8 @@ export default function App() {
   };
 
   const handleUpdateCategory = async (categoryId, updatedData) => {
-    const oldCat = categories.find(c => c.id === categoryId);
+    const safeCatId = ensureValidUuid(categoryId);
+    const oldCat = categories.find(c => c.id === categoryId || c.id === safeCatId);
     if (!oldCat) return;
     const oldName = oldCat.name;
     const newName = (updatedData.name || oldName).trim();
@@ -4259,6 +4277,7 @@ export default function App() {
     const updatedCat = {
       ...oldCat,
       ...updatedData,
+      id: safeCatId,
       name: newName,
       gujarati: (updatedData.gujarati || updatedData.gujarati_name || oldCat.gujarati || newName).trim(),
       image_url: photoUrl,
@@ -4267,7 +4286,7 @@ export default function App() {
       photo: photoUrl
     };
 
-    const updatedCats = categories.map(c => c.id === categoryId ? updatedCat : c);
+    const updatedCats = categories.map(c => (c.id === categoryId || c.id === safeCatId) ? updatedCat : c);
     setCategories(updatedCats);
     setLocalStore('categories', updatedCats);
     try {
@@ -4277,8 +4296,8 @@ export default function App() {
 
     if (oldName !== newName) {
       const updatedDishes = menuItems.map(item => {
-        if (item.category === oldName) {
-          return { ...item, category: newName };
+        if (item.category === oldName || item.category_id === safeCatId) {
+          return { ...item, category: newName, category_id: safeCatId };
         }
         return item;
       });
@@ -4308,11 +4327,12 @@ export default function App() {
   };
 
   const handleDeleteCategory = async (categoryId) => {
-    const targetCat = categories.find(c => c.id === categoryId);
+    const safeCatId = ensureValidUuid(categoryId);
+    const targetCat = categories.find(c => c.id === categoryId || c.id === safeCatId);
     if (!targetCat) return;
-    const catDishes = menuItems.filter(m => m.category === targetCat.name);
+    const catDishes = menuItems.filter(m => m.category === targetCat.name || m.category_id === safeCatId);
 
-    const updatedCats = categories.filter(c => c.id !== categoryId);
+    const updatedCats = categories.filter(c => c.id !== categoryId && c.id !== safeCatId);
     setCategories(updatedCats);
     setLocalStore('categories', updatedCats);
     try {
@@ -4321,10 +4341,11 @@ export default function App() {
     } catch (e) {}
 
     if (catDishes.length > 0) {
-      const fallbackCatName = updatedCats.length > 0 ? updatedCats[0].name : 'General';
+      const fallbackCatName = updatedCats.length > 0 ? updatedCats[0].name : 'Uncategorized';
+      const fallbackCatId = updatedCats.length > 0 ? updatedCats[0].id : null;
       const updatedDishes = menuItems.map(item => {
-        if (item.category === targetCat.name) {
-          return { ...item, category: fallbackCatName };
+        if (item.category === targetCat.name || item.category_id === safeCatId) {
+          return { ...item, category: fallbackCatName, category_id: fallbackCatId };
         }
         return item;
       });
@@ -4339,7 +4360,7 @@ export default function App() {
     window.dispatchEvent(new Event('restaurant_data_updated'));
 
     // Cloud delete from Supabase Cloud & Backend
-    await deleteCategoryFromSupabaseCloud(categoryId);
+    await deleteCategoryFromSupabaseCloud(safeCatId);
 
     recordEmployeeActivity({
       employeeName: authUser?.name || 'Admin',

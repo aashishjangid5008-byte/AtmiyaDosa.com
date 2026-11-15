@@ -33,6 +33,30 @@ export const API_BASE_URL = (() => {
   return '/api';
 })();
 
+export const generateUuid = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    try {
+      return crypto.randomUUID();
+    } catch (e) {}
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
+export const isValidUuid = (val) => {
+  return Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(val).trim()));
+};
+
+export const ensureValidUuid = (val) => {
+  if (isValidUuid(val)) {
+    return String(val).trim().toLowerCase();
+  }
+  return generateUuid();
+};
+
 // ---------------------------------------------------------------------------
 // DATA ACCESS HELPERS (SUPABASE + LOCAL STORAGE CACHE FALLBACK)
 // ---------------------------------------------------------------------------
@@ -1063,7 +1087,7 @@ export const purgeAllMenuFromSupabase = async () => {
 
 export const saveCategoryToSupabaseCloud = async (catObj) => {
   if (!catObj || !catObj.name) return null;
-  const catId = catObj.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : null);
+  const catId = ensureValidUuid(catObj.id);
 
   const payload = {
     id: catId,
@@ -1071,15 +1095,15 @@ export const saveCategoryToSupabaseCloud = async (catObj) => {
     name: catObj.name.trim(),
     gujarati_name: (catObj.gujarati || catObj.gujarati_name || catObj.name).trim(),
     icon: catObj.icon || 'Utensils',
-    image_url: catObj.image_url || catObj.imageUrl || catObj.image || catObj.photo || null,
-    display_order: catObj.display_order || 1,
+    display_order: parseInt(catObj.display_order || catObj.order, 10) || 1,
     is_active: true
   };
+  // CRITICAL: NEVER include image_url in payload for menu_categories as Supabase table has no such column!
 
   try {
     const { data, error } = await supabaseAdmin
       .from('menu_categories')
-      .upsert(payload)
+      .upsert(payload, { onConflict: 'id' })
       .select();
     if (!error && data && data.length > 0) {
       console.log(`[SUPABASE CATEGORY] Saved "${payload.name}" (${payload.id})`);
@@ -1098,16 +1122,24 @@ export const saveCategoryToSupabaseCloud = async (catObj) => {
     });
   } catch (e) {}
 
-  return payload;
+  return { ...catObj, id: catId };
 };
 
 export const deleteCategoryFromSupabaseCloud = async (catId) => {
   if (!catId) return;
+  const isUuid = isValidUuid(catId);
   try {
-    await supabaseAdmin
-      .from('menu_categories')
-      .delete()
-      .or(`id.eq.${catId},name.eq.${catId}`);
+    if (isUuid) {
+      await supabaseAdmin
+        .from('menu_categories')
+        .delete()
+        .eq('id', catId);
+    } else {
+      await supabaseAdmin
+        .from('menu_categories')
+        .delete()
+        .eq('name', String(catId));
+    }
   } catch (e) {
     console.warn('[SUPABASE CATEGORY] Delete notice:', e);
   }
@@ -1119,15 +1151,58 @@ export const deleteCategoryFromSupabaseCloud = async (catId) => {
 
 export const saveMenuItemToSupabaseCloud = async (itemObj, categoryId = null) => {
   if (!itemObj || !itemObj.name) return null;
-  const itemId = itemObj.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : null);
+  const itemId = ensureValidUuid(itemObj.id);
 
   const photo = itemObj.image_url || itemObj.imageUrl || itemObj.image || itemObj.photo || null;
-  const priceNum = parseFloat(itemObj.price) || 0;
+  const priceNum = parseFloat(itemObj.price || itemObj.finalPrice) || 0;
+
+  // Resolve valid category UUID referencing menu_categories
+  let resolvedCatId = isValidUuid(categoryId) ? categoryId : (isValidUuid(itemObj.category_id) ? itemObj.category_id : null);
+  const catName = (itemObj.category || '').trim();
+
+  // If no valid UUID yet but category name is known, look up or auto-create in menu_categories!
+  if (!resolvedCatId && catName && catName !== 'All' && catName !== 'Uncategorized') {
+    try {
+      const { data: matchedCat } = await supabaseAdmin
+        .from('menu_categories')
+        .select('id')
+        .ilike('name', catName)
+        .maybeSingle();
+
+      if (matchedCat?.id) {
+        resolvedCatId = matchedCat.id;
+      } else {
+        const newCatUuid = generateUuid();
+        const { data: createdCat } = await supabaseAdmin
+          .from('menu_categories')
+          .insert({
+            id: newCatUuid,
+            restaurant_id: RESTAURANT_ID,
+            name: catName,
+            gujarati_name: (itemObj.gujarati_name || catName).trim(),
+            icon: 'Utensils',
+            display_order: 10,
+            is_active: true
+          })
+          .select()
+          .maybeSingle();
+
+        if (createdCat?.id) {
+          resolvedCatId = createdCat.id;
+        }
+      }
+    } catch (catLookupErr) {
+      console.warn('[SUPABASE DISH] Category auto-resolve notice:', catLookupErr);
+    }
+  }
+
+  const existingTags = Array.isArray(itemObj.tags) ? itemObj.tags : [];
+  const safeTags = catName && !existingTags.includes(catName) ? [catName, ...existingTags] : (existingTags.length > 0 ? existingTags : ['New Item']);
 
   const payload = {
     id: itemId,
     restaurant_id: RESTAURANT_ID,
-    category_id: categoryId || itemObj.category_id || null,
+    category_id: resolvedCatId,
     name: itemObj.name.trim(),
     gujarati_name: (itemObj.gujarati_name || itemObj.gujarati || itemObj.name).trim(),
     description: itemObj.description || '',
@@ -1136,16 +1211,16 @@ export const saveMenuItemToSupabaseCloud = async (itemObj, categoryId = null) =>
     is_available: itemObj.is_available !== false,
     is_jain_available: Boolean(itemObj.is_jain_available),
     prep_time_mins: itemObj.prep_time_mins || itemObj.prepTimeMins || 10,
-    tags: itemObj.tags || ['New Item']
+    tags: safeTags
   };
 
   try {
     const { data, error } = await supabaseAdmin
       .from('menu_items')
-      .upsert(payload)
+      .upsert(payload, { onConflict: 'id' })
       .select();
     if (!error && data && data.length > 0) {
-      console.log(`[SUPABASE DISH] Saved "${payload.name}" (${payload.id})`);
+      console.log(`[SUPABASE DISH] Saved "${payload.name}" (${payload.id}) in category ${resolvedCatId}`);
     } else if (error) {
       console.warn('[SUPABASE DISH] Upsert notice:', error);
     }
@@ -1164,16 +1239,24 @@ export const saveMenuItemToSupabaseCloud = async (itemObj, categoryId = null) =>
     });
   } catch (e) {}
 
-  return payload;
+  return { ...itemObj, id: itemId, category_id: resolvedCatId };
 };
 
 export const deleteMenuItemFromSupabaseCloud = async (itemId) => {
   if (!itemId) return;
+  const isUuid = isValidUuid(itemId);
   try {
-    await supabaseAdmin
-      .from('menu_items')
-      .delete()
-      .or(`id.eq.${itemId},name.eq.${itemId}`);
+    if (isUuid) {
+      await supabaseAdmin
+        .from('menu_items')
+        .delete()
+        .eq('id', itemId);
+    } else {
+      await supabaseAdmin
+        .from('menu_items')
+        .delete()
+        .eq('name', String(itemId));
+    }
   } catch (e) {
     console.warn('[SUPABASE DISH] Delete notice:', e);
   }
@@ -1191,11 +1274,11 @@ export const deleteMenuItemFromSupabaseCloud = async (itemId) => {
 export const fetchLiveMenuFromSupabase = async () => {
   try {
     const [catsRes, itemsRes] = await Promise.all([
-      supabase
+      supabaseAdmin
         .from('menu_categories')
         .select('*')
         .order('display_order', { ascending: true }),
-      supabase
+      supabaseAdmin
         .from('menu_items')
         .select('*')
         .order('name', { ascending: true })
@@ -1219,12 +1302,23 @@ export const fetchLiveMenuFromSupabase = async () => {
       const mappedItems = itemRows.map((item, idx) => {
         const photo = item.image_url || null;
         const priceNum = parseFloat(item.price) || 0;
+        let itemCat = catMap[item.category_id] || null;
+        if (!itemCat && Array.isArray(item.tags)) {
+          const matchedTagCat = catRows.find(c => item.tags.includes(c.name));
+          if (matchedTagCat) {
+            itemCat = matchedTagCat.name;
+          }
+        }
+        if (!itemCat) {
+          itemCat = 'Uncategorized';
+        }
+
         return {
           id: item.id,
           name: item.name,
           english_name: item.name,
           gujarati_name: item.gujarati_name || item.name,
-          category: catMap[item.category_id] || 'Special Item',
+          category: itemCat,
           category_id: item.category_id,
           price: priceNum,
           originalPrice: priceNum,
