@@ -715,63 +715,54 @@ export const updateOrderItemStatusInSupabase = async (orderIdOrNumber, itemIndex
         } catch (e) {}
       }
 
-      const itemKey = String(itemIndexOrName);
-      itemStates[itemKey] = safeItemStatus.toLowerCase();
+      // Purge numeric index keys ('0', '1') and 'all' to prevent cross-ticket bleed
+      Object.keys(itemStates).forEach(k => {
+        if (/^\d+$/.test(k) || k === 'all') delete itemStates[k];
+      });
+
+      const cleanItemKey = String(itemIndexOrName || '').toLowerCase().trim();
+      if (cleanItemKey) {
+        itemStates[cleanItemKey] = safeItemStatus.toLowerCase();
+      }
+
       if (existingOrderObj?.items && Array.isArray(existingOrderObj.items)) {
         const found = (typeof itemIndexOrName === 'number') 
           ? existingOrderObj.items[itemIndexOrName]
-          : existingOrderObj.items.find(i => i.id === itemIndexOrName);
-        if (found && found.id) {
-          itemStates[found.id] = safeItemStatus.toLowerCase();
+          : existingOrderObj.items.find(i => i.id === itemIndexOrName || i.name?.toLowerCase().trim() === cleanItemKey);
+        if (found) {
+          if (found.id) itemStates[found.id] = safeItemStatus.toLowerCase();
+          if (found.name) itemStates[found.name.toLowerCase().trim()] = safeItemStatus.toLowerCase();
         }
       }
 
       const newSpecialNotes = `${cleanNotes ? cleanNotes + ' ' : ''}[KDS_ITEM_STATES:${JSON.stringify(itemStates)}]`.trim();
 
-      // 2. Fetch dbItems for evaluating whole order readiness (ordered chronologically)
+      // 2. Fetch dbItems for evaluating whole order readiness
       const { data: dbItems } = await supabase
         .from('order_items')
         .select('id, item_name, quantity, status, created_at')
         .eq('order_id', orderUuid)
         .order('created_at', { ascending: true });
 
-      let fallbackCount = 1;
-      if (existingOrderObj?.items && Array.isArray(existingOrderObj.items) && existingOrderObj.items.length > 0) {
-        fallbackCount = existingOrderObj.items.length;
-      } else if (existingOrderObj?.order_items && Array.isArray(existingOrderObj.order_items) && existingOrderObj.order_items.length > 0) {
-        fallbackCount = existingOrderObj.order_items.length;
-      } else if (existingOrderObj?.items_summary) {
-        fallbackCount = Math.max(String(existingOrderObj.items_summary).split(',').length, 1);
-      } else {
-        fallbackCount = Math.max(Object.keys(itemStates).length, 1);
-      }
+      const allItemsList = (existingOrderObj?.items && Array.isArray(existingOrderObj.items) && existingOrderObj.items.length > 0)
+        ? existingOrderObj.items
+        : (dbItems || []);
 
-      const totalItemsCount = (dbItems && dbItems.length > 0) ? dbItems.length : fallbackCount;
-
-      // Calculate how many items are served vs ready across the whole ticket
+      const totalItemsCount = allItemsList.length;
       let servedCount = 0;
       let readyCount = 0;
 
-      for (let idx = 0; idx < totalItemsCount; idx++) {
-        const dbItem = dbItems?.[idx];
-        const state = itemStates[String(idx)] || (dbItem && (itemStates[dbItem.item_name] || itemStates[dbItem.id])) || (idx === itemIndexOrName ? safeItemStatus.toLowerCase() : null);
-        if (state === 'served') {
+      allItemsList.forEach((it) => {
+        const nameKey = String(it.name || it.item_name || '').toLowerCase().trim();
+        const itId = it.id;
+        const st = (itId && itemStates[itId]) || (nameKey && itemStates[nameKey]) || String(it.status || it.kitchen_status || '').toLowerCase();
+        if (st === 'served' || it.is_served) {
           servedCount++;
           readyCount++;
-        } else if (state === 'ready') {
+        } else if (st === 'ready' || st === 'prepared') {
           readyCount++;
         }
-      }
-
-      // Fallback if itemStates keys are strings or arbitrary names
-      if (servedCount === 0 && reqStatusUpper === 'SERVED') {
-        const directServed = Object.values(itemStates).filter(s => s === 'served').length;
-        if (directServed > 0) servedCount = directServed;
-      }
-      if (readyCount === 0) {
-        const directReady = Object.values(itemStates).filter(s => s === 'ready' || s === 'served').length;
-        if (directReady > 0) readyCount = directReady;
-      }
+      });
 
       const allServed = totalItemsCount > 0 && servedCount >= totalItemsCount;
       const allReady = totalItemsCount > 0 && readyCount >= totalItemsCount;
@@ -779,7 +770,7 @@ export const updateOrderItemStatusInSupabase = async (orderIdOrNumber, itemIndex
       let nextOrderStatus = 'PREPARING';
       if (allServed) {
         nextOrderStatus = 'SERVED';
-      } else if (allReady) {
+      } else if (allReady && readyCount > servedCount) {
         nextOrderStatus = 'READY';
       } else {
         nextOrderStatus = 'PREPARING';
@@ -799,23 +790,19 @@ export const updateOrderItemStatusInSupabase = async (orderIdOrNumber, itemIndex
         .update(updatePayload)
         .eq('id', orderUuid);
 
-      console.log(`[SUPABASE] Updated order ${orderUuid} dish [${itemKey}] -> ${safeItemStatus} (Overall status: ${nextOrderStatus}) in Cloud DB!`);
+      console.log(`[SUPABASE] Updated order ${orderUuid} dish [${cleanItemKey}] -> ${safeItemStatus} (Overall status: ${nextOrderStatus}) in Cloud DB!`);
 
-      // 4. Also attempt updating individual order_items for direct relation compatibility
+      // 4. Update individual order_items row for relational consistency
       if (dbItems && dbItems.length > 0) {
         let targetItem = null;
         if (typeof itemIndexOrName === 'string') {
-          targetItem = dbItems.find(i => i.id === itemIndexOrName || i.item_name?.toLowerCase() === itemIndexOrName?.toLowerCase());
+          targetItem = dbItems.find(i => i.id === itemIndexOrName || i.item_name?.toLowerCase().trim() === cleanItemKey);
         } else if (typeof itemIndexOrName === 'number' && dbItems[itemIndexOrName]) {
           targetItem = dbItems[itemIndexOrName];
         }
-        if (!targetItem && typeof itemIndexOrName === 'string') {
-          targetItem = dbItems.find(i => i.item_name?.toLowerCase().includes(itemIndexOrName.toLowerCase()));
-        }
 
-        if (targetItem) {
+        if (targetItem?.id) {
           try {
-            // DB check constraint allows only 'PLACED', 'PREPARING', 'READY' in order_items
             const dbItemStatus = (safeItemStatus === 'SERVED' || safeItemStatus === 'DELIVERED') ? 'SERVED' : safeItemStatus;
             await supabase
               .from('order_items')
@@ -845,15 +832,20 @@ export const updateAllOrderItemsServedInSupabase = async (tableNumber) => {
     if (openOrders && openOrders.length > 0) {
       for (const ord of openOrders) {
         let cleanNotes = (ord.special_notes || '').replace(/\[KDS_ITEM_STATES:\{.*?\}\]/g, '').trim();
-        const servedNotes = `${cleanNotes ? cleanNotes + ' ' : ''}[KDS_ITEM_STATES:{"all":"served"}]`.trim();
         await supabase
           .from('orders')
           .update({ 
             status: 'SERVED', 
-            special_notes: servedNotes,
+            special_notes: cleanNotes,
             served_at: new Date().toISOString() 
           })
           .eq('id', ord.id);
+        try {
+          await supabase
+            .from('order_items')
+            .update({ status: 'SERVED' })
+            .eq('order_id', ord.id);
+        } catch (e) {}
       }
     }
   } catch (err) {

@@ -452,7 +452,7 @@ export default function WaiterView({
         orderNumber: call.orderNumber || call.orderId || call.id,
         tableNumber: call.tableNumber,
         customerName: call.customerName || 'Guest',
-        itemIndex: call.itemIndex !== undefined ? call.itemIndex : 0,
+        itemIndex: call.itemIndex !== undefined ? call.itemIndex : undefined,
         dishName: cleanName,
         gujaratiName: call.gujaratiName || cleanName,
         qty: parsedQty,
@@ -476,34 +476,71 @@ export default function WaiterView({
   };
 
   const handleDeliverReadyDish = (dish) => {
-    const itemObj = { id: dish.id, name: dish.dishName || dish.name, round: dish.round };
-    if (dish.orderId && dish.itemIndex !== undefined && onToggleItemServed) {
-      onToggleItemServed(dish.orderId, dish.itemIndex, activeWaiterName, activeWaiterId, itemObj);
-    } else if (dish.orderId && dish.dishName && onToggleItemServed) {
-      const ord = orders.find(o => o.id === dish.orderId || o.order_number === dish.orderId);
-      const matchIdx = ord?.items?.findIndex(it => it.name === dish.dishName || it.id === dish.id);
-      if (matchIdx !== undefined && matchIdx >= 0) {
-        onToggleItemServed(dish.orderId, matchIdx, activeWaiterName, activeWaiterId, itemObj);
-      } else if (dish.tableNumber && onMarkAllTableItemsServed) {
-        onMarkAllTableItemsServed(dish.tableNumber, activeWaiterName, activeWaiterId);
-      }
-    } else if (dish.tableNumber && onMarkAllTableItemsServed) {
-      onMarkAllTableItemsServed(dish.tableNumber, activeWaiterName, activeWaiterId);
+    if (!dish) return;
+    const cleanDishName = String(dish.dishName || dish.name || '').replace(/^(\d+x\s*)+/i, '').replace(/^Deliver:\s*/i, '').trim();
+    const itemObj = { 
+      id: dish.id, 
+      name: cleanDishName, 
+      round: dish.round 
+    };
+
+    // Find the exact matching order
+    let targetOrder = null;
+    if (dish.orderId && !String(dish.orderId).startsWith('call_')) {
+      targetOrder = orders.find(o => matchesOrderId(o, dish.orderId));
+    }
+    if (!targetOrder && dish.tableNumber) {
+      const activeOrds = getTableActiveOrders(dish.tableNumber);
+      targetOrder = activeOrds.find(o => 
+        (o.items || []).some(it => 
+          !it.is_served && 
+          ((it.kitchen_status || '').toLowerCase() === 'ready' || (it.kitchen_status || '').toLowerCase() === 'prepared') &&
+          (it.id === dish.id || it.name?.toLowerCase().trim() === cleanDishName.toLowerCase())
+        )
+      ) || activeOrds[0];
     }
 
-    // Dismiss matching service call(s)
+    if (targetOrder && onToggleItemServed) {
+      let matchIdx = -1;
+      // 1. Direct index match if valid and matches dish
+      if (dish.itemIndex !== undefined && targetOrder.items?.[dish.itemIndex]) {
+        const atIdx = targetOrder.items[dish.itemIndex];
+        if (!atIdx.is_served && (atIdx.name?.toLowerCase().trim() === cleanDishName.toLowerCase() || atIdx.id === dish.id)) {
+          matchIdx = dish.itemIndex;
+        }
+      }
+      // 2. Prioritize unserved ready item with exact match
+      if (matchIdx < 0 && Array.isArray(targetOrder.items)) {
+        matchIdx = targetOrder.items.findIndex(it => 
+          !it.is_served && 
+          ((it.kitchen_status || '').toLowerCase() === 'ready' || (it.kitchen_status || '').toLowerCase() === 'prepared') &&
+          ((dish.id && it.id === dish.id) || (cleanDishName && it.name?.toLowerCase().trim() === cleanDishName.toLowerCase()))
+        );
+      }
+      // 3. Fallback matching on any unserved item with matching name/id
+      if (matchIdx < 0 && Array.isArray(targetOrder.items)) {
+        matchIdx = targetOrder.items.findIndex(it => 
+          !it.is_served && 
+          ((dish.id && it.id === dish.id) || (cleanDishName && it.name?.toLowerCase().trim() === cleanDishName.toLowerCase()))
+        );
+      }
+
+      if (matchIdx >= 0) {
+        onToggleItemServed(targetOrder.id, matchIdx, activeWaiterName, activeWaiterId, itemObj);
+      }
+    }
+
+    // Dismiss matching service call(s) for this specific dish only
     if (dish.callId && onDismissServiceCall) {
       onDismissServiceCall(dish.callId, activeWaiterName, activeWaiterId);
     }
     (serviceCalls || [])
       .filter(c => c.type === 'food_ready' && (
         c.id === dish.callId ||
-        c.orderId === dish.orderId || 
-        normalizeTbl(c.tableNumber) === normalizeTbl(dish.tableNumber)
-      ) && (
-        c.itemIndex === dish.itemIndex || 
-        c.itemsSummary?.toLowerCase().includes(String(dish.dishName || '').toLowerCase()) ||
-        dish.itemIndex === undefined
+        (normalizeTbl(c.tableNumber) === normalizeTbl(dish.tableNumber) && (
+          (dish.itemIndex !== undefined && c.itemIndex === dish.itemIndex) ||
+          (cleanDishName && c.itemsSummary?.toLowerCase().includes(cleanDishName.toLowerCase()))
+        ))
       ))
       .forEach(c => {
         if (onDismissServiceCall) onDismissServiceCall(c.id, activeWaiterName, activeWaiterId);

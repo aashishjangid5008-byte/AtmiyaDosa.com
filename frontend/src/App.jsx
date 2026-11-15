@@ -173,14 +173,14 @@ const mapDbOrderToFrontend = (dbOrd) => {
 
   const hasSpecificStates = Object.keys(itemStates).length > 0;
 
-  let itms = (dbOrd.order_items || []).map((i, idx) => {
+  let itms = (dbOrd.order_items || []).map((i) => {
     const rawItemStatus = String(i.status || '').toLowerCase().trim();
+    const cleanNameKey = String(i.item_name || i.name || '').toLowerCase().trim();
     const savedState = (i.id && itemStates[i.id]) || 
                        (i.item_id && itemStates[i.item_id]) || 
+                       (cleanNameKey && itemStates[cleanNameKey]) ||
                        (i.item_name && itemStates[i.item_name]) || 
-                       (i.name && itemStates[i.name]) || 
-                       itemStates[String(idx)] || 
-                       itemStates[`oi_${idx}`];
+                       (i.name && itemStates[i.name]);
     const isSavedReady = savedState === 'ready';
     const isSavedServed = savedState === 'served';
     const isSavedPrep = savedState === 'preparing' || savedState === 'cooking' || savedState === 'placed';
@@ -203,8 +203,6 @@ const mapDbOrderToFrontend = (dbOrd) => {
       } else if (isSavedPrep || rawItemStatus === 'placed' || rawItemStatus === 'preparing' || rawItemStatus === 'cooking') {
         isItemReady = false;
       } else if (rawItemStatus === 'ready') {
-        isItemReady = true;
-      } else if (itemStates['all'] === 'ready') {
         isItemReady = true;
       }
     }
@@ -1051,7 +1049,7 @@ export default function App() {
             ...o,
             status: 'Completed',
             payment_status: 'Paid',
-            items: (o.items || []).map(it => ({ ...it, is_served: true, kitchen_status: 'ready' }))
+            items: (o.items || []).map(it => ({ ...it, is_served: true, kitchen_status: 'served' }))
           };
         }
 
@@ -1162,11 +1160,27 @@ export default function App() {
           const dbItems = hasDbItems
             ? mo.items
             : (hasLocalItems ? localMatch.items : (mo.items || []));
-          const mergedItems = dbItems.map((dbItem, idx) => {
-            const localItem = (localMatch.items || []).find(it => 
-              (it.id && dbItem.id && it.id === dbItem.id) ||
-              (it.name && dbItem.name && it.name.toLowerCase().trim() === dbItem.name.toLowerCase().trim() && (it.round === dbItem.round || !dbItem.round))
-            ) || localMatch.items?.[idx];
+          const matchedLocalIndices = new Set();
+          const mergedItems = dbItems.map((dbItem) => {
+            const cleanDbName = String(dbItem.name || dbItem.item_name || '').toLowerCase().trim();
+            let localItem = null;
+            let matchedIdx = -1;
+
+            (localMatch.items || []).forEach((it, lIdx) => {
+              if (matchedIdx >= 0 || matchedLocalIndices.has(lIdx)) return;
+              if (it.id && dbItem.id && it.id === dbItem.id) {
+                localItem = it;
+                matchedIdx = lIdx;
+              } else if (it.name && cleanDbName && it.name.toLowerCase().trim() === cleanDbName && (it.round === dbItem.round || !dbItem.round || !it.round)) {
+                localItem = it;
+                matchedIdx = lIdx;
+              }
+            });
+
+            if (matchedIdx >= 0) {
+              matchedLocalIndices.add(matchedIdx);
+            }
+
             const isLocalPreparing = Boolean(localItem && (localItem.kitchen_status === 'preparing' || localItem.status === 'PREPARING'));
             const isDbPreparing = Boolean(dbItem.kitchen_status === 'preparing' || String(dbItem.status || '').toLowerCase() === 'preparing');
             const isExplicitlyPreparing = isLocalPreparing || isDbPreparing;
@@ -1176,7 +1190,7 @@ export default function App() {
             const finalServed = !isExplicitlyPreparing && (isLocalServed || isDbServed);
 
             const isDbReady = Boolean(dbItem.kitchen_status === 'ready' || String(dbItem.status || '').toLowerCase() === 'ready');
-            const isLocalReady = Boolean(localItem && (localItem.kitchen_status === 'ready'));
+            const isLocalReady = Boolean(localItem && (localItem.kitchen_status === 'ready' || localItem.kitchen_status === 'prepared'));
             const finalReady = !finalServed && !isExplicitlyPreparing && (isDbReady || isLocalReady);
 
             return {
@@ -1188,6 +1202,13 @@ export default function App() {
               ready_at: isExplicitlyPreparing ? null : (localItem?.ready_at || dbItem.ready_at),
               served_at: isExplicitlyPreparing ? null : (localItem?.served_at || dbItem.served_at)
             };
+          });
+
+          // Retain any local items (e.g. fresh add-ons) not yet populated in dbItems
+          (localMatch.items || []).forEach((locIt, locIdx) => {
+            if (!matchedLocalIndices.has(locIdx)) {
+              mergedItems.push(locIt);
+            }
           });
 
           const hasUnserved = mergedItems.some(i => !i.is_served);
@@ -2437,10 +2458,28 @@ export default function App() {
 
     let targetIndex = itemIndex;
     if (itemObj && Array.isArray(targetOrder.items)) {
-      const fIdx = targetOrder.items.findIndex(it => 
-        (itemObj.id && it.id && it.id === itemObj.id) ||
-        (itemObj.name && it.name && it.name.toLowerCase().trim() === itemObj.name.toLowerCase().trim() && (it.round === itemObj.round || !itemObj.round))
-      );
+      let fIdx = -1;
+      if (itemObj.id) {
+        fIdx = targetOrder.items.findIndex(it => it.id === itemObj.id);
+      }
+      if (fIdx < 0 && itemObj.name) {
+        const cleanName = itemObj.name.toLowerCase().trim();
+        // Prioritize unserved ready item
+        fIdx = targetOrder.items.findIndex(it => 
+          !it.is_served && 
+          (it.kitchen_status === 'ready' || it.kitchen_status === 'prepared') &&
+          it.name && it.name.toLowerCase().trim() === cleanName &&
+          (it.round === itemObj.round || !itemObj.round)
+        );
+      }
+      if (fIdx < 0 && itemObj.name) {
+        const cleanName = itemObj.name.toLowerCase().trim();
+        fIdx = targetOrder.items.findIndex(it => 
+          !it.is_served &&
+          it.name && it.name.toLowerCase().trim() === cleanName &&
+          (it.round === itemObj.round || !itemObj.round)
+        );
+      }
       if (fIdx >= 0) targetIndex = fIdx;
     }
 
@@ -2455,22 +2494,22 @@ export default function App() {
       if (!matchesOrderId(o, orderId)) return o;
       const items = (o.items || []).map((it, idx) => {
         if (idx !== targetIndex) return it;
-        const nextServed = !it.is_served;
         return {
           ...it,
-          is_served: nextServed,
-          kitchen_status: nextServed ? 'served' : (it.kitchen_status || 'ready'),
-          served_at: nextServed ? Date.now() : null,
-          served_by_waiter_id: nextServed ? collectorId : null,
-          served_by_waiter_name: nextServed ? collectorName : null
+          is_served: true,
+          kitchen_status: 'served',
+          served_at: it.served_at || Date.now(),
+          served_by_waiter_id: collectorId,
+          served_by_waiter_name: collectorName
         };
       });
       updatedItems = items;
 
       const allServed = items.length > 0 && items.every(i => i.is_served);
       const anyServed = items.some(i => i.is_served);
+      const hasUnservedReady = items.some(i => !i.is_served && (i.kitchen_status === 'ready' || i.kitchen_status === 'prepared'));
       const allReadyOrServed = items.length > 0 && items.every(i => i.is_served || i.kitchen_status === 'ready');
-      const nextStatus = allServed ? 'Served' : (allReadyOrServed ? 'Ready' : (anyServed ? 'Preparing' : o.status));
+      const nextStatus = allServed ? 'Served' : (allReadyOrServed && hasUnservedReady ? 'Ready' : (anyServed ? 'Preparing' : o.status));
       updatedNextStatus = nextStatus;
       const deliveredAt = anyServed ? (o.food_delivered_at || Date.now()) : (allServed ? Date.now() : o.food_delivered_at);
       if (anyServed && !o.food_delivered_at) {
@@ -2494,7 +2533,7 @@ export default function App() {
 
     // If marked served, clear any matching food_ready service call
     const targetItem = targetOrder.items?.[targetIndex];
-    const isNowServed = targetItem ? !targetItem.is_served : true;
+    const isNowServed = true;
     if (isNowServed) {
       setServiceCalls(prev => {
         const nextCalls = prev.filter(c => !(c.type === 'food_ready' && (c.orderId === orderId || String(c.orderId) === String(orderId)) && (c.itemIndex === targetIndex || c.itemIndex === undefined)));
@@ -2583,15 +2622,23 @@ export default function App() {
 
     let targetIndex = itemIndex;
     if (itemObj && Array.isArray(targetOrder.items)) {
-      const fIdx = targetOrder.items.findIndex(it => 
-        (itemObj.id && it.id && it.id === itemObj.id) ||
-        (itemObj.name && it.name && it.name.toLowerCase().trim() === itemObj.name.toLowerCase().trim() && (it.round === itemObj.round || !itemObj.round))
-      );
+      let fIdx = -1;
+      if (itemObj.id) {
+        fIdx = targetOrder.items.findIndex(it => it.id === itemObj.id);
+      }
+      if (fIdx < 0 && itemObj.name) {
+        const cleanName = itemObj.name.toLowerCase().trim();
+        fIdx = targetOrder.items.findIndex(it => 
+          !it.is_served &&
+          it.name && it.name.toLowerCase().trim() === cleanName &&
+          (it.round === itemObj.round || !itemObj.round)
+        );
+      }
       if (fIdx >= 0) targetIndex = fIdx;
     }
 
     const targetItem = targetOrder.items?.[targetIndex];
-    if (!targetItem) return;
+    if (!targetItem || targetItem.is_served) return;
 
     const nextReadyState = targetItem.kitchen_status === 'ready' ? 'preparing' : 'ready';
 
@@ -2609,8 +2656,10 @@ export default function App() {
       });
       updatedItems = items;
 
+      const allServed = items.length > 0 && items.every(i => i.is_served);
+      const hasUnservedReady = items.some(i => !i.is_served && (i.kitchen_status === 'ready' || i.kitchen_status === 'prepared'));
       const allReady = items.length > 0 && items.every(i => i.kitchen_status === 'ready' || i.is_served);
-      const nextStatus = allReady ? 'Ready' : (o.status === 'Ready' || o.status === 'Placed' ? 'Preparing' : o.status);
+      const nextStatus = allServed ? 'Served' : (allReady && hasUnservedReady ? 'Ready' : (o.status === 'Ready' || o.status === 'Placed' ? 'Preparing' : o.status));
       updatedNextStatus = nextStatus;
 
       return {
@@ -3428,31 +3477,7 @@ export default function App() {
       });
     }
 
-    // 1.5 If order contains ready-to-deliver items (e.g. bottled water ordered by customer via QR), dispatch food_ready alert for waiters
-    (finalOrder.items || []).forEach((it, idx) => {
-      if ((it.kitchen_status === 'ready' || it.kitchen_status === 'prepared') && !it.is_served) {
-        const cleanTbl = (finalOrder.table_number || '').replace(/table/i, '').trim();
-        const qty = it.qty || it.quantity || 1;
-        const foodReadyCall = {
-          id: `ready_item_${finalOrder.id}_${idx}_${Date.now()}`,
-          tableNumber: cleanTbl,
-          label: `Deliver: ${qty}x ${it.name}`,
-          type: 'food_ready',
-          orderId: finalOrder.id,
-          orderNumber: finalOrder.order_number || finalOrder.id,
-          itemIndex: idx,
-          itemsSummary: `${qty}x ${it.name}`,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          timestamp: Date.now()
-        };
-        setServiceCalls(prev => {
-          if (prev.some(c => c.orderId === finalOrder.id && c.itemIndex === idx)) return prev;
-          const next = [foodReadyCall, ...prev];
-          setLocalStore('service_calls', next);
-          return next;
-        });
-      }
-    });
+    // 1.5 Fresh orders and add-ons start in PREPARING in the kitchen. Chef manually taps [Tap Ready] when prepared.
 
     // 2. DISPATCH LIVE TO SUPABASE CLOUD POSTGRESQL (table_sessions, orders, order_items, customers)
     try {
@@ -5307,7 +5332,7 @@ export default function App() {
   const readyFoodCount = (orders || []).reduce((acc, o) => {
     const isCooking = ['cooking', 'preparing', 'ready', 'placed'].includes(String(o?.status || '').toLowerCase());
     if (!isCooking) return acc;
-    const readyItems = (o.items || []).filter(i => (i.kitchen_status === 'ready' || i.kitchen_status === 'prepared' || o.status === 'Ready') && !i.is_served);
+    const readyItems = (o.items || []).filter(i => (i.kitchen_status === 'ready' || i.kitchen_status === 'prepared') && !i.is_served);
     return acc + readyItems.length;
   }, 0);
   const waiterAlertsCount = activeServiceCalls.length + readyFoodCount;
