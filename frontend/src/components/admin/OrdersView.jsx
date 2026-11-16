@@ -155,8 +155,16 @@ export default function OrdersView({
   const activeOrdersCount = orders.filter(o => !isOrderCompleted(o) && o.status !== 'Cancelled').length;
   const completedOrdersCount = orders.filter(isOrderCompleted).length;
   const unseenOrdersCount = orders.filter(o => !safeSeenOrderIds.includes(o.id) && !isOrderCompleted(o) && o.status !== 'Cancelled').length;
-  const dineInCount = orders.filter(o => !o.order_source || o.order_source === 'Dine-In' || o.order_source === 'Table QR' || o.order_source === 'Waiter POS').length;
-  const takeawayCount = orders.filter(o => o.order_source === 'Takeaway' || o.order_source === 'Counter').length;
+  const isTakeawayOrder = (o) => {
+    if (!o) return false;
+    const src = String(o.order_source || '').toLowerCase();
+    const ch = String(o.channel || '').toLowerCase();
+    const tbl = String(o.table_number || '').toLowerCase();
+    return src === 'takeaway' || src === 'counter' || ch === 'takeaway' || tbl.includes('takeaway') || tbl.includes('parcel');
+  };
+
+  const dineInCount = orders.filter(o => !isTakeawayOrder(o)).length;
+  const takeawayCount = orders.filter(isTakeawayOrder).length;
   const cashPendingOrders = orders.filter(o => 
     o.status !== 'Cancelled' && 
     o.payment_mode === 'Cash' && 
@@ -185,8 +193,8 @@ export default function OrdersView({
 
   // Filter orders
   const filteredOrders = orders.filter(o => {
-    if (channelTab === 'dine_in' && (o.order_source === 'Takeaway' || o.order_source === 'Counter')) return false;
-    if (channelTab === 'takeaway' && o.order_source !== 'Takeaway' && o.order_source !== 'Counter') return false;
+    if (channelTab === 'dine_in' && isTakeawayOrder(o)) return false;
+    if (channelTab === 'takeaway' && !isTakeawayOrder(o)) return false;
     if (channelTab === 'completed' && !isOrderCompleted(o)) return false;
 
     const dt = formatOrderDateTime(o);
@@ -509,13 +517,13 @@ export default function OrdersView({
                         <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider mt-0.5 ${
                           order.order_source === 'Waiter_POS' || order.order_source === 'Waiter POS'
                             ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                            : order.order_source === 'Takeaway' || order.order_source === 'Counter'
+                            : isTakeawayOrder(order)
                               ? 'bg-purple-50 text-purple-700 border border-purple-200'
                               : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                         }`}>
                           {order.order_source === 'Waiter_POS' || order.order_source === 'Waiter POS'
                             ? 'Waiter POS'
-                            : order.order_source === 'Takeaway' || order.order_source === 'Counter'
+                            : isTakeawayOrder(order)
                               ? 'Takeaway'
                               : 'Table QR'}
                         </span>
@@ -524,8 +532,12 @@ export default function OrdersView({
                       {/* Table Number */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="px-2 py-1 bg-orange-50 text-orange-700 font-mono font-bold rounded-md border border-orange-200 text-xs">
-                            {order.table_number || 'Takeaway'}
+                          <span className={`px-2 py-1 font-mono font-bold rounded-md border text-xs ${
+                            isTakeawayOrder(order)
+                              ? 'bg-purple-50 text-purple-700 border-purple-200'
+                              : 'bg-orange-50 text-orange-700 border-orange-200'
+                          }`}>
+                            {isTakeawayOrder(order) ? 'Takeaway' : (order.table_number || 'Dine-In')}
                           </span>
                           {(order.round > 1 || order.is_addon) && (
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-purple-100 text-purple-900 border border-purple-200">

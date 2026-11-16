@@ -130,14 +130,16 @@ export default function QuickPosModal({
       return;
     }
 
+    const isTakeaway = selectedChannel === 'Takeaway';
     const orderId = `#ORD${Math.floor(1000 + Math.random() * 9000)}`;
-    const finalCustomerName = (customerName || '').trim() || (selectedChannel === 'Dine-In' ? `Table ${selectedTable} Guest` : 'Walk-in Customer');
+    const finalCustomerName = (customerName || '').trim() || (isTakeaway ? 'Walk-in Customer' : `Table ${selectedTable} Guest`);
     const cleanPhone = (customerPhone || '').replace(/[^0-9]/g, '').slice(-10);
 
     const newOrderObj = {
       id: orderId,
-      table_number: selectedChannel === 'Dine-In' ? selectedTable : selectedChannel,
-      channel: selectedChannel,
+      table_number: isTakeaway ? 'Takeaway' : selectedTable,
+      channel: isTakeaway ? 'Takeaway' : 'Dine-In',
+      order_source: isTakeaway ? 'Takeaway' : 'Counter POS',
       customer_name: finalCustomerName,
       customer_phone: cleanPhone,
       items: cart.map(i => {
@@ -174,7 +176,7 @@ export default function QuickPosModal({
       saveCustomerProfile({
         name: finalCustomerName,
         phone: cleanPhone,
-        tableNumber: selectedChannel === 'Dine-In' ? selectedTable : selectedChannel,
+        tableNumber: isTakeaway ? 'Takeaway' : selectedTable,
         orderId,
         orderTotal: grandTotal,
         items: cart,

@@ -67,11 +67,16 @@ export const speakOrderAlert = (tableNumber, isAddon = false, itemsSummary = '')
     if (!isVoiceNotificationEnabled()) return;
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel(); // Stop any pending speech
-      const digits = String(tableNumber || '').replace(/\D/g, '');
-      const spokenTable = digits ? `Table ${parseInt(digits, 10)}` : (String(tableNumber || '').trim() || 'Table');
-      const text = isAddon
-        ? `Attention floor staff: ${spokenTable} has placed an add-on order for ${itemsSummary || 'items'}. Please deliver promptly.`
-        : `Attention kitchen: ${spokenTable} order has arrived! Please start making it.`;
+      const isTakeaway = String(tableNumber || '').toLowerCase().includes('takeaway') || 
+                         String(tableNumber || '').toLowerCase().includes('parcel') || 
+                         String(tableNumber || '').toLowerCase().includes('counter');
+      const digits = isTakeaway ? '' : String(tableNumber || '').replace(/\D/g, '');
+      const spokenTable = isTakeaway ? 'Takeaway' : (digits ? `Table ${parseInt(digits, 10)}` : (String(tableNumber || '').trim() || 'Table'));
+      const text = isTakeaway
+        ? `Attention kitchen: Takeaway order has arrived! Please pack ${itemsSummary || 'dishes'}.`
+        : (isAddon
+            ? `Attention floor staff: ${spokenTable} has placed an add-on order for ${itemsSummary || 'items'}. Please deliver promptly.`
+            : `Attention kitchen: ${spokenTable} order has arrived! Please start making it.`);
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.05;
       utterance.pitch = 1.1;
@@ -107,7 +112,7 @@ export const speakSystemTestAlert = () => {
 /**
  * Triggers a multi-channel order arrival notification:
  * 1. Audio siren / kitchen bell
- * 2. Voice announcement ("Table 1 order has arrived! Please start making it")
+ * 2. Voice announcement ("Table 1 order has arrived!" or "Takeaway order has arrived!")
  * 3. System Push / Lock Screen Notification with vibration pattern
  */
 export const triggerStaffOrderNotification = async ({
@@ -118,9 +123,11 @@ export const triggerStaffOrderNotification = async ({
   isAddon = false,
   paymentMode = 'Cash'
 }) => {
-  // Format table number clearly
-  const digits = String(tableNumber).replace(/\D/g, '');
-  const displayTable = digits ? parseInt(digits, 10) : tableNumber;
+  const isTakeaway = String(tableNumber || '').toLowerCase().includes('takeaway') || 
+                     String(tableNumber || '').toLowerCase().includes('parcel') || 
+                     String(tableNumber || '').toLowerCase().includes('counter');
+  const digits = isTakeaway ? '' : String(tableNumber).replace(/\D/g, '');
+  const displayTable = isTakeaway ? 'Takeaway' : (digits ? parseInt(digits, 10) : tableNumber);
 
   // 1. Play kitchen bell sound
   playSound(isAddon ? 'waiter' : 'order');
@@ -138,10 +145,14 @@ export const triggerStaffOrderNotification = async ({
   }
 
   // 4. Send background notification via Service Worker (works on locked phone / background tab)
-  const title = isAddon ? `💧 Table ${displayTable} Add-On: ${itemsSummary || 'Water'}!` : `🚨 Table ${displayTable} Order Arrived!`;
-  const body = isAddon
-    ? `Table ${displayTable} added ${itemsSummary || 'items'}. Serve promptly!`
-    : `Table ${displayTable} order #${orderNumber} from ${customerName}. ${itemsSummary ? `Items: ${itemsSummary}` : 'Please start making it now!'}`;
+  const title = isTakeaway
+    ? `📦 Counter Takeaway Order: ${itemsSummary || 'Dishes'}!`
+    : (isAddon ? `💧 Table ${displayTable} Add-On: ${itemsSummary || 'Water'}!` : `🚨 Table ${displayTable} Order Arrived!`);
+  const body = isTakeaway
+    ? `Takeaway order #${orderNumber} for ${customerName}. ${itemsSummary ? `Items: ${itemsSummary}` : 'Please start packing!'}`
+    : (isAddon
+        ? `Table ${displayTable} added ${itemsSummary || 'items'}. Serve promptly!`
+        : `Table ${displayTable} order #${orderNumber} from ${customerName}. ${itemsSummary ? `Items: ${itemsSummary}` : 'Please start making it now!'}`);
 
   if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
     try {

@@ -174,12 +174,24 @@ export const recordEmployeeActivity = async (
 // ---------------------------------------------------------------------------
 
 /**
- * Normalizes any table representation (e.g. 'T01', 'Table 1', '1', 'T-01') into 'T-01' format.
+ * Checks if a table identifier corresponds to a takeaway, parcel, or counter order.
+ */
+export const isTakeawayTable = (tableVal) => {
+  if (!tableVal) return false;
+  const str = String(tableVal).trim().toLowerCase();
+  return str.includes('takeaway') || str.includes('parcel') || str.includes('counter') || str.includes('delivery');
+};
+
+/**
+ * Normalizes dining table representation (e.g. 'T01', 'Table 1', '1', 'T-01') into 'T-01' format.
+ * Returns 'Takeaway' for takeaway/parcel orders and preserves non-table inputs.
  */
 export const normalizeTableNumber = (tableNum) => {
-  if (!tableNum) return 'T-01';
-  const digits = String(tableNum).replace(/\D/g, '');
-  if (!digits) return 'T-01';
+  if (!tableNum) return '';
+  const str = String(tableNum).trim();
+  if (isTakeawayTable(str)) return 'Takeaway';
+  const digits = str.replace(/\D/g, '');
+  if (!digits) return str;
   return `T-${digits.padStart(2, '0')}`;
 };
 
@@ -191,6 +203,8 @@ export const normalizeTableNumber = (tableNum) => {
  */
 export const dispatchOrderToSupabase = async ({
   table_number,
+  channel = 'Dine-In',
+  order_source,
   customer_name,
   customer_phone,
   items = [],
@@ -203,9 +217,16 @@ export const dispatchOrderToSupabase = async ({
   order_id = null,
   id = null
 }) => {
-  const formattedTableNum = normalizeTableNumber(table_number);
+  const isTakeaway = 
+    String(channel || '').toLowerCase().includes('takeaway') ||
+    String(order_source || '').toLowerCase().includes('takeaway') ||
+    String(order_source || '').toLowerCase().includes('counter') ||
+    isTakeawayTable(table_number) ||
+    !table_number;
+
+  const formattedTableNum = isTakeaway ? 'Takeaway' : normalizeTableNumber(table_number);
   const cleanPhone = customer_phone ? String(customer_phone).replace(/[^0-9]/g, '').slice(-10) : null;
-  const guestName = customer_name ? String(customer_name).trim() : 'Walk-in Guest';
+  const guestName = customer_name ? String(customer_name).trim() : (isTakeaway ? 'Walk-in Customer' : 'Walk-in Guest');
   const isOnlinePayment = payment_mode === 'UPI' || payment_mode === 'Online' || payment_mode === 'UPI_COUNTER' || payment_mode === 'ONLINE_RAZORPAY';
 
   let tableId = null;
@@ -214,151 +235,157 @@ export const dispatchOrderToSupabase = async ({
   let createdOrder = null;
 
   try {
-    // 1. Resolve Table UUID from restaurant_tables
-    let { data: tableData } = await supabase
-      .from('restaurant_tables')
-      .select('id, table_number')
-      .eq('table_number', formattedTableNum)
-      .maybeSingle();
-
-    if (!tableData) {
-      const altNum = formattedTableNum.replace('-', '');
-      const { data: altTable } = await supabase
+    // 1 & 2 & 3: Table Resolution, Active Table Session, and Occupancy Status (DINE-IN ONLY)
+    // Takeaway / Parcel orders NEVER attach to dining tables, never occupy tables, and never create table_sessions!
+    if (!isTakeaway) {
+      // 1. Resolve Table UUID from restaurant_tables
+      let { data: tableData } = await supabase
         .from('restaurant_tables')
         .select('id, table_number')
-        .or(`table_number.eq.${altNum},table_number.eq.${formattedTableNum}`)
+        .eq('table_number', formattedTableNum)
         .maybeSingle();
-      if (altTable) tableData = altTable;
-    }
 
-    if (tableData) {
-      tableId = tableData.id;
-    } else {
-      const digits = String(formattedTableNum).replace(/\D/g, '');
-      const { data: allTbls } = await supabase.from('restaurant_tables').select('id, table_number');
-      const match = (allTbls || []).find(t => String(t.table_number).replace(/\D/g, '') === digits);
-      if (match) {
-        tableId = match.id;
+      if (!tableData) {
+        const altNum = formattedTableNum.replace('-', '');
+        const { data: altTable } = await supabase
+          .from('restaurant_tables')
+          .select('id, table_number')
+          .or(`table_number.eq.${altNum},table_number.eq.${formattedTableNum}`)
+          .maybeSingle();
+        if (altTable) tableData = altTable;
       }
-    }
 
-    // Auto-provision table row in restaurant_tables if not found (NEVER fall back to Table 01!)
-    if (!tableId) {
-      try {
-        const cleanTableCode = formattedTableNum.replace('-', '');
-        const createRes = await fetch(`${API_BASE_URL}/tables`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            number: cleanTableCode,
-            capacity: 4
-          })
-        });
-        if (createRes.ok) {
-          const { data: newlyCreated } = await supabase
-            .from('restaurant_tables')
-            .select('id, table_number')
-            .or(`table_number.eq.${formattedTableNum},table_number.eq.${cleanTableCode}`)
-            .maybeSingle();
-          if (newlyCreated) tableId = newlyCreated.id;
+      if (tableData) {
+        tableId = tableData.id;
+      } else {
+        const digits = String(formattedTableNum).replace(/\D/g, '');
+        if (digits) {
+          const { data: allTbls } = await supabase.from('restaurant_tables').select('id, table_number');
+          const match = (allTbls || []).find(t => String(t.table_number).replace(/\D/g, '') === digits);
+          if (match) {
+            tableId = match.id;
+          }
         }
-      } catch (autoProvErr) {
-        console.warn('[SUPABASE] Auto-provision table notice:', autoProvErr);
       }
-    }
 
-    // 2. Find or Create ACTIVE Table Session
-    if (tableId) {
-      const { data: activeSession, error: sessFindErr } = await supabase
-        .from('table_sessions')
-        .select('id, session_code, total_amount, opened_at')
-        .eq('table_id', tableId)
-        .eq('status', 'ACTIVE')
-        .order('opened_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // Auto-provision table row in restaurant_tables if not found (NEVER for takeaway!)
+      if (!tableId && formattedTableNum && formattedTableNum !== 'Takeaway') {
+        try {
+          const cleanTableCode = formattedTableNum.replace('-', '');
+          const createRes = await fetch(`${API_BASE_URL}/tables`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              number: cleanTableCode,
+              capacity: 4
+            })
+          });
+          if (createRes.ok) {
+            const { data: newlyCreated } = await supabase
+              .from('restaurant_tables')
+              .select('id, table_number')
+              .or(`table_number.eq.${formattedTableNum},table_number.eq.${cleanTableCode}`)
+              .maybeSingle();
+            if (newlyCreated) tableId = newlyCreated.id;
+          }
+        } catch (autoProvErr) {
+          console.warn('[SUPABASE] Auto-provision table notice:', autoProvErr);
+        }
+      }
 
-      const sessionAgeMs = (activeSession && activeSession.opened_at)
-        ? (Date.now() - new Date(activeSession.opened_at).getTime())
-        : 0;
-      const isSessionFresh = activeSession && (!activeSession.opened_at || sessionAgeMs < 2.5 * 60 * 60 * 1000);
+      // 2. Find or Create ACTIVE Table Session
+      if (tableId) {
+        const { data: activeSession, error: sessFindErr } = await supabase
+          .from('table_sessions')
+          .select('id, session_code, total_amount, opened_at')
+          .eq('table_id', tableId)
+          .eq('status', 'ACTIVE')
+          .order('opened_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-      if (!sessFindErr && activeSession && isSessionFresh) {
-        sessionId = activeSession.id;
-        sessionCode = activeSession.session_code;
-        const targetTotal = Number(parseFloat(total || 0).toFixed(2));
+        const sessionAgeMs = (activeSession && activeSession.opened_at)
+          ? (Date.now() - new Date(activeSession.opened_at).getTime())
+          : 0;
+        const isSessionFresh = activeSession && (!activeSession.opened_at || sessionAgeMs < 2.5 * 60 * 60 * 1000);
+
+        if (!sessFindErr && activeSession && isSessionFresh) {
+          sessionId = activeSession.id;
+          sessionCode = activeSession.session_code;
+          const targetTotal = Number(parseFloat(total || 0).toFixed(2));
+          const summaryText = items && items.length > 0 
+            ? items.map(i => `${i.quantity || 1}x ${i.name || i.item_name || 'Dish'}`).join(', ') 
+            : 'Order Placed';
+
+          await supabase
+            .from('table_sessions')
+            .update({
+              total_amount: targetTotal,
+              customer_name: guestName,
+              customer_phone: cleanPhone || activeSession.customer_phone,
+              table_number: formattedTableNum,
+              payment_status: isOnlinePayment ? 'PAID' : 'UNPAID',
+              payment_method: isOnlinePayment ? 'UPI_COUNTER' : 'CASH',
+              items_summary: summaryText
+            })
+            .eq('id', activeSession.id);
+        } else if (activeSession && !isSessionFresh) {
+          // Auto-close stale session from hours or days ago
+          try {
+            await supabase
+              .from('table_sessions')
+              .update({ status: 'COMPLETED', closed_at: new Date().toISOString() })
+              .eq('id', activeSession.id);
+          } catch (e) {}
+        }
+      }
+
+      // If no active session found for this table, create a fresh one
+      if (!sessionId && tableId) {
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const randSuffix = Math.floor(100 + Math.random() * 900);
+        sessionCode = `SESS-${dateStr}-${formattedTableNum.replace('-', '')}-${randSuffix}`;
         const summaryText = items && items.length > 0 
           ? items.map(i => `${i.quantity || 1}x ${i.name || i.item_name || 'Dish'}`).join(', ') 
           : 'Order Placed';
 
-        await supabase
+        const { data: newSession, error: sessCreateErr } = await supabase
           .from('table_sessions')
-          .update({
-            total_amount: targetTotal,
-            customer_name: guestName,
-            customer_phone: cleanPhone || activeSession.customer_phone,
+          .insert([{
+            restaurant_id: RESTAURANT_ID,
+            table_id: tableId,
             table_number: formattedTableNum,
+            session_code: sessionCode,
+            status: 'ACTIVE',
+            customer_name: guestName,
+            customer_phone: cleanPhone,
+            total_amount: parseFloat(total || 0),
             payment_status: isOnlinePayment ? 'PAID' : 'UNPAID',
             payment_method: isOnlinePayment ? 'UPI_COUNTER' : 'CASH',
-            items_summary: summaryText
-          })
-          .eq('id', activeSession.id);
-      } else if (activeSession && !isSessionFresh) {
-        // Auto-close stale session from hours or days ago
+            items_summary: summaryText,
+            opened_at: new Date().toISOString()
+          }])
+          .select()
+          .single();
+
+        if (sessCreateErr) {
+          console.error('[SUPABASE] Session creation error:', sessCreateErr.message);
+        } else if (newSession) {
+          sessionId = newSession.id;
+          sessionCode = newSession.session_code;
+        }
+      }
+
+      // 3. Mark Table as OCCUPIED (Dine-in only!)
+      if (tableId) {
         try {
           await supabase
-            .from('table_sessions')
-            .update({ status: 'COMPLETED', closed_at: new Date().toISOString() })
-            .eq('id', activeSession.id);
-        } catch (e) {}
-      }
-    }
-
-    // If no active session found for this table, create a fresh one
-    if (!sessionId) {
-      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      const randSuffix = Math.floor(100 + Math.random() * 900);
-      sessionCode = `SESS-${dateStr}-${formattedTableNum.replace('-', '')}-${randSuffix}`;
-      const summaryText = items && items.length > 0 
-        ? items.map(i => `${i.quantity || 1}x ${i.name || i.item_name || 'Dish'}`).join(', ') 
-        : 'Order Placed';
-
-      const { data: newSession, error: sessCreateErr } = await supabase
-        .from('table_sessions')
-        .insert([{
-          restaurant_id: RESTAURANT_ID,
-          table_id: tableId,
-          table_number: formattedTableNum,
-          session_code: sessionCode,
-          status: 'ACTIVE',
-          customer_name: guestName,
-          customer_phone: cleanPhone,
-          total_amount: parseFloat(total || 0),
-          payment_status: isOnlinePayment ? 'PAID' : 'UNPAID',
-          payment_method: isOnlinePayment ? 'UPI_COUNTER' : 'CASH',
-          items_summary: summaryText,
-          opened_at: new Date().toISOString()
-        }])
-        .select()
-        .single();
-
-      if (sessCreateErr) {
-        console.error('[SUPABASE] Session creation error:', sessCreateErr.message);
-      } else if (newSession) {
-        sessionId = newSession.id;
-        sessionCode = newSession.session_code;
-      }
-    }
-
-    // 3. Mark Table as OCCUPIED
-    if (tableId) {
-      try {
-        await supabase
-          .from('restaurant_tables')
-          .update({ status: 'OCCUPIED' })
-          .eq('id', tableId);
-      } catch (e) {
-        console.warn('[SUPABASE] Notice setting table status:', e);
+            .from('restaurant_tables')
+            .update({ status: 'OCCUPIED' })
+            .eq('id', tableId);
+        } catch (e) {
+          console.warn('[SUPABASE] Notice setting table status:', e);
+        }
       }
     }
 
@@ -382,42 +409,45 @@ export const dispatchOrderToSupabase = async ({
       if (data) existingDbOrder = data;
     }
 
-    // C. Check by sessionId: In restaurant dine-in, merge into active order for this table session!
-    if (!existingDbOrder && sessionId) {
-      const { data: activeOrderForSession } = await supabase
-        .from('orders')
-        .select('id, order_number, placed_at, special_notes')
-        .eq('session_id', sessionId)
-        .neq('status', 'CANCELLED')
-        .order('placed_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (activeOrderForSession) {
-        const orderAgeMs = activeOrderForSession.placed_at 
-          ? (Date.now() - new Date(activeOrderForSession.placed_at).getTime()) 
-          : 0;
-        if (!activeOrderForSession.placed_at || orderAgeMs < 2.5 * 60 * 60 * 1000) {
-          existingDbOrder = activeOrderForSession;
+    // C & D: Dine-in table session order merging (NEVER for Takeaway orders!)
+    if (!isTakeaway) {
+      // C. Check by sessionId: In restaurant dine-in, merge into active order for this table session!
+      if (!existingDbOrder && sessionId) {
+        const { data: activeOrderForSession } = await supabase
+          .from('orders')
+          .select('id, order_number, placed_at, special_notes')
+          .eq('session_id', sessionId)
+          .neq('status', 'CANCELLED')
+          .order('placed_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (activeOrderForSession) {
+          const orderAgeMs = activeOrderForSession.placed_at 
+            ? (Date.now() - new Date(activeOrderForSession.placed_at).getTime()) 
+            : 0;
+          if (!activeOrderForSession.placed_at || orderAgeMs < 2.5 * 60 * 60 * 1000) {
+            existingDbOrder = activeOrderForSession;
+          }
         }
       }
-    }
 
-    // D. Check by table_id: If table has a recent order placed within 2.5 hours, merge into it
-    if (!existingDbOrder && tableId) {
-      const { data: latestTableOrder } = await supabase
-        .from('orders')
-        .select('id, order_number, placed_at, special_notes')
-        .eq('table_id', tableId)
-        .neq('status', 'CANCELLED')
-        .order('placed_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (latestTableOrder) {
-        const orderAgeMs = latestTableOrder.placed_at 
-          ? (Date.now() - new Date(latestTableOrder.placed_at).getTime()) 
-          : 0;
-        if (!latestTableOrder.placed_at || orderAgeMs < 2.5 * 60 * 60 * 1000) {
-          existingDbOrder = latestTableOrder;
+      // D. Check by table_id: If table has a recent order placed within 2.5 hours, merge into it
+      if (!existingDbOrder && tableId) {
+        const { data: latestTableOrder } = await supabase
+          .from('orders')
+          .select('id, order_number, placed_at, special_notes')
+          .eq('table_id', tableId)
+          .neq('status', 'CANCELLED')
+          .order('placed_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (latestTableOrder) {
+          const orderAgeMs = latestTableOrder.placed_at 
+            ? (Date.now() - new Date(latestTableOrder.placed_at).getTime()) 
+            : 0;
+          if (!latestTableOrder.placed_at || orderAgeMs < 2.5 * 60 * 60 * 1000) {
+            existingDbOrder = latestTableOrder;
+          }
         }
       }
     }
@@ -615,6 +645,9 @@ export const dispatchOrderToSupabase = async ({
           items_summary: (items || []).map(i => `${i.qty || i.quantity || 1}x ${i.name || i.item_name || 'Dish'}`).join(', '),
           total: total,
           payment_mode: payment_mode,
+          channel: isTakeaway ? 'Takeaway' : (channel || 'Dine-In'),
+          order_source: isTakeaway ? 'Takeaway' : (order_source || 'Table QR'),
+          is_takeaway: isTakeaway,
           is_addon: Boolean(existingDbOrder),
           placed_at: new Date().toISOString()
         }
@@ -839,6 +872,10 @@ export const updateOrderItemStatusInSupabase = async (orderIdOrNumber, itemIndex
  * Marks all dishes for a specific dining table as SERVED in Supabase.
  */
 export const updateAllOrderItemsServedInSupabase = async (tableNumber) => {
+  if (isTakeawayTable(tableNumber)) {
+    // Takeaway orders are served per order ticket, not by dining table
+    return;
+  }
   const formattedTableNum = normalizeTableNumber(tableNumber);
   try {
     const { data: openOrders } = await supabase
@@ -873,75 +910,63 @@ export const updateAllOrderItemsServedInSupabase = async (tableNumber) => {
 
 /**
  * Marks table session as COMPLETED, frees table to VACANT, and settles order payment.
+ * For takeaway/counter orders, settles the order directly without touching any dining tables.
  */
 export const settleTableSessionInSupabase = async (tableNumber, orderIdOrNumber, paymentMethod = 'Cash') => {
-  const formattedTableNum = normalizeTableNumber(tableNumber);
+  const isTakeaway = isTakeawayTable(tableNumber) || !tableNumber;
+  const formattedTableNum = isTakeaway ? 'Takeaway' : normalizeTableNumber(tableNumber);
   const mappedPaymentMethod = (paymentMethod === 'Cash' || paymentMethod === 'CASH') ? 'CASH' : 'UPI_COUNTER';
 
   try {
-    // 1. Get Table ID robustly across all table formats
-    let tableData = null;
-    const { data: directTbl } = await supabase
-      .from('restaurant_tables')
-      .select('id')
-      .eq('table_number', formattedTableNum)
-      .maybeSingle();
-    tableData = directTbl;
-
-    if (!tableData) {
-      const altNum = formattedTableNum.replace('-', '');
-      const { data: altTbl } = await supabase
+    // 1. Table Resolution & Session Close (DINE-IN TABLES ONLY)
+    if (!isTakeaway) {
+      let tableData = null;
+      const { data: directTbl } = await supabase
         .from('restaurant_tables')
         .select('id')
-        .or(`table_number.eq.${altNum},table_number.eq.${formattedTableNum}`)
+        .eq('table_number', formattedTableNum)
         .maybeSingle();
-      if (altTbl) tableData = altTbl;
-    }
+      tableData = directTbl;
 
-    if (!tableData) {
-      const digits = String(formattedTableNum).replace(/\D/g, '');
-      const { data: allTbls } = await supabase.from('restaurant_tables').select('id, table_number');
-      const match = (allTbls || []).find(t => String(t.table_number).replace(/\D/g, '') === digits);
-      if (match) tableData = match;
-    }
+      if (!tableData) {
+        const altNum = formattedTableNum.replace('-', '');
+        const { data: altTbl } = await supabase
+          .from('restaurant_tables')
+          .select('id')
+          .or(`table_number.eq.${altNum},table_number.eq.${formattedTableNum}`)
+          .maybeSingle();
+        if (altTbl) tableData = altTbl;
+      }
 
-    if (tableData?.id) {
-      // 2. Complete active session
-      await supabase
-        .from('table_sessions')
-        .update({
-          status: 'COMPLETED',
-          closed_at: new Date().toISOString()
-        })
-        .eq('table_id', tableData.id)
-        .eq('status', 'ACTIVE');
+      if (!tableData) {
+        const digits = String(formattedTableNum).replace(/\D/g, '');
+        if (digits) {
+          const { data: allTbls } = await supabase.from('restaurant_tables').select('id, table_number');
+          const match = (allTbls || []).find(t => String(t.table_number).replace(/\D/g, '') === digits);
+          if (match) tableData = match;
+        }
+      }
 
-      // 3. Mark Table as VACANT
-      await supabase
-        .from('restaurant_tables')
-        .update({ status: 'VACANT' })
-        .eq('id', tableData.id);
+      if (tableData?.id) {
+        // 2. Complete active session
+        await supabase
+          .from('table_sessions')
+          .update({
+            status: 'COMPLETED',
+            closed_at: new Date().toISOString()
+          })
+          .eq('table_id', tableData.id)
+          .eq('status', 'ACTIVE');
+
+        // 3. Mark Table as VACANT
+        await supabase
+          .from('restaurant_tables')
+          .update({ status: 'VACANT' })
+          .eq('id', tableData.id);
+      }
     }
 
     // 4. Update order payment status to PAID and status to SERVED / COMPLETED
-    const rawDigits = String(formattedTableNum || tableNumber || '').replace(/\D/g, '');
-    const intNum = rawDigits ? parseInt(rawDigits, 10) : null;
-    const padNum = intNum !== null ? (intNum < 10 ? `0${intNum}` : `${intNum}`) : rawDigits;
-    const tableVariants = Array.from(new Set([
-      formattedTableNum,
-      String(tableNumber),
-      rawDigits,
-      String(intNum),
-      padNum,
-      `T${intNum}`,
-      `T${padNum}`,
-      `T-${intNum}`,
-      `T-${padNum}`,
-      `Table ${intNum}`,
-      `Table ${padNum}`
-    ].filter(Boolean)));
-    const orFilter = tableVariants.map(v => `table_number.eq.${v}`).join(',');
-
     const updatePayload = {
       payment_status: 'PAID',
       payment_method: mappedPaymentMethod,
@@ -967,15 +992,35 @@ export const settleTableSessionInSupabase = async (tableNumber, orderIdOrNumber,
       }
     }
 
-    // Always update all active orders for this table in Supabase so no orphaned unpaid orders remain
-    if (orFilter) {
-      try {
-        await supabase
-          .from('orders')
-          .update(updatePayload)
-          .or(orFilter);
-      } catch (tblOrdErr) {
-        console.warn('[SUPABASE] Settle all table orders notice:', tblOrdErr);
+    // For Dine-In: Always update all active orders for this table in Supabase so no orphaned unpaid orders remain
+    if (!isTakeaway) {
+      const rawDigits = String(formattedTableNum || tableNumber || '').replace(/\D/g, '');
+      const intNum = rawDigits ? parseInt(rawDigits, 10) : null;
+      const padNum = intNum !== null ? (intNum < 10 ? `0${intNum}` : `${intNum}`) : rawDigits;
+      const tableVariants = Array.from(new Set([
+        formattedTableNum,
+        String(tableNumber),
+        rawDigits,
+        String(intNum),
+        padNum,
+        `T${intNum}`,
+        `T${padNum}`,
+        `T-${intNum}`,
+        `T-${padNum}`,
+        `Table ${intNum}`,
+        `Table ${padNum}`
+      ].filter(Boolean)));
+      const orFilter = tableVariants.map(v => `table_number.eq.${v}`).join(',');
+
+      if (orFilter) {
+        try {
+          await supabase
+            .from('orders')
+            .update(updatePayload)
+            .or(orFilter);
+        } catch (tblOrdErr) {
+          console.warn('[SUPABASE] Settle all table orders notice:', tblOrdErr);
+        }
       }
     }
 

@@ -64,6 +64,7 @@ import {
   verifyStaffTokenApi,
   fetchLiveOrdersFromSupabase,
   normalizeTableNumber,
+  isTakeawayTable,
   updateOrderItemStatusInSupabase,
   updateAllOrderItemsServedInSupabase,
   fetchLiveMenuFromSupabase,
@@ -281,13 +282,17 @@ const mapDbOrderToFrontend = (dbOrd) => {
   const cleanOrderNum = String(rawNum).replace(/^#+/, '').trim();
   const formattedOrderId = `#${cleanOrderNum}`;
 
+  const isTakeawayDbOrder = !dbOrd.table_number || isTakeawayTable(dbOrd.table_number);
+  const resolvedChannel = isTakeawayDbOrder ? 'Takeaway' : 'Dine-In';
+  const resolvedOrderSource = isTakeawayDbOrder ? 'Takeaway' : (dbOrd.table_number ? 'Table QR' : 'Takeaway');
+
   return {
     id: formattedOrderId,
     order_number: cleanOrderNum,
     supabase_order_id: dbOrd.id,
     session_id: dbOrd.session_id,
-    table_number: dbOrd.table_number,
-    customer_name: dbOrd.customer_name || 'Walk-in Guest',
+    table_number: isTakeawayDbOrder ? 'Takeaway' : dbOrd.table_number,
+    customer_name: dbOrd.customer_name || (isTakeawayDbOrder ? 'Walk-in Customer' : 'Walk-in Guest'),
     customer_phone: dbOrd.customer_phone || '',
     items: itms,
     order_items: dbOrd.order_items || [],
@@ -298,7 +303,8 @@ const mapDbOrderToFrontend = (dbOrd) => {
     total: parseFloat(dbOrd.total_amount) || 0,
     total_amount: parseFloat(dbOrd.total_amount) || 0,
     status: mappedStatus,
-    channel: 'Dine-In QR',
+    channel: resolvedChannel,
+    order_source: resolvedOrderSource,
     placed_at: dbOrd.placed_at,
     created_at: dbOrd.created_at || dbOrd.placed_at,
     served_at: dbOrd.served_at,
@@ -2811,10 +2817,12 @@ export default function App() {
     playSound('success');
   };
 
-  // Mark all dishes for a specific table as Delivered/Served
+  // Mark all dishes for a specific dining table as Delivered/Served
   const handleMarkAllTableItemsServed = (tableNum, staffName = null, staffId = null) => {
+    if (isTakeawayTable(tableNum)) return;
     const normalizeTbl = (val) => String(val || '').replace(/[^0-9]/g, '');
     const targetCode = normalizeTbl(tableNum);
+    if (!targetCode) return;
     const collectorName = staffName || authUser?.name || 'Floor Server';
     const collectorId = staffId || authUser?.waiter_id || authUser?.id || 'WTR-101';
     
@@ -3242,75 +3250,92 @@ export default function App() {
       const isStaffSession = Boolean(authUser) && !isCustomerScreen;
       const userRole = isStaffSession ? authUser?.role : 'customer';
 
-    // Ensure session table lock is reinforced upon customer order placement
-    if (viewMode === 'customer' && !authUser) {
-      if (!newOrder.table_number) {
-        const boundTable = getBoundSessionTable();
-        if (boundTable) {
-          const safeTable = Number(boundTable) < 10 ? `T0${boundTable}` : `T${boundTable}`;
-          newOrder.table_number = safeTable;
-        } else {
-          setActiveToast({
-            title: '🔒 Table Verification Required',
-            message: 'Please scan your dining table QR standee before placing an order.',
-            type: 'error'
-          });
-          playSound('alert');
-          return;
-        }
-      }
-    }
-    if (newOrder.table_number) {
-      bindSessionTable(newOrder.table_number);
-    }
+      // Identify Takeaway / Parcel orders
+      const isTakeawayOrder = 
+        newOrder.channel === 'Takeaway' || 
+        newOrder.order_source === 'Takeaway' || 
+        newOrder.order_source === 'Counter' ||
+        newOrder.order_source === 'Counter POS' ||
+        isTakeawayTable(newOrder.table_number) ||
+        (!newOrder.table_number && isStaffSession);
 
-    // 0. Table Session Round & Multi-Round Add-on Architecture
-    const normalizeTbl = (val) => {
-      const digits = String(val || '').replace(/[^0-9]/g, '');
-      return digits ? String(parseInt(digits, 10)) : String(val || '').trim().toLowerCase();
-    };
-
-    // Locate active live order for this table session
-    let activeParent = null;
-
-    const isOrderEligibleParent = (o) => {
-      if (!o) return false;
-      const st = String(o.status || '').toLowerCase().trim();
-      const paySt = String(o.payment_status || '').toLowerCase().trim();
-      return st !== 'cancelled' && st !== 'completed' && st !== 'settled' && paySt !== 'paid' && paySt !== 'void';
-    };
-
-    // Check 1: Direct match by order ID if passed
-    if (newOrder.id) {
-      activeParent = orders.find(o => matchesOrderId(o, newOrder.id) && isOrderEligibleParent(o));
-    }
-
-    // Check 2: Match by table occupancy & recent orders (< 2.5 hours)
-    if (!activeParent && newOrder.table_number) {
-      const normTarget = normalizeTbl(newOrder.table_number);
-      const tblObj = tables.find(t => normalizeTbl(t.number) === normTarget || t.id === newOrder.table_number);
-
-      if (tblObj && tblObj.current_order_id) {
-        activeParent = orders.find(o => matchesOrderId(o, tblObj.current_order_id) && isOrderEligibleParent(o));
+      if (isTakeawayOrder) {
+        newOrder.table_number = 'Takeaway';
+        newOrder.channel = 'Takeaway';
+        newOrder.order_source = 'Takeaway';
       }
 
-      if (!activeParent) {
-        const candidateOrders = orders.filter(o => {
-          if (normalizeTbl(o.table_number) !== normTarget) return false;
-          if (!isOrderEligibleParent(o)) return false;
-          const orderTime = new Date(o.placed_at || o.created_at || 0).getTime();
-          return orderTime > 0 && (Date.now() - orderTime) < 2.5 * 60 * 60 * 1000;
-        });
-
-        if (candidateOrders.length > 0) {
-          candidateOrders.sort((a, b) => new Date(b.placed_at || b.created_at || 0) - new Date(a.placed_at || a.created_at || 0));
-          const isTableVacated = tblObj && (tblObj.status === 'available' || tblObj.status === 'vacant') && !tblObj.current_order_id;
-          if (!isTableVacated) {
-            activeParent = candidateOrders[0];
+      // Ensure session table lock is reinforced upon customer order placement (DINE-IN ONLY)
+      if (viewMode === 'customer' && !authUser && !isTakeawayOrder) {
+        if (!newOrder.table_number) {
+          const boundTable = getBoundSessionTable();
+          if (boundTable) {
+            const safeTable = Number(boundTable) < 10 ? `T0${boundTable}` : `T${boundTable}`;
+            newOrder.table_number = safeTable;
+          } else {
+            setActiveToast({
+              title: '🔒 Table Verification Required',
+              message: 'Please scan your dining table QR standee before placing an order.',
+              type: 'error'
+            });
+            playSound('alert');
+            return;
           }
         }
       }
-    }
+      if (!isTakeawayOrder && newOrder.table_number) {
+        bindSessionTable(newOrder.table_number);
+      }
+
+      // 0. Table Session Round & Multi-Round Add-on Architecture
+      const normalizeTbl = (val) => {
+        const digits = String(val || '').replace(/[^0-9]/g, '');
+        return digits ? String(parseInt(digits, 10)) : String(val || '').trim().toLowerCase();
+      };
+
+      // Locate active live order for this table session (NEVER FOR TAKEAWAY!)
+      let activeParent = null;
+
+      if (!isTakeawayOrder) {
+        const isOrderEligibleParent = (o) => {
+          if (!o) return false;
+          const st = String(o.status || '').toLowerCase().trim();
+          const paySt = String(o.payment_status || '').toLowerCase().trim();
+          return st !== 'cancelled' && st !== 'completed' && st !== 'settled' && paySt !== 'paid' && paySt !== 'void';
+        };
+
+        // Check 1: Direct match by order ID if passed
+        if (newOrder.id) {
+          activeParent = orders.find(o => matchesOrderId(o, newOrder.id) && isOrderEligibleParent(o));
+        }
+
+        // Check 2: Match by table occupancy & recent orders (< 2.5 hours)
+        if (!activeParent && newOrder.table_number) {
+          const normTarget = normalizeTbl(newOrder.table_number);
+          const tblObj = tables.find(t => normalizeTbl(t.number) === normTarget || t.id === newOrder.table_number);
+
+          if (tblObj && tblObj.current_order_id) {
+            activeParent = orders.find(o => matchesOrderId(o, tblObj.current_order_id) && isOrderEligibleParent(o));
+          }
+
+          if (!activeParent) {
+            const candidateOrders = orders.filter(o => {
+              if (normalizeTbl(o.table_number) !== normTarget) return false;
+              if (!isOrderEligibleParent(o)) return false;
+              const orderTime = new Date(o.placed_at || o.created_at || 0).getTime();
+              return orderTime > 0 && (Date.now() - orderTime) < 2.5 * 60 * 60 * 1000;
+            });
+
+            if (candidateOrders.length > 0) {
+              candidateOrders.sort((a, b) => new Date(b.placed_at || b.created_at || 0) - new Date(a.placed_at || a.created_at || 0));
+              const isTableVacated = tblObj && (tblObj.status === 'available' || tblObj.status === 'vacant') && !tblObj.current_order_id;
+              if (!isTableVacated) {
+                activeParent = candidateOrders[0];
+              }
+            }
+          }
+        }
+      }
 
     const isAddonOrder = Boolean(activeParent);
     const roundNumber = isAddonOrder ? ((activeParent.round || 1) + 1) : 1;
@@ -3447,29 +3472,31 @@ export default function App() {
     setOrders(updated);
     setLocalStore('orders', updated);
 
-    // Update corresponding dining table status to occupied with guest info
-    const updatedTables = tables.map(t => {
-      if (normalizeTbl(t.number) === normalizeTbl(finalOrder.table_number) || t.id === finalOrder.table_number) {
-        return {
-          ...t,
-          status: 'occupied',
-          current_order_id: finalOrder.id,
-          current_customer_name: finalOrder.customer_name,
-          current_customer_phone: finalOrder.customer_phone,
-          timing: t.timing || '1m'
-        };
-      }
-      return t;
-    });
-    setTables(updatedTables);
-    setLocalStore('tables', updatedTables);
+    // Update corresponding dining table status to occupied with guest info (DINE-IN ONLY)
+    if (!isTakeawayOrder) {
+      const updatedTables = tables.map(t => {
+        if (normalizeTbl(t.number) === normalizeTbl(finalOrder.table_number) || t.id === finalOrder.table_number) {
+          return {
+            ...t,
+            status: 'occupied',
+            current_order_id: finalOrder.id,
+            current_customer_name: finalOrder.customer_name,
+            current_customer_phone: finalOrder.customer_phone,
+            timing: t.timing || '1m'
+          };
+        }
+        return t;
+      });
+      setTables(updatedTables);
+      setLocalStore('tables', updatedTables);
+    }
 
     // Permanently record customer profile in local CRM
     if (finalOrder.customer_phone) {
       saveCustomerProfile({
         name: finalOrder.customer_name,
         phone: finalOrder.customer_phone,
-        tableNumber: finalOrder.table_number,
+        tableNumber: isTakeawayOrder ? 'Takeaway' : finalOrder.table_number,
         orderId: finalOrder.id,
         orderTotal: finalOrder.total || finalOrder.total_amount,
         items: finalOrder.items || [],
@@ -3479,30 +3506,34 @@ export default function App() {
     }
 
     const isWaiterOrder = Boolean(newOrder.placed_by_waiter_id || newOrder.order_source === 'Waiter Terminal');
-    const actionLabel = isAddonOrder 
-      ? `ADD-ON ROUND ${roundNumber}` 
-      : (isWaiterOrder ? `WAITER ORDER (${newOrder.placed_by_waiter_id || 'TERMINAL'})` : 'QR SELF-ORDER');
+    const actionLabel = isTakeawayOrder
+      ? 'COUNTER TAKEAWAY'
+      : (isAddonOrder 
+          ? `ADD-ON ROUND ${roundNumber}` 
+          : (isWaiterOrder ? `WAITER ORDER (${newOrder.placed_by_waiter_id || 'TERMINAL'})` : 'QR SELF-ORDER'));
 
     recordEmployeeActivity({
       employeeName: isWaiterOrder ? (newOrder.placed_by_waiter_name || authUser?.name || 'Waiter') : (finalOrder.customer_name || 'Guest User'),
-      employeeRole: isWaiterOrder ? 'Floor Waiter' : `Guest / ${actionLabel}`,
-      tableNumber: finalOrder.table_number || 'Online',
-      actionType: isAddonOrder ? 'ORDER_ADDON_PLACED' : (isWaiterOrder ? 'ORDER_PLACED_WAITER' : 'ORDER_PLACED_QR'),
+      employeeRole: isWaiterOrder ? 'Floor Waiter' : (isTakeawayOrder ? 'Counter POS' : `Guest / ${actionLabel}`),
+      tableNumber: isTakeawayOrder ? 'Takeaway' : (finalOrder.table_number || 'Online'),
+      actionType: isTakeawayOrder ? 'TAKEAWAY_ORDER_PLACED' : (isAddonOrder ? 'ORDER_ADDON_PLACED' : (isWaiterOrder ? 'ORDER_PLACED_WAITER' : 'ORDER_PLACED_QR')),
       amount: newOrder.total || newOrder.total_amount || 0,
       paymentMethod: finalOrder.payment_mode || 'Cash',
-      details: `${actionLabel} placed at Table ${finalOrder.table_number} by ${isWaiterOrder ? `Waiter ${newOrder.placed_by_waiter_name || 'Staff'}` : (finalOrder.customer_name || 'Guest')} (+${newOrder.items_summary}) — Continuous Bill: ₹${finalOrder.total}`,
+      details: isTakeawayOrder
+        ? `Counter Takeaway order #${finalOrder.id} placed for ${finalOrder.customer_name} (${finalOrder.items_summary}) — ₹${finalOrder.total}`
+        : `${actionLabel} placed at Table ${finalOrder.table_number} by ${isWaiterOrder ? `Waiter ${newOrder.placed_by_waiter_name || 'Staff'}` : (finalOrder.customer_name || 'Guest')} (+${newOrder.items_summary}) — Continuous Bill: ₹${finalOrder.total}`,
       type: 'order',
-      color: isWaiterOrder ? 'indigo' : (isAddonOrder ? 'blue' : 'orange')
+      color: isTakeawayOrder ? 'purple' : (isWaiterOrder ? 'indigo' : (isAddonOrder ? 'blue' : 'orange'))
     });
 
     // Kitchen & Admin audible chime and clear voice alert for the exact table
     if (isStaffSession) {
       if (userRole === 'chef' || userRole === 'admin') {
         triggerStaffOrderNotification({
-          tableNumber: finalOrder.table_number || '01',
+          tableNumber: isTakeawayOrder ? 'Takeaway' : (finalOrder.table_number || '01'),
           orderNumber: finalOrder.id || '',
           itemsSummary: isAddonOrder ? (newOrder.items_summary || 'Add-on round') : finalOrder.items_summary,
-          customerName: finalOrder.customer_name || 'Guest',
+          customerName: finalOrder.customer_name || (isTakeawayOrder ? 'Walk-in Customer' : 'Guest'),
           isAddon: isAddonOrder,
           paymentMode: finalOrder.payment_mode
         });
@@ -3512,9 +3543,13 @@ export default function App() {
 
       // Display floating staff banner toast on the POS
       setActiveToast({
-        title: isAddonOrder ? `💧 Table ${finalOrder.table_number} Add-On Added to Bill (Round ${roundNumber})!` : `🔔 Table ${finalOrder.table_number} New Order!`,
-        message: `${finalOrder.customer_name || 'Guest'}: Added ${newOrder.items_summary} • Continuous Bill: ₹${finalOrder.total}`,
-        type: isAddonOrder ? 'info' : 'success'
+        title: isTakeawayOrder
+          ? '📦 New Counter Takeaway Order!'
+          : (isAddonOrder ? `💧 Table ${finalOrder.table_number} Add-On Added to Bill (Round ${roundNumber})!` : `🔔 Table ${finalOrder.table_number} New Order!`),
+        message: isTakeawayOrder
+          ? `${finalOrder.customer_name || 'Walk-in Customer'}: ${finalOrder.items_summary} • Total: ₹${finalOrder.total}`
+          : `${finalOrder.customer_name || 'Guest'}: Added ${newOrder.items_summary} • Continuous Bill: ₹${finalOrder.total}`,
+        type: isTakeawayOrder ? 'success' : (isAddonOrder ? 'info' : 'success')
       });
     }
 
@@ -3523,7 +3558,9 @@ export default function App() {
     // 2. DISPATCH LIVE TO SUPABASE CLOUD POSTGRESQL (table_sessions, orders, order_items, customers)
     try {
       const supaResult = await dispatchOrderToSupabase({
-        table_number: finalOrder.table_number,
+        table_number: isTakeawayOrder ? 'Takeaway' : finalOrder.table_number,
+        channel: isTakeawayOrder ? 'Takeaway' : (finalOrder.channel || 'Dine-In'),
+        order_source: isTakeawayOrder ? 'Takeaway' : (finalOrder.order_source || 'Table QR'),
         customer_name: finalOrder.customer_name,
         customer_phone: finalOrder.customer_phone,
         items: finalOrder.items || [],

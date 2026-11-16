@@ -405,6 +405,14 @@ export default function CustomerMenu({
 
   const isOrderActive = (order) => {
     if (!order) return false;
+    // Takeaway orders can NEVER lock a dining table QR session!
+    const tbl = String(order.table_number || '').toLowerCase();
+    const ch = String(order.channel || '').toLowerCase();
+    const src = String(order.order_source || '').toLowerCase();
+    if (tbl.includes('takeaway') || tbl.includes('parcel') || ch === 'takeaway' || src === 'takeaway') {
+      return false;
+    }
+
     const st = String(order.status || '').toLowerCase().trim();
     const paySt = String(order.payment_status || '').toLowerCase().trim();
 

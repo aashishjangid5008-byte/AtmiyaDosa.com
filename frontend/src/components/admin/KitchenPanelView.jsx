@@ -764,7 +764,9 @@ export default function KitchenPanelView({
               <div className="flex items-center space-x-2">
                 <span className="w-2 h-2 rounded-full bg-amber-400"></span>
                 <span className="font-bold text-xs tracking-wide uppercase text-amber-300">
-                  New Order · Table {newOrderAlert.table_number || 'Dine-In'}
+                  {String(newOrderAlert.table_number || '').toLowerCase().includes('takeaway') || String(newOrderAlert.channel || '').toLowerCase() === 'takeaway' || String(newOrderAlert.order_source || '').toLowerCase() === 'takeaway'
+                    ? '📦 New Takeaway Order'
+                    : `New Order · Table ${newOrderAlert.table_number || 'Dine-In'}`}
                 </span>
               </div>
               <button 
@@ -1069,7 +1071,9 @@ export default function KitchenPanelView({
                 <div className="font-bold text-sm uppercase">ATMIYA DOSA HUB</div>
                 <div className="text-[10px] text-slate-500">PETLAD · KITCHEN COPY</div>
                 <div className="font-bold text-base mt-1 text-slate-900">
-                  TABLE: {printingKotOrder.table_number || 'DINE-IN'}
+                  {String(printingKotOrder.table_number || '').toLowerCase().includes('takeaway') || String(printingKotOrder.channel || '').toLowerCase() === 'takeaway'
+                    ? 'TYPE: TAKEAWAY / PARCEL'
+                    : `TABLE: ${printingKotOrder.table_number || 'DINE-IN'}`}
                 </div>
                 <div className="text-[10px] text-slate-500">
                   KOT #{printingKotOrder.id} · {printingKotOrder.time || 'NOW'}
@@ -1193,9 +1197,11 @@ export default function KitchenPanelView({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-bold text-base text-slate-900 tracking-tight">
-                {String(order.table_number || '').toLowerCase().startsWith('table') 
-                  ? order.table_number 
-                  : `Table ${order.table_number || 'Dine-In'}`}
+                {String(order.table_number || '').toLowerCase().includes('takeaway') || String(order.table_number || '').toLowerCase().includes('parcel') || String(order.channel || '').toLowerCase() === 'takeaway' || String(order.order_source || '').toLowerCase() === 'takeaway'
+                  ? '📦 Takeaway / Parcel'
+                  : (String(order.table_number || '').toLowerCase().startsWith('table') 
+                      ? order.table_number 
+                      : `Table ${order.table_number || 'Dine-In'}`)}
               </h3>
               <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase border ${
                 isPlaced && checkedCount === 0
@@ -1613,7 +1619,9 @@ export default function KitchenPanelView({
                       type: 'broadcast',
                       event: 'food_ready_for_pickup',
                       payload: {
-                        tableNumber: (order.table_number || '').replace(/table/i, '').trim(),
+                        tableNumber: String(order.table_number || '').toLowerCase().includes('takeaway') || String(order.channel || '').toLowerCase() === 'takeaway'
+                          ? 'Takeaway'
+                          : (order.table_number || '').replace(/table/i, '').trim(),
                         orderId: order.id,
                         orderNumber: order.order_number || order.id,
                         itemsSummary: displayItems.map(i => `${i.qty || 1}x ${i.name}`).join(', ')

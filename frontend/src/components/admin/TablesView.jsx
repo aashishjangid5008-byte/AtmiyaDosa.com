@@ -92,6 +92,14 @@ export default function TablesView({
   // Helper to determine if an order is active for dining / billing
   const isOrderDiningActive = (o) => {
     if (!o) return false;
+    // Takeaway orders are not dining table orders
+    const tbl = String(o.table_number || '').toLowerCase();
+    const ch = String(o.channel || '').toLowerCase();
+    const src = String(o.order_source || '').toLowerCase();
+    if (tbl.includes('takeaway') || tbl.includes('parcel') || ch === 'takeaway' || src === 'takeaway') {
+      return false;
+    }
+
     const st = String(o.status || '').toLowerCase().trim();
     const paySt = String(o.payment_status || '').toLowerCase().trim();
     const isPaid = paySt === 'paid' || paySt === 'void';
