@@ -22,7 +22,8 @@ import {
   ChefHat,
   Flame,
   BellRing,
-  Lock
+  Lock,
+  Trash2
 } from 'lucide-react';
 import { getTranslation } from '../../lib/translations';
 import { downloadSinglePageBillPdf, printSinglePageReceipt } from '../../lib/generateBillPdf';
@@ -36,6 +37,7 @@ export default function OrdersView({
   onMarkCashPaymentDone,
   onCancelOrderWithReason,
   onAddNewOrder, 
+  onDeleteOrders,
   currentStaff = { name: 'Admin Owner', role: 'Admin' },
   currentLang,
   theme = 'light',
@@ -46,6 +48,11 @@ export default function OrdersView({
   const [statusFilter, setStatusFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('all'); // 'all', 'today', 'yesterday'
   const [selectedOrder, setSelectedOrder] = useState(null);
+
+  // Multi-select & Permanent Deletion State
+  const [selectedOrderIds, setSelectedOrderIds] = useState([]);
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState({ isOpen: false, targetIds: [], targetNumbers: [] });
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Mark all current orders as seen after user has spent 2s viewing the Orders page
   useEffect(() => {
@@ -225,6 +232,36 @@ export default function OrdersView({
       return tsB - tsA; // Newest first
     });
   }, [filteredOrders]);
+
+  const handleToggleSelectOrder = (orderId) => {
+    setSelectedOrderIds(prev => 
+      prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedOrderIds.length === sortedFilteredOrders.length) {
+      setSelectedOrderIds([]);
+    } else {
+      setSelectedOrderIds(sortedFilteredOrders.map(o => o.id));
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmModal.targetIds || deleteConfirmModal.targetIds.length === 0) return;
+    setIsDeleting(true);
+    try {
+      if (onDeleteOrders) {
+        await onDeleteOrders(deleteConfirmModal.targetIds);
+      }
+      setSelectedOrderIds(prev => prev.filter(id => !deleteConfirmModal.targetIds.includes(id)));
+      setDeleteConfirmModal({ isOpen: false, targetIds: [], targetNumbers: [] });
+    } catch (e) {
+      console.error('Delete order error:', e);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleConfirmCashPayment = () => {
     if (!cashCollectingOrder) return;
@@ -457,12 +494,60 @@ export default function OrdersView({
         </div>
       </div>
 
+      {/* BATCH ACTIONS BAR (WHEN ORDERS ARE SELECTED) */}
+      {selectedOrderIds.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 p-3 px-4 bg-rose-50 border border-rose-200 rounded-2xl shadow-xs animate-in fade-in duration-150">
+          <div className="flex items-center gap-2.5">
+            <span className="w-6 h-6 rounded-full bg-rose-600 text-white text-xs font-black flex items-center justify-center font-mono shadow-xs">
+              {selectedOrderIds.length}
+            </span>
+            <span className="text-xs font-bold text-rose-950">
+              {selectedOrderIds.length} order{selectedOrderIds.length > 1 ? 's' : ''} selected
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedOrderIds([])}
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-white transition cursor-pointer border border-transparent hover:border-slate-200"
+            >
+              Clear Selection
+            </button>
+            <button
+              onClick={() => {
+                const targetNums = sortedFilteredOrders
+                  .filter(o => selectedOrderIds.includes(o.id))
+                  .map(o => o.id || o.order_number);
+                setDeleteConfirmModal({
+                  isOpen: true,
+                  targetIds: [...selectedOrderIds],
+                  targetNumbers: targetNums
+                });
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white transition shadow-xs cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected ({selectedOrderIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 4. ORDERS DATA TABLE (TOAST / SQUARE STYLE) */}
       <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-xs overflow-hidden`}>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className={`${headerBg} uppercase text-[10px] font-black tracking-wider border-b`}>
               <tr>
+                <th className="py-3 px-3 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all orders"
+                    checked={sortedFilteredOrders.length > 0 && selectedOrderIds.length === sortedFilteredOrders.length}
+                    onChange={handleToggleSelectAll}
+                    className="w-4 h-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                    title="Select All Orders"
+                  />
+                </th>
                 <th className="py-3 px-4">Order ID & Source</th>
                 <th className="py-3 px-4">Table</th>
                 <th className="py-3 px-4">Date & Time</th>
@@ -478,7 +563,7 @@ export default function OrdersView({
             <tbody className={`divide-y ${rowBorder}`}>
               {sortedFilteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan="10" className="p-8 text-center text-slate-400 font-medium">
+                  <td colSpan="11" className="p-8 text-center text-slate-400 font-medium">
                     {channelTab === 'completed' 
                       ? 'No completed orders found. Orders settled with cash or UPI are stored here permanently with full dates and times.'
                       : 'No orders matching the active criteria.'}
@@ -498,9 +583,23 @@ export default function OrdersView({
                   const isUpiPending = !isCancelled && !isPaid && isOnline && order.payment_status !== 'Void';
                   const isCashPending = !isCancelled && !isPaid && !isOnline && order.payment_status !== 'Void';
                   const elapsedMins = getElapsedWaitMinutes(order.placed_at || order.time);
+                  const isSelected = selectedOrderIds.includes(order.id);
 
                   return (
-                    <tr key={`${order.id}-${idx}`} className={`${rowHover} transition ${isCancelled ? 'bg-rose-50/40 opacity-60' : ''}`}>
+                    <tr 
+                      key={`${order.id}-${idx}`} 
+                      className={`${rowHover} transition ${isSelected ? 'bg-orange-50/50' : ''} ${isCancelled ? 'bg-rose-50/40 opacity-60' : ''}`}
+                    >
+                      {/* Checkbox */}
+                      <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select order ${order.id}`}
+                          checked={isSelected}
+                          onChange={() => handleToggleSelectOrder(order.id)}
+                          className="w-4 h-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                        />
+                      </td>
                       
                       {/* Order ID & Source */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
@@ -794,6 +893,20 @@ export default function OrdersView({
                               <Ban className="w-3.5 h-3.5" />
                             </button>
                           )}
+
+                          <button
+                            onClick={() => {
+                              setDeleteConfirmModal({
+                                isOpen: true,
+                                targetIds: [order.id],
+                                targetNumbers: [order.id || order.order_number]
+                              });
+                            }}
+                            className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition cursor-pointer border border-rose-200"
+                            title="Permanently Delete Order from Cloud DB"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
 
@@ -997,6 +1110,64 @@ export default function OrdersView({
               >
                 <Download className="w-4 h-4" />
                 <span>PDF Bill</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: PERMANENT ORDER DELETION CONFIRMATION */}
+      {deleteConfirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className={`${cardBg} rounded-2xl p-6 max-w-md w-full border ${cardBorder} shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150`}>
+            <div className="flex items-start space-x-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className={`text-base font-black ${textPrimary} font-heading`}>
+                  Permanently Delete {deleteConfirmModal.targetIds.length > 1 ? `${deleteConfirmModal.targetIds.length} Orders` : 'Order'}?
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  This will permanently wipe the order{deleteConfirmModal.targetIds.length > 1 ? 's' : ''} and all items from Supabase Cloud DB. If occupied tables are freed, they will automatically switch back to Vacant.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-rose-50/70 border border-rose-200/80 rounded-xl p-3 text-xs space-y-1.5">
+              <div className="font-bold text-rose-900 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>Warning: Irreversible Cloud Database Deletion</span>
+              </div>
+              <div className="text-slate-600 font-mono text-[11px] max-h-24 overflow-y-auto pt-1 break-words">
+                {deleteConfirmModal.targetNumbers.slice(0, 10).join(', ')}
+                {deleteConfirmModal.targetNumbers.length > 10 && ` +${deleteConfirmModal.targetNumbers.length - 10} more`}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteConfirmModal({ isOpen: false, targetIds: [], targetNumbers: [] })}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white transition shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? (
+                  <span>Deleting...</span>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Permanently Delete</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

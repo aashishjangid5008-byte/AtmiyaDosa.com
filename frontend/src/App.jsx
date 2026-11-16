@@ -78,6 +78,9 @@ import {
   assignDishesToCategoryCloud,
   saveMenuItemToSupabaseCloud,
   deleteMenuItemFromSupabaseCloud,
+  permanentlyDeleteOrdersFromSupabase,
+  purgeAllOrdersFromSupabaseCloud,
+  purgeTodayOrdersFromSupabaseCloud,
   ensureValidUuid,
   API_BASE_URL
 } from './lib/supabase';
@@ -2129,6 +2132,16 @@ export default function App() {
             loadFreshState();
             refreshOrdersFromSupabase();
           })
+          .on('broadcast', { event: 'orders_permanently_deleted' }, () => {
+            console.log('[SUPABASE REALTIME] Detected orders_permanently_deleted broadcast');
+            loadFreshState();
+            refreshOrdersFromSupabase();
+          })
+          .on('broadcast', { event: 'restaurant_data_reset' }, () => {
+            console.log('[SUPABASE REALTIME] Detected restaurant_data_reset broadcast');
+            loadFreshState();
+            refreshOrdersFromSupabase();
+          })
           .on('broadcast', { event: 'menu_item_updated' }, ({ payload }) => {
             console.log('[SUPABASE REALTIME] Incoming menu_item_updated broadcast:', payload);
             if (!payload) return;
@@ -3924,6 +3937,186 @@ export default function App() {
     } catch (e) {
       console.warn('Notice: Update cloud orders exception:', e);
     }
+  };
+
+  const handleDeleteOrders = async (orderIdsOrNumbers = []) => {
+    if (!orderIdsOrNumbers || orderIdsOrNumbers.length === 0) return;
+
+    const idsSet = new Set(orderIdsOrNumbers.map(x => String(x || '').toLowerCase().replace('#', '').trim()));
+    
+    // Find affected orders to know which tables were occupied
+    const affectedOrders = (orders || []).filter(o => {
+      const ordId = String(o.id || '').toLowerCase().replace('#', '').trim();
+      const ordNum = String(o.order_number || '').toLowerCase().replace('#', '').trim();
+      const ordDbId = String(o.supabase_order_id || '').toLowerCase().replace('#', '').trim();
+      return idsSet.has(ordId) || idsSet.has(ordNum) || idsSet.has(ordDbId);
+    });
+
+    const updatedOrders = (orders || []).filter(o => {
+      const ordId = String(o.id || '').toLowerCase().replace('#', '').trim();
+      const ordNum = String(o.order_number || '').toLowerCase().replace('#', '').trim();
+      const ordDbId = String(o.supabase_order_id || '').toLowerCase().replace('#', '').trim();
+      return !idsSet.has(ordId) && !idsSet.has(ordNum) && !idsSet.has(ordDbId);
+    });
+
+    setOrders(updatedOrders);
+    setLocalStore('orders', updatedOrders);
+    try {
+      localStorage.setItem('atmiya_orders', JSON.stringify(updatedOrders));
+    } catch (e) {}
+
+    // Clean seen orders
+    setSeenOrderIds(prev => (prev || []).filter(id => !idsSet.has(String(id).toLowerCase().replace('#', '').trim())));
+
+    // Check affected dining tables and vacate them if they have no other active orders
+    const affectedTables = Array.from(new Set(
+      affectedOrders.map(o => o.table_number).filter(t => t && String(t).toLowerCase() !== 'takeaway' && String(t).toLowerCase() !== 'quick pos')
+    ));
+
+    affectedTables.forEach(tNum => {
+      const remainingTableOrders = updatedOrders.filter(o => 
+        String(o.table_number).toLowerCase().trim() === String(tNum).toLowerCase().trim() &&
+        o.status !== 'Cancelled' && o.status !== 'Completed' && o.status !== 'Served'
+      );
+      if (remainingTableOrders.length === 0) {
+        handleVacateTable(tNum);
+      }
+    });
+
+    playSound('trash');
+
+    setActiveToast({
+      title: '🗑️ Order(s) Permanently Deleted',
+      message: `Permanently removed ${orderIdsOrNumbers.length} order(s) from Supabase Cloud DB.`,
+      type: 'success'
+    });
+
+    recordEmployeeActivity({
+      employeeName: authUser?.name || 'Admin',
+      employeeRole: authUser?.role || 'Admin',
+      tableNumber: 'Orders',
+      actionType: 'ORDERS_DELETED',
+      details: `Permanently deleted ${orderIdsOrNumbers.length} order(s) from Cloud DB (${orderIdsOrNumbers.slice(0, 5).join(', ')})`,
+      type: 'order',
+      color: 'rose'
+    });
+
+    // Cloud DB deletion (order_items, orders, table_sessions)
+    try {
+      await permanentlyDeleteOrdersFromSupabase(orderIdsOrNumbers);
+    } catch (err) {
+      console.warn('Error deleting orders from Supabase:', err);
+    }
+  };
+
+  const handleResetDashboardData = async (mode = 'today') => {
+    playSound('alert');
+
+    if (mode === 'all') {
+      // 1. Wipe all orders locally
+      setOrders([]);
+      setLocalStore('orders', []);
+      try {
+        localStorage.removeItem('atmiya_orders');
+        localStorage.removeItem('kds_cleared_order_ids');
+      } catch (e) {}
+      setSeenOrderIds([]);
+      setServiceCalls([]);
+      setLocalStore('service_calls', []);
+
+      // 2. Vacate all dining tables
+      const vacatedTables = tables.map(t => ({
+        ...t,
+        status: 'available',
+        current_order_id: null,
+        current_customer_name: null,
+        current_customer_phone: null,
+        timing: null,
+        food_delivered_at: null,
+        turnover_notified: false
+      }));
+      setTables(vacatedTables);
+      setLocalStore('tables', vacatedTables);
+
+      recordEmployeeActivity({
+        employeeName: authUser?.name || 'Admin',
+        employeeRole: authUser?.role || 'Admin',
+        tableNumber: 'Dashboard',
+        actionType: 'DATA_FACTORY_RESET',
+        details: 'Full operational factory reset executed (All orders wiped; Menu 100% preserved)',
+        type: 'system',
+        color: 'rose'
+      });
+
+      setActiveToast({
+        title: '✨ Full Operational Reset Completed',
+        message: 'All orders, sessions, and live queues wiped. Menu items 100% preserved.',
+        type: 'success'
+      });
+
+      // 3. Purge from Supabase Cloud
+      try {
+        await purgeAllOrdersFromSupabaseCloud();
+      } catch (err) {
+        console.warn('Error purging all orders from Supabase:', err);
+      }
+    } else {
+      // Mode === 'today'
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const startMs = startOfToday.getTime();
+
+      // Filter out today's orders
+      const remainingOrders = (orders || []).filter(o => {
+        const t = new Date(o.placed_at || o.time || o.created_at).getTime();
+        return !isNaN(t) && t < startMs;
+      });
+
+      setOrders(remainingOrders);
+      setLocalStore('orders', remainingOrders);
+      try {
+        localStorage.setItem('atmiya_orders', JSON.stringify(remainingOrders));
+      } catch (e) {}
+
+      // Vacate active dining tables that only had orders from today
+      const vacatedTables = tables.map(t => ({
+        ...t,
+        status: 'available',
+        current_order_id: null,
+        current_customer_name: null,
+        current_customer_phone: null,
+        timing: null,
+        food_delivered_at: null,
+        turnover_notified: false
+      }));
+      setTables(vacatedTables);
+      setLocalStore('tables', vacatedTables);
+
+      recordEmployeeActivity({
+        employeeName: authUser?.name || 'Admin',
+        employeeRole: authUser?.role || 'Admin',
+        tableNumber: 'Dashboard',
+        actionType: 'TODAY_QUEUE_RESET',
+        details: "Reset today's orders queue and floor occupancy (Menu preserved)",
+        type: 'system',
+        color: 'orange'
+      });
+
+      setActiveToast({
+        title: "✨ Today's Operational Queue Reset",
+        message: "Today's live queue cleared and tables vacated. Previous days preserved.",
+        type: 'success'
+      });
+
+      // Cloud purge today
+      try {
+        await purgeTodayOrdersFromSupabaseCloud();
+      } catch (err) {
+        console.warn('Error purging today orders from Supabase:', err);
+      }
+    }
+
+    refreshOrdersFromSupabase();
   };
 
   const handleToggleStock = (itemId) => {
@@ -6061,6 +6254,7 @@ export default function App() {
                 onOpenAddItem={() => setActiveTab('menu')}
                 onOpenGenerateQR={() => setActiveTab('qr')}
                 onVacateTable={handleVacateTable}
+                onResetDashboardData={handleResetDashboardData}
               />
             ) : isChefUser ? (
               <KitchenPanelView
@@ -6154,6 +6348,7 @@ export default function App() {
               onMarkCashPaymentDone={handleMarkCashPaymentDone}
               onCancelOrderWithReason={handleCancelOrderWithReason}
               onAddNewOrder={() => setViewMode('customer')}
+              onDeleteOrders={handleDeleteOrders}
               currentStaff={{ name: authUser?.name || 'Admin Owner', role: authUser?.role || 'Admin' }}
               currentLang={currentLang}
               theme={theme}

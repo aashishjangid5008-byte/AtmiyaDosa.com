@@ -49,7 +49,8 @@ import {
   ToggleLeft,
   ToggleRight,
   SlidersHorizontal,
-  ChevronDown
+  ChevronDown,
+  RotateCcw
 } from 'lucide-react';
 import { getTranslation, getCategoryLabel, getDishDisplayName } from '../../lib/translations';
 import { playSound } from '../../lib/sound';
@@ -130,6 +131,7 @@ export default function ExecutiveDashboard({
   onOpenGenerateQR,
   onOpenApplyCoupon,
   onVacateTable,
+  onResetDashboardData,
   authUser = null
 }) {
   const t = (key) => getTranslation(currentLang, key);
@@ -173,6 +175,25 @@ export default function ExecutiveDashboard({
   };
 
   const [showCustomizeModal, setShowCustomizeModal] = useState(false);
+
+  // Reset Data Modal State
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetMode, setResetMode] = useState('today'); // 'today' | 'all'
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleConfirmReset = async () => {
+    setIsResetting(true);
+    try {
+      if (onResetDashboardData) {
+        await onResetDashboardData(resetMode);
+      }
+      setShowResetModal(false);
+    } catch (err) {
+      console.error('Reset data error:', err);
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   // 2. Editable Daily Target Sales Goal (persisted in localStorage)
   const [dailyTarget, setDailyTarget] = useState(() => {
@@ -1387,6 +1408,17 @@ export default function ExecutiveDashboard({
             <SlidersHorizontal className="w-3.5 h-3.5 text-orange-600" />
             <span className="hidden sm:inline">{t('customizeView') || 'Customize View'}</span>
             <span className="sm:hidden">{t('customizeView') || 'Views'}</span>
+          </button>
+
+          {/* RESET DATA BUTTON */}
+          <button
+            onClick={() => setShowResetModal(true)}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 text-xs font-medium transition cursor-pointer shadow-2xs"
+            title="Reset operational dashboard data, orders, or active queue"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+            <span className="hidden sm:inline">Reset Data</span>
+            <span className="sm:hidden">Reset</span>
           </button>
 
           <button
@@ -2796,6 +2828,119 @@ export default function ExecutiveDashboard({
               </>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* RESET DASHBOARD DATA MODAL */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 border border-rose-100">
+                  <RotateCcw className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 font-heading">Reset Operational Data</h3>
+                  <p className="text-xs text-slate-500">Manage queue reset & operational cleanup</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowResetModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Menu Items Safety Guarantee Banner */}
+            <div className="p-3 bg-emerald-50/80 border border-emerald-200/90 rounded-xl flex items-start gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="text-xs text-emerald-950 font-medium">
+                <span className="font-bold">Zero Risk to Menu:</span> All your menu categories, dishes, prices, and photos are 100% protected and will NOT be touched.
+              </div>
+            </div>
+
+            {/* Mode selection radio cards */}
+            <div className="space-y-2 pt-1">
+              <label 
+                onClick={() => setResetMode('today')}
+                className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition ${
+                  resetMode === 'today' 
+                    ? 'border-orange-500 bg-orange-50/40 ring-1 ring-orange-400/30' 
+                    : 'border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <input 
+                  type="radio" 
+                  name="resetMode" 
+                  checked={resetMode === 'today'} 
+                  onChange={() => setResetMode('today')} 
+                  className="mt-0.5 text-orange-600 focus:ring-orange-500"
+                />
+                <div>
+                  <div className="text-xs font-bold text-slate-900">Reset Today's Queue & Floor (Recommended)</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">
+                    Clears today's live orders, releases occupied dining tables back to Vacant, and clears the kitchen KDS queue. Historical orders from previous days remain intact.
+                  </div>
+                </div>
+              </label>
+
+              <label 
+                onClick={() => setResetMode('all')}
+                className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition ${
+                  resetMode === 'all' 
+                    ? 'border-rose-500 bg-rose-50/40 ring-1 ring-rose-400/30' 
+                    : 'border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <input 
+                  type="radio" 
+                  name="resetMode" 
+                  checked={resetMode === 'all'} 
+                  onChange={() => setResetMode('all')} 
+                  className="mt-0.5 text-rose-600 focus:ring-rose-500"
+                />
+                <div>
+                  <div className="text-xs font-bold text-rose-950">Complete Operational Wipe</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">
+                    Permanently purges ALL orders, table sessions, and employee activity logs from Cloud DB. All tables reset to Vacant.
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            {/* Confirmation actions */}
+            <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={() => setShowResetModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={handleConfirmReset}
+                className={`flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white transition shadow-sm cursor-pointer disabled:opacity-50 ${
+                  resetMode === 'all' 
+                    ? 'bg-rose-600 hover:bg-rose-700 active:bg-rose-800' 
+                    : 'bg-orange-600 hover:bg-orange-700 active:bg-orange-800'
+                }`}
+              >
+                {isResetting ? (
+                  <span>Resetting Data...</span>
+                ) : (
+                  <>
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>{resetMode === 'all' ? 'Perform Full Wipe' : 'Confirm Reset Today'}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

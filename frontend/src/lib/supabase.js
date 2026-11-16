@@ -2034,5 +2034,238 @@ export const updateTableInSupabaseApi = async (tableIdOrNum, updates) => {
   } catch (e) {}
 };
 
+/**
+ * Permanently deletes specified orders and their line items from Supabase Cloud DB.
+ * Also vacates associated dining tables and closes active sessions.
+ */
+export const permanentlyDeleteOrdersFromSupabase = async (orderIdsOrNumbers = []) => {
+  if (!orderIdsOrNumbers || orderIdsOrNumbers.length === 0) return { success: true, count: 0 };
 
+  const rawList = Array.isArray(orderIdsOrNumbers) ? orderIdsOrNumbers : [orderIdsOrNumbers];
+  const cleanNums = rawList.map(x => String(x || '').replace('#', '').trim()).filter(Boolean);
+  const cleanUuids = rawList.map(x => String(x || '').trim()).filter(x => isValidUuid(x));
 
+  try {
+    // 1. Locate all target rows in orders table to discover UUIDs, table IDs/numbers, and session IDs
+    let matchedOrders = [];
+    const orClauses = [];
+    if (cleanUuids.length > 0) {
+      orClauses.push(`id.in.(${cleanUuids.join(',')})`);
+    }
+    if (cleanNums.length > 0) {
+      orClauses.push(`order_number.in.(${cleanNums.join(',')})`);
+    }
+
+    if (orClauses.length > 0) {
+      const { data } = await supabaseAdmin
+        .from('orders')
+        .select('id, order_number, table_id, table_number, session_id')
+        .or(orClauses.join(','));
+      if (data && Array.isArray(data)) {
+        matchedOrders = data;
+      }
+    }
+
+    const allTargetUuids = Array.from(new Set([
+      ...cleanUuids,
+      ...matchedOrders.map(o => o.id).filter(Boolean)
+    ]));
+
+    const affectedSessionIds = Array.from(new Set(
+      matchedOrders.map(o => o.session_id).filter(Boolean)
+    ));
+
+    const affectedTableNums = Array.from(new Set(
+      matchedOrders.map(o => o.table_number).filter(t => t && String(t).toLowerCase() !== 'takeaway' && String(t).toLowerCase() !== 'quick pos')
+    ));
+
+    // 2. Delete child rows from order_items first
+    if (allTargetUuids.length > 0) {
+      const { error: itemsDelErr } = await supabaseAdmin
+        .from('order_items')
+        .delete()
+        .in('order_id', allTargetUuids);
+      if (itemsDelErr) {
+        console.warn('[SUPABASE] order_items deletion notice:', itemsDelErr.message);
+      }
+    }
+
+    // 3. Delete parent rows from orders
+    if (allTargetUuids.length > 0) {
+      const { error: ordsDelErr } = await supabaseAdmin
+        .from('orders')
+        .delete()
+        .in('id', allTargetUuids);
+      if (ordsDelErr) {
+        console.warn('[SUPABASE] orders deletion notice:', ordsDelErr.message);
+      }
+    } else if (cleanNums.length > 0) {
+      const { error: ordsDelErr } = await supabaseAdmin
+        .from('orders')
+        .delete()
+        .in('order_number', cleanNums);
+      if (ordsDelErr) {
+        console.warn('[SUPABASE] orders deletion by num notice:', ordsDelErr.message);
+      }
+    }
+
+    // 4. Delete associated table_sessions
+    if (affectedSessionIds.length > 0) {
+      try {
+        await supabaseAdmin
+          .from('table_sessions')
+          .delete()
+          .in('id', affectedSessionIds);
+      } catch (sessErr) {
+        console.warn('[SUPABASE] table_sessions delete notice:', sessErr);
+      }
+    }
+
+    // 5. Vacate dining tables if no remaining active orders
+    for (const tblNum of affectedTableNums) {
+      try {
+        const { data: remainingOrders } = await supabaseAdmin
+          .from('orders')
+          .select('id, status')
+          .eq('table_number', tblNum)
+          .neq('status', 'CANCELLED')
+          .neq('status', 'SERVED');
+
+        if (!remainingOrders || remainingOrders.length === 0) {
+          const digits = tblNum.replace(/\D/g, '');
+          const supabaseTNum = digits ? `T-${digits.padStart(2, '0')}` : tblNum;
+          const tNoDash = digits ? `T${digits.padStart(2, '0')}` : tblNum;
+          const tShort = digits ? `T${parseInt(digits, 10)}` : tblNum;
+
+          await supabaseAdmin
+            .from('restaurant_tables')
+            .update({ status: 'VACANT', current_order_id: null, current_session_id: null })
+            .or(`table_number.eq.${supabaseTNum},table_number.eq.${tNoDash},table_number.eq.${tShort},table_number.eq.${tblNum}`);
+        }
+      } catch (tblErr) {
+        console.warn('[SUPABASE] Table vacate check notice:', tblErr);
+      }
+    }
+
+    // 6. Multi-Device Realtime Broadcast
+    try {
+      const channel = supabase.channel('restaurant_alerts');
+      await channel.send({
+        type: 'broadcast',
+        event: 'orders_permanently_deleted',
+        payload: {
+          deletedOrderIds: allTargetUuids,
+          deletedOrderNumbers: cleanNums,
+          affectedTables: affectedTableNums
+        }
+      });
+    } catch (bcastErr) {}
+
+    return {
+      success: true,
+      count: Math.max(allTargetUuids.length, cleanNums.length)
+    };
+  } catch (err) {
+    console.error('[SUPABASE] Permanent order deletion error:', err);
+    return { success: false, error: err.message };
+  }
+};
+
+/**
+ * Factory Data Reset: Purges ALL orders, order_items, and table_sessions from Supabase Cloud.
+ * Resets all dining tables to VACANT.
+ * CRITICAL: Menu items, categories, and restaurant configuration are 100% PRESERVED!
+ */
+export const purgeAllOrdersFromSupabaseCloud = async () => {
+  try {
+    // 1. Delete all order_items
+    await supabaseAdmin
+      .from('order_items')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    // 2. Delete all orders
+    await supabaseAdmin
+      .from('orders')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    // 3. Delete all table_sessions
+    await supabaseAdmin
+      .from('table_sessions')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    // 4. Reset all restaurant_tables to VACANT
+    await supabaseAdmin
+      .from('restaurant_tables')
+      .update({ status: 'VACANT', current_order_id: null, current_session_id: null })
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    // 5. Broadcast reset event across all devices
+    try {
+      const channel = supabase.channel('restaurant_alerts');
+      await channel.send({
+        type: 'broadcast',
+        event: 'restaurant_data_reset',
+        payload: { scope: 'all', timestamp: new Date().toISOString() }
+      });
+    } catch (e) {}
+
+    return { success: true };
+  } catch (err) {
+    console.error('[SUPABASE] Purge all orders error:', err);
+    return { success: false, error: err.message };
+  }
+};
+
+/**
+ * Resets today's operational queue, orders, and active table sessions from Supabase Cloud.
+ * Menu items, categories, and past historical orders remain safe.
+ */
+export const purgeTodayOrdersFromSupabaseCloud = async () => {
+  try {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const todayIso = startOfToday.toISOString();
+
+    // 1. Find today's orders
+    const { data: todayOrders } = await supabaseAdmin
+      .from('orders')
+      .select('id, table_number, session_id')
+      .gte('placed_at', todayIso);
+
+    const todayOrderIds = (todayOrders || []).map(o => o.id).filter(Boolean);
+
+    if (todayOrderIds.length > 0) {
+      await permanentlyDeleteOrdersFromSupabase(todayOrderIds);
+    }
+
+    // 2. Delete today's table_sessions
+    await supabaseAdmin
+      .from('table_sessions')
+      .delete()
+      .gte('opened_at', todayIso);
+
+    // 3. Reset all tables to VACANT if no remaining active orders
+    await supabaseAdmin
+      .from('restaurant_tables')
+      .update({ status: 'VACANT', current_order_id: null, current_session_id: null })
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    // 4. Broadcast
+    try {
+      const channel = supabase.channel('restaurant_alerts');
+      await channel.send({
+        type: 'broadcast',
+        event: 'restaurant_data_reset',
+        payload: { scope: 'today', timestamp: new Date().toISOString() }
+      });
+    } catch (e) {}
+
+    return { success: true, count: todayOrderIds.length };
+  } catch (err) {
+    console.error('[SUPABASE] Purge today orders error:', err);
+    return { success: false, error: err.message };
+  }
+};
