@@ -9,7 +9,6 @@ import {
   ConciergeBell,
   Smartphone,
   AlertCircle,
-  UserPlus,
   User,
   KeyRound,
   Eye,
@@ -29,8 +28,7 @@ import {
   supabase, 
   RESTAURANT_ID, 
   recordEmployeeActivity, 
-  staffLoginApi, 
-  staffSignupApi 
+  staffLoginApi 
 } from '../../lib/supabase';
 
 export const PRIMARY_ADMIN_EMAIL = 'admin@atmiyadosa.com';
@@ -44,8 +42,6 @@ export default function AuthPage({
   onLanguageChange, 
   onOpenCustomerPreview 
 }) {
-  // Flow: 'signin' | 'signup'
-  const [authFlow, setAuthFlow] = useState('signin');
   const [selectedRole, setSelectedRole] = useState('admin'); // 'admin' | 'waiter' | 'chef'
   const [showAuthLangModal, setShowAuthLangModal] = useState(false);
   
@@ -53,14 +49,6 @@ export default function AuthPage({
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-
-  // Sign Up / Staff Registration States
-  const [signupName, setSignupName] = useState('');
-  const [signupEmail, setSignupEmail] = useState('');
-  const [signupRole, setSignupRole] = useState('waiter'); // 'waiter' | 'chef'
-  const [signupPassword, setSignupPassword] = useState('');
-  const [signupPhone, setSignupPhone] = useState('');
-  const [showSignupPassword, setShowSignupPassword] = useState(false);
 
   // General state
   const [error, setError] = useState('');
@@ -240,122 +228,7 @@ export default function AuthPage({
     }
   };
 
-  // 2. Direct Staff Registration Submission
-  const handleSignupSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
 
-    const trimmedName = signupName.trim();
-    const trimmedEmail = signupEmail.trim();
-    const trimmedPassword = signupPassword.trim();
-
-    if (!trimmedName || trimmedName.length < 2) {
-      setError('Please enter your full staff name (at least 2 letters).');
-      return;
-    }
-    if (!trimmedEmail) {
-      setError('Please provide a Staff ID, Username, or Email.');
-      return;
-    }
-    if (!trimmedPassword || trimmedPassword.length < 4) {
-      setError('Password / PIN must be at least 4 characters for POS security.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      let authenticatedUser = null;
-      let token = null;
-
-      // 1. Try Server API Registration
-      try {
-        const apiRes = await staffSignupApi({
-          name: trimmedName,
-          email: trimmedEmail,
-          role: signupRole,
-          password: trimmedPassword,
-          phone: signupPhone.trim() || undefined
-        });
-
-        if (apiRes && apiRes.success && apiRes.user) {
-          token = apiRes.token;
-          authenticatedUser = {
-            id: apiRes.user.username || trimmedEmail.split('@')[0],
-            waiter_id: apiRes.user.waiter_id || (signupRole === 'waiter' ? `WTR-${Math.floor(100 + Math.random() * 900)}` : null),
-            name: apiRes.user.name,
-            email: apiRes.user.email || trimmedEmail,
-            role: (apiRes.user.role || signupRole).toLowerCase() === 'kitchen' ? 'chef' : (apiRes.user.role || signupRole).toLowerCase(),
-            permissions: apiRes.user.permissions || ['*'],
-            restaurantName: apiRes.user.restaurant || 'Atmiya Dosa Hub',
-            restaurantId: apiRes.user.restaurant_id || RESTAURANT_ID,
-            isPrimaryOwner: false,
-            token
-          };
-        }
-      } catch (apiErr) {
-        console.warn('Backend staff signup API notice:', apiErr.message);
-      }
-
-      // 2. Register in Local Staff Roster
-      const newStaffId = `WTR-${Math.floor(100 + Math.random() * 900)}`;
-      const newEmpRecord = {
-        id: `emp_${Date.now()}`,
-        waiter_id: signupRole === 'waiter' ? newStaffId : null,
-        name: trimmedName,
-        username: trimmedEmail.includes('@') ? trimmedEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_') : trimmedEmail.toLowerCase().replace(/[^a-zA-Z0-9_]/g, '_'),
-        email: trimmedEmail.includes('@') ? trimmedEmail : `${trimmedEmail.toLowerCase()}@atmiyadosa.com`,
-        password: trimmedPassword,
-        pin: trimmedPassword.length === 4 ? trimmedPassword : '1001',
-        role: signupRole === 'chef' ? 'Head Chef' : 'Waiter',
-        phone: signupPhone.trim() || '+91 98000 00000',
-        shift: 'General Shift',
-        active: true,
-        preferred_language: currentLang,
-        createdAt: new Date().toISOString().split('T')[0]
-      };
-
-      try {
-        localStorage.setItem('preferred_language', currentLang);
-      } catch (e) {}
-
-      if (onAddEmployee) {
-        onAddEmployee(newEmpRecord);
-      } else if (typeof window !== 'undefined') {
-        const currentEmployees = JSON.parse(localStorage.getItem('restaurant_employees') || '[]');
-        const updated = [...currentEmployees.filter(e => e.username !== newEmpRecord.username), newEmpRecord];
-        localStorage.setItem('restaurant_employees', JSON.stringify(updated));
-      }
-
-      if (!authenticatedUser) {
-        authenticatedUser = {
-          id: newEmpRecord.username,
-          waiter_id: newEmpRecord.waiter_id,
-          name: newEmpRecord.name,
-          email: newEmpRecord.email,
-          role: signupRole === 'chef' ? 'chef' : 'waiter',
-          preferred_language: currentLang,
-          restaurantName: 'Atmiya Dosa Hub',
-          restaurantId: RESTAURANT_ID,
-          isPrimaryOwner: false
-        };
-      } else {
-        authenticatedUser.preferred_language = currentLang;
-      }
-
-      await recordEmployeeActivity(
-        authenticatedUser.name,
-        authenticatedUser.role,
-        'STAFF_REGISTERED',
-        `New ${authenticatedUser.role.toUpperCase()} staff registered with ID (${authenticatedUser.id || authenticatedUser.waiter_id})`
-      );
-
-      setLoading(false);
-      onLoginSuccess(authenticatedUser, token);
-    } catch (err) {
-      setLoading(false);
-      setError(err.message || 'Staff registration failed. Please try again.');
-    }
-  };
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans flex flex-col justify-between selection:bg-orange-500 selection:text-white relative overflow-x-hidden">
@@ -530,44 +403,19 @@ export default function AuthPage({
           <div className="lg:col-span-6 w-full max-w-md mx-auto">
             <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-200/50 p-6 sm:p-8 space-y-6">
               
-              {/* Top Flow Switcher: Sign In vs Staff Registration */}
-              <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-2xl">
-                <button
-                  type="button"
-                  onClick={() => { setAuthFlow('signin'); setError(''); }}
-                  className={`py-2.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center space-x-2 ${
-                    authFlow === 'signin'
-                      ? 'bg-white text-slate-900 shadow-xs'
-                      : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  <KeyRound className="w-4 h-4 text-orange-600" />
-                  <span>{t('login') || t('signIn') || 'Sign In'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setAuthFlow('signup'); setShowAuthLangModal(true); setError(''); }}
-                  className={`py-2.5 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center space-x-2 ${
-                    authFlow === 'signup'
-                      ? 'bg-white text-orange-600 shadow-xs'
-                      : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  <UserPlus className="w-4 h-4 text-orange-600" />
-                  <span>{t('registerStaff') || 'Register Staff'}</span>
-                </button>
-              </div>
-
-              {/* Title & Role Info */}
-              <div>
-                <h2 className="text-xl sm:text-2xl font-heading font-black text-slate-900 tracking-tight">
-                  {authFlow === 'signup' ? (t('staffRegistration') || 'Staff Registration') : (t('terminalAccess') || 'Terminal Access')}
-                </h2>
-                <p className="text-xs text-slate-500 mt-1">
-                  {authFlow === 'signup'
-                    ? (t('staffRegistrationSub') || 'Register your waiter or chef credentials for floor duty')
-                    : (t('terminalAccessSub') || 'Choose your role station to launch the touch console')}
-                </p>
+              {/* Terminal Access Header */}
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-heading font-black text-slate-900 tracking-tight">
+                    {t('terminalAccess') || 'Terminal Access'}
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {t('terminalAccessSub') || 'Choose your role station to launch the touch console'}
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-2xl bg-orange-50 border border-orange-200/80 flex items-center justify-center text-orange-600 shadow-2xs">
+                  <KeyRound className="w-5 h-5" />
+                </div>
               </div>
 
               {/* Error Notice */}
@@ -578,11 +426,7 @@ export default function AuthPage({
                 </div>
               )}
 
-              {/* ============================================================== */}
-              {/* FLOW 1: SIGN IN TERMINAL */}
-              {/* ============================================================== */}
-              {authFlow === 'signin' && (
-                <div className="space-y-5">
+              <div className="space-y-5">
                   
                   {/* Interactive Role Cards (Admin, Waiter, Kitchen) */}
                   <div className="space-y-1.5">
@@ -755,187 +599,12 @@ export default function AuthPage({
                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 inline shrink-0" />
                       <span>{t('typeCredentialsNote') || 'Type your assigned ID & password to enter'}</span>
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => { setAuthFlow('signup'); setError(''); }}
-                      className="text-orange-600 hover:text-orange-700 font-bold hover:underline cursor-pointer"
-                    >
-                      {t('newStaffRegister') || 'New staff? Register →'}
-                    </button>
+                    <span className="text-[10px] font-semibold text-slate-400 font-mono bg-slate-50 border border-slate-200/70 px-2 py-0.5 rounded-md">
+                      Admin Assigned
+                    </span>
                   </div>
 
                 </div>
-              )}
-
-              {/* ============================================================== */}
-              {/* FLOW 2: STAFF REGISTRATION */}
-              {/* ============================================================== */}
-              {authFlow === 'signup' && (
-                <form onSubmit={handleSignupSubmit} className="space-y-4">
-                  {/* Preferred Language for Staff Account & Terminal */}
-                  <div className="p-3 rounded-2xl bg-orange-50/60 border border-orange-200/80 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-xs font-bold text-slate-800 flex items-center space-x-1.5">
-                        <Globe className="w-3.5 h-3.5 text-orange-600" />
-                        <span>{t('choosePreferredLanguage') || 'Preferred Language'}</span>
-                      </label>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white border border-orange-200 text-orange-800">
-                        {currentLang === 'gu' ? 'ગુજરાતી સક્રિય' : currentLang === 'hi' ? 'हिन्दी सक्रिय' : 'English Active'}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { code: 'en', label: 'English', sub: 'Default' },
-                        { code: 'gu', label: 'ગુજરાતી', sub: 'Gujarati' },
-                        { code: 'hi', label: 'हिन्दी', sub: 'Hindi' }
-                      ].map(l => (
-                        <button
-                          key={l.code}
-                          type="button"
-                          onClick={() => {
-                            if (onLanguageChange) onLanguageChange(l.code);
-                            try { localStorage.setItem('preferred_language', l.code); } catch(err){}
-                          }}
-                          className={`p-2.5 rounded-xl border text-center transition cursor-pointer ${
-                            currentLang === l.code
-                              ? 'bg-white border-orange-500 text-orange-950 font-black ring-2 ring-orange-400/30 shadow-xs'
-                              : 'bg-white/80 border-slate-200 text-slate-600 font-bold hover:bg-white'
-                          }`}
-                        >
-                          <div className="text-xs leading-tight font-heading">{l.label}</div>
-                          <div className="text-[10px] text-slate-400 font-normal">{l.sub}</div>
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-slate-500 leading-tight">
-                      {t('chooseLangDesc') || 'All menus, terminals, and notifications will display in your selected language.'}
-                    </p>
-                  </div>
-
-                  {/* Assigned Role */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                      {t('selectAssignedRole') || 'Select Assigned Role'}
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSignupRole('waiter')}
-                        className={`p-3 rounded-2xl border-2 text-xs font-bold transition flex items-center justify-center space-x-2 cursor-pointer ${
-                          signupRole === 'waiter'
-                            ? 'border-orange-500 bg-orange-50/70 text-orange-900 ring-2 ring-orange-400/20 shadow-2xs'
-                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <ConciergeBell className="w-4 h-4 text-orange-600" />
-                        <span>{t('floorWaiter') || 'Floor Waiter'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSignupRole('chef')}
-                        className={`p-3 rounded-2xl border-2 text-xs font-bold transition flex items-center justify-center space-x-2 cursor-pointer ${
-                          signupRole === 'chef'
-                            ? 'border-orange-500 bg-orange-50/70 text-orange-900 ring-2 ring-orange-400/20 shadow-2xs'
-                            : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <ChefHat className="w-4 h-4 text-orange-600" />
-                        <span>{t('kitchenChef') || 'Kitchen Chef'}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Full Name */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      {t('staffFullName') || 'Staff Full Name'}
-                    </label>
-                    <div className="relative">
-                      <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        value={signupName}
-                        onChange={(e) => setSignupName(e.target.value)}
-                        placeholder={t('staffFullNamePlaceholder') || 'e.g. Ramesh Patel'}
-                        className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-slate-200 bg-white text-slate-900 text-xs font-bold transition focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {/* Staff ID, Username or Email */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      {t('staffIdOrEmail') || 'Staff ID, Username or Email'}
-                    </label>
-                    <div className="relative">
-                      <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        autoComplete="username"
-                        value={signupEmail}
-                        onChange={(e) => setSignupEmail(e.target.value)}
-                        placeholder={t('staffIdPlaceholder') || 'e.g. WTR-104 or ramesh@atmiyadosa.com'}
-                        className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-slate-200 bg-white text-slate-900 text-xs font-bold transition focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {/* Password / PIN */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      {t('setPasswordOrPin') || 'Set Password or 4-Digit PIN'}
-                    </label>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type={showSignupPassword ? 'text' : 'password'}
-                        value={signupPassword}
-                        onChange={(e) => setSignupPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="w-full pl-10 pr-10 py-3 rounded-xl border border-slate-200 bg-white text-slate-900 text-xs font-bold transition focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowSignupPassword(!showSignupPassword)}
-                        className="p-1 rounded-lg text-slate-400 hover:text-slate-600 absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer"
-                      >
-                        {showSignupPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Mobile Phone */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      {t('mobileOptional') || 'Mobile Number'} <span className="text-slate-400 font-normal">({t('optional') || 'Optional'})</span>
-                    </label>
-                    <div className="relative">
-                      <Smartphone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="tel"
-                        value={signupPhone}
-                        onChange={(e) => setSignupPhone(e.target.value)}
-                        placeholder="+91 98250 14820"
-                        className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-slate-200 bg-white text-slate-900 text-xs font-bold transition focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Submit Button */}
-                  <button
-                    type="submit"
-                    disabled={loading || !signupName || !signupEmail || !signupPassword}
-                    className="w-full py-3.5 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white font-black text-xs tracking-wider uppercase shadow-md transition flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50 min-h-[46px]"
-                  >
-                    <span>{loading ? (t('registeringStaff') || 'Registering Staff...') : (t('registerAndSignInBtn') || 'Register Staff Account & Sign In')}</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </form>
-              )}
 
               {/* Guest Customer Access Banner */}
               <div className="p-3.5 rounded-2xl bg-orange-50/70 border border-orange-200/90 flex items-center justify-between shadow-2xs">
