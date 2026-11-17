@@ -120,6 +120,7 @@ export default function WaiterView({
   const [showPinModal, setShowPinModal] = useState(false);
   const [enteredPin, setEnteredPin] = useState('');
   const [pinError, setPinError] = useState('');
+  const [vacatingTablePrompt, setVacatingTablePrompt] = useState(null); // { tableNumber, amount }
   
   // Handheld Order Pad States
   const [orderPadSearch, setOrderPadSearch] = useState('');
@@ -1960,9 +1961,7 @@ export default function WaiterView({
                           <button
                             type="button"
                             onClick={() => {
-                              if (window.confirm(`Vacate Table ${table.number} and mark it available?`)) {
-                                if (onVacateTable) onVacateTable(table.number);
-                              }
+                              setVacatingTablePrompt({ tableNumber: table.number, amount: totalBillAmount });
                             }}
                             className="text-emerald-700 hover:text-emerald-900 font-bold flex items-center space-x-1 transition cursor-pointer py-1 px-2 rounded-lg hover:bg-emerald-50"
                             title="Vacate and free this table"
@@ -3469,10 +3468,9 @@ export default function WaiterView({
                 <button
                   type="button"
                   onClick={() => {
-                    if (window.confirm(`Vacate Table ${viewingBillTable.number} and mark it available?`)) {
-                      if (onVacateTable) onVacateTable(viewingBillTable.number);
-                      setViewingBillTable(null);
-                    }
+                    const activeOrders = getTableActiveOrders(viewingBillTable.number);
+                    const bTotal = activeOrders.reduce((sum, o) => sum + (o.total || o.total_amount || 0), 0);
+                    setVacatingTablePrompt({ tableNumber: viewingBillTable.number, amount: bTotal });
                   }}
                   className="px-4 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-xs transition cursor-pointer min-h-[46px] flex items-center justify-center space-x-1 shadow-sm shrink-0"
                   title="Vacate and free Table"
@@ -3710,6 +3708,89 @@ export default function WaiterView({
               All cash settlements & manual orders will be permanently tied to the selected Waiter ID.
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* 10B. VACATE & PAYMENT METHOD SELECTION MODAL */}
+      {vacatingTablePrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full border-2 border-slate-200 shadow-2xl space-y-4 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-2xl shadow-xs">
+              ⚡
+            </div>
+
+            <div className="space-y-1.5">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-900 border border-emerald-300">
+                Settle Bill & Vacate Table
+              </span>
+              <h3 className="text-base font-black text-slate-900 font-heading">
+                Table {vacatingTablePrompt.tableNumber}
+              </h3>
+              {Number(vacatingTablePrompt.amount || 0) > 0 && (
+                <>
+                  <p className="text-xs text-slate-600">Total Bill Amount:</p>
+                  <div className="text-3xl font-black font-mono text-emerald-700 py-1">
+                    ₹{vacatingTablePrompt.amount}
+                  </div>
+                </>
+              )}
+              <p className="text-xs font-semibold text-slate-600 pt-1">
+                How did the customer pay? Select payment method:
+              </p>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const tblNum = vacatingTablePrompt.tableNumber;
+                  const activeOrders = getTableActiveOrders(tblNum);
+                  const primaryOrder = activeOrders[0];
+                  if (onSettleTableBill && primaryOrder) {
+                    onSettleTableBill(primaryOrder.id, tblNum, 'UPI');
+                  }
+                  if (onVacateTable) {
+                    onVacateTable(tblNum, 'UPI');
+                  }
+                  setVacatingTablePrompt(null);
+                  setViewingBillTable(null);
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-black text-sm shadow-md shadow-indigo-500/20 transition flex items-center justify-center space-x-2 cursor-pointer active:scale-98"
+              >
+                <span className="text-base">💳</span>
+                <span>Paid through UPI</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const tblNum = vacatingTablePrompt.tableNumber;
+                  const activeOrders = getTableActiveOrders(tblNum);
+                  const primaryOrder = activeOrders[0];
+                  if (onSettleTableBill && primaryOrder) {
+                    onSettleTableBill(primaryOrder.id, tblNum, 'Cash');
+                  }
+                  if (onVacateTable) {
+                    onVacateTable(tblNum, 'Cash');
+                  }
+                  setVacatingTablePrompt(null);
+                  setViewingBillTable(null);
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-sm shadow-md shadow-emerald-500/20 transition flex items-center justify-center space-x-2 cursor-pointer active:scale-98"
+              >
+                <span className="text-base">💵</span>
+                <span>Paid in Cash</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setVacatingTablePrompt(null)}
+                className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs transition cursor-pointer mt-1"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

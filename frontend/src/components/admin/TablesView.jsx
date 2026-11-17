@@ -265,15 +265,16 @@ export default function TablesView({
     });
   };
 
-  const handleExecuteVacate = () => {
+  const handleExecuteVacate = (chosenMethod) => {
     if (!vacateConfirmState?.table) return;
-    const { table, method } = vacateConfirmState;
+    const { table } = vacateConfirmState;
+    const method = chosenMethod || vacateConfirmState.method || 'Cash';
     const activeOrder = getTableActiveOrder(table.number);
     if (onSettleTableBill && activeOrder) {
       onSettleTableBill(activeOrder.id, table.number, method);
     }
     if (onVacateTable) {
-      onVacateTable(table.number);
+      onVacateTable(table.number, method);
     } else if (onUpdateTable) {
       onUpdateTable(table.id, { status: 'available', is_occupied: false, on_hold: false, current_order_id: null, timing: null });
     }
@@ -1569,107 +1570,60 @@ export default function TablesView({
         </div>
       )}
 
-      {/* 2-STEP CONFIRMATION MODAL: CASH RECEIVED & VACATE TABLE */}
+      {/* SETTLE & VACATE TABLE PAYMENT MODAL */}
       {vacateConfirmState && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full border-2 border-slate-200 shadow-2xl space-y-4 text-center">
             
-            {vacateConfirmState.step === 1 ? (
-              <>
-                <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto text-2xl shadow-xs">
-                  💵
-                </div>
+            <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-2xl shadow-xs">
+              ⚡
+            </div>
 
-                <div className="space-y-1.5">
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-900 border border-amber-300">
-                    Step 1 of 2 • Cash Verification
-                  </span>
-                  <h3 className="text-base font-black text-slate-900 font-heading">
-                    Did you receive the cash?
-                  </h3>
-                  <p className="text-xs text-slate-600">
-                    Table <strong>{vacateConfirmState.table?.number}</strong> bill balance:
-                  </p>
-                  <div className="text-3xl font-black font-mono text-emerald-700 py-1">
-                    ₹{vacateConfirmState.amount}
-                  </div>
-                  <p className="text-[11px] text-slate-500 leading-relaxed">
-                    Please confirm that the guest has finished dining and the cash amount has been handed over.
-                  </p>
-                </div>
+            <div className="space-y-1.5">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-900 border border-emerald-300">
+                Settle Bill & Vacate Table
+              </span>
+              <h3 className="text-base font-black text-slate-900 font-heading">
+                Table {vacateConfirmState.table?.number}
+              </h3>
+              <p className="text-xs text-slate-600">
+                Table bill balance:
+              </p>
+              <div className="text-3xl font-black font-mono text-emerald-700 py-1">
+                ₹{vacateConfirmState.amount}
+              </div>
+              <p className="text-xs font-semibold text-slate-600 pt-1">
+                How did the customer pay? Select payment method:
+              </p>
+            </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setVacateConfirmState(null)}
-                    className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
-                  >
-                    Not Yet / Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setVacateConfirmState(prev => ({ ...prev, step: 2 }))}
-                    className="py-2.5 px-3 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-xs shadow-xs transition flex items-center justify-center space-x-1 cursor-pointer"
-                  >
-                    <span>Yes, Cash Received</span>
-                    <span>→</span>
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-2xl shadow-xs">
-                  ⚡
-                </div>
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={() => handleExecuteVacate('UPI')}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-black text-sm shadow-md shadow-indigo-500/20 transition flex items-center justify-center space-x-2 cursor-pointer active:scale-98"
+              >
+                <span className="text-base">💳</span>
+                <span>Paid through UPI & Vacate</span>
+              </button>
 
-                <div className="space-y-1.5">
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-900 border border-emerald-300">
-                    Step 2 of 2 • Final Confirmation
-                  </span>
-                  <h3 className="text-base font-black text-slate-900 font-heading">
-                    Double Check: Settle & Vacate?
-                  </h3>
-                  <p className="text-xs text-slate-600">
-                    Are you 100% sure you received <strong>₹{vacateConfirmState.amount} in cash</strong>?
-                  </p>
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-left text-[11px] text-slate-700 space-y-1.5">
-                    <div className="flex items-center space-x-2 text-emerald-800 font-bold">
-                      <span className="text-emerald-600 font-black">✓</span>
-                      <span>Orders marked COMPLETED & PAID</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-emerald-800 font-bold">
-                      <span className="text-emerald-600 font-black">✓</span>
-                      <span>Remove all holds from orders and KDS</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-emerald-800 font-bold">
-                      <span className="text-emerald-600 font-black">✓</span>
-                      <span>Remove hold from Table {vacateConfirmState.table?.number} & mark VACANT</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-emerald-800 font-bold">
-                      <span className="text-emerald-600 font-black">✓</span>
-                      <span>🧹 Auto-dispatch cleaning alert to floor waiters</span>
-                    </div>
-                  </div>
-                </div>
+              <button
+                type="button"
+                onClick={() => handleExecuteVacate('Cash')}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-sm shadow-md shadow-emerald-500/20 transition flex items-center justify-center space-x-2 cursor-pointer active:scale-98"
+              >
+                <span className="text-base">💵</span>
+                <span>Paid in Cash & Vacate</span>
+              </button>
 
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setVacateConfirmState(null)}
-                    className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
-                  >
-                    Back / Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleExecuteVacate}
-                    className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/30 transition flex items-center justify-center space-x-1 cursor-pointer"
-                  >
-                    <span>✓ Confirm & Vacate</span>
-                  </button>
-                </div>
-              </>
-            )}
+              <button
+                type="button"
+                onClick={() => setVacateConfirmState(null)}
+                className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs transition cursor-pointer mt-1"
+              >
+                Cancel
+              </button>
+            </div>
 
           </div>
         </div>

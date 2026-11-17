@@ -953,6 +953,8 @@ export const settleTableSessionInSupabase = async (tableNumber, orderIdOrNumber,
           .from('table_sessions')
           .update({
             status: 'COMPLETED',
+            payment_status: 'PAID',
+            payment_method: mappedPaymentMethod,
             closed_at: new Date().toISOString()
           })
           .eq('table_id', tableData.id)
@@ -961,7 +963,7 @@ export const settleTableSessionInSupabase = async (tableNumber, orderIdOrNumber,
         // 3. Mark Table as VACANT
         await supabase
           .from('restaurant_tables')
-          .update({ status: 'VACANT' })
+          .update({ status: 'VACANT', current_customer_name: null, current_order_id: null })
           .eq('id', tableData.id);
       }
     }
@@ -970,6 +972,7 @@ export const settleTableSessionInSupabase = async (tableNumber, orderIdOrNumber,
     const updatePayload = {
       payment_status: 'PAID',
       payment_method: mappedPaymentMethod,
+      payment_mode: mappedPaymentMethod === 'UPI_COUNTER' ? 'UPI' : 'Cash',
       status: 'SERVED', // DB check constraint permits 'SERVED', 'CANCELLED', 'READY', 'PREPARING', 'PLACED'
       served_at: new Date().toISOString()
     };

@@ -1250,21 +1250,29 @@ export default function ExecutiveDashboard({
     });
   };
 
-  const executeSettleDashboardSession = async () => {
+  const executeSettleDashboardSession = async (chosenMethod = 'Cash') => {
     if (!dashboardVacateConfirm?.session) return;
     const session = dashboardVacateConfirm.session;
     const tblNum = session.table_number || session.restaurant_tables?.table_number;
+    const cleanMethod = (String(chosenMethod || '').toUpperCase() === 'UPI' || String(chosenMethod || '').toUpperCase() === 'ONLINE') ? 'UPI' : 'Cash';
+    const supaMethod = cleanMethod === 'UPI' ? 'UPI_COUNTER' : 'CASH';
+
     try {
       if (session.id && !session.id.startsWith('sess_')) {
         await supabase
           .from('table_sessions')
-          .update({ status: 'COMPLETED', closed_at: new Date().toISOString() })
+          .update({ 
+            status: 'COMPLETED', 
+            payment_status: 'PAID',
+            payment_method: supaMethod,
+            closed_at: new Date().toISOString() 
+          })
           .eq('id', session.id);
 
         if (session.table_id) {
           await supabase
             .from('restaurant_tables')
-            .update({ status: 'VACANT' })
+            .update({ status: 'VACANT', current_customer_name: null, current_order_id: null })
             .eq('id', session.table_id);
         }
       }
@@ -1292,7 +1300,8 @@ export default function ExecutiveDashboard({
             .update({ 
               status: 'COMPLETED', 
               payment_status: 'PAID', 
-              payment_method: 'CASH',
+              payment_mode: cleanMethod,
+              payment_method: supaMethod,
               settled_at: new Date().toISOString()
             })
             .or(orFilter);
@@ -1304,7 +1313,12 @@ export default function ExecutiveDashboard({
 
           await supabase
             .from('table_sessions')
-            .update({ status: 'COMPLETED', closed_at: new Date().toISOString() })
+            .update({ 
+              status: 'COMPLETED', 
+              payment_status: 'PAID',
+              payment_method: supaMethod,
+              closed_at: new Date().toISOString() 
+            })
             .or(orFilter);
         }
       }
@@ -1312,14 +1326,14 @@ export default function ExecutiveDashboard({
         'DARSHIT RANA',
         'admin',
         'SESSION_SETTLED',
-        `Settled session for Table ${tblNum || 'table'} - ₹${session.total_amount}`,
+        `Settled session for Table ${tblNum || 'table'} - ₹${session.total_amount} via ${cleanMethod}`,
         tblNum
       );
       // Immediately mark session as COMPLETED in live state to update occupancy right away
-      setLiveSessions(prev => prev.map(s => s.id === session.id ? { ...s, status: 'COMPLETED' } : s));
+      setLiveSessions(prev => prev.map(s => s.id === session.id ? { ...s, status: 'COMPLETED', payment_method: supaMethod, payment_status: 'PAID' } : s));
 
       if (onVacateTable && tblNum) {
-        onVacateTable(tblNum);
+        onVacateTable(tblNum, cleanMethod);
       }
       fetchLiveSupabaseData();
       playSound('cash');
@@ -2726,107 +2740,60 @@ export default function ExecutiveDashboard({
         </div>
       )}
 
-      {/* 2-STEP CONFIRMATION MODAL: DASHBOARD VACATE & SETTLE SESSION */}
+      {/* SETTLE & VACATE SESSION PAYMENT MODAL */}
       {dashboardVacateConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full border-2 border-slate-200 shadow-2xl space-y-4 text-center">
             
-            {dashboardVacateConfirm.step === 1 ? (
-              <>
-                <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto text-2xl shadow-xs">
-                  💰
-                </div>
+            <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-2xl shadow-xs">
+              ⚡
+            </div>
 
-                <div className="space-y-1.5">
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-100 text-amber-900 border border-amber-300">
-                    {t('step1CashVerification') || 'Step 1 of 2 • Cash Verification'}
-                  </span>
-                  <h3 className="text-base font-black text-slate-900 font-heading">
-                    {t('didYouReceiveCash') || 'Did you receive the cash?'}
-                  </h3>
-                  <p className="text-xs text-slate-600">
-                    {t('tableBillAmount') || 'Table bill amount:'} <strong>{dashboardVacateConfirm.session?.table_number || dashboardVacateConfirm.session?.restaurant_tables?.table_number || 'Dining'}</strong>:
-                  </p>
-                  <div className="text-3xl font-black font-mono text-emerald-700 py-1">
-                    ₹{dashboardVacateConfirm.session?.total_amount || 0}
-                  </div>
-                  <p className="text-[11px] text-slate-500 leading-relaxed">
-                    {t('confirmGuestPaidCash') || 'Confirm that the guest finished dining and paid in cash.'}
-                  </p>
-                </div>
+            <div className="space-y-1.5">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-900 border border-emerald-300">
+                Settle Bill & Vacate Table
+              </span>
+              <h3 className="text-base font-black text-slate-900 font-heading">
+                Table {dashboardVacateConfirm.session?.table_number || dashboardVacateConfirm.session?.restaurant_tables?.table_number || 'Dining'}
+              </h3>
+              <p className="text-xs text-slate-600">
+                {t('tableBillAmount') || 'Table bill amount:'}
+              </p>
+              <div className="text-3xl font-black font-mono text-emerald-700 py-1">
+                ₹{dashboardVacateConfirm.session?.total_amount || 0}
+              </div>
+              <p className="text-xs font-semibold text-slate-600 pt-1">
+                How did the customer pay? Select payment method:
+              </p>
+            </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setDashboardVacateConfirm(null)}
-                    className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
-                  >
-                    {t('cancelNotYet') || 'Cancel / Not Yet'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDashboardVacateConfirm(prev => ({ ...prev, step: 2 }))}
-                    className="py-2.5 px-3 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-xs shadow-xs transition flex items-center justify-center space-x-1 cursor-pointer"
-                  >
-                    <span>{t('yesCashReceived') || 'Yes, Cash Received'}</span>
-                    <span>→</span>
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-2xl shadow-xs">
-                  ⚡
-                </div>
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={() => executeSettleDashboardSession('UPI')}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-black text-sm shadow-md shadow-indigo-500/20 transition flex items-center justify-center space-x-2 cursor-pointer active:scale-98"
+              >
+                <span className="text-base">💳</span>
+                <span>Paid through UPI & Vacate</span>
+              </button>
 
-                <div className="space-y-1.5">
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-900 border border-emerald-300">
-                    {t('step2FinalConfirmation') || 'Step 2 of 2 • Final Confirmation'}
-                  </span>
-                  <h3 className="text-base font-black text-slate-900 font-heading">
-                    {t('doubleCheckVacate') || 'Double Check: Settle & Vacate?'}
-                  </h3>
-                  <p className="text-xs text-slate-600">
-                    {t('areYouSureCash') || 'Are you 100% sure you received'} <strong>₹{dashboardVacateConfirm.session?.total_amount || 0}</strong> {t('inCash') || 'in cash?'}
-                  </p>
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-left text-[11px] text-slate-700 space-y-1.5">
-                    <div className="flex items-center space-x-2 text-emerald-800 font-bold">
-                      <span className="text-emerald-600 font-black">✓</span>
-                      <span>{t('ordersCompletedPaid') || 'Orders marked COMPLETED & PAID'}</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-emerald-800 font-bold">
-                      <span className="text-emerald-600 font-black">✓</span>
-                      <span>{t('removeAllHolds') || 'Remove all holds from orders & KDS'}</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-emerald-800 font-bold">
-                      <span className="text-emerald-600 font-black">✓</span>
-                      <span>{t('removeTableHoldVacant') || 'Remove hold from Table & mark VACANT on dashboard'}</span>
-                    </div>
-                    <div className="flex items-center space-x-2 text-emerald-800 font-bold">
-                      <span className="text-emerald-600 font-black">✓</span>
-                      <span>{t('dispatchCleaningAlert') || '🧹 Auto-dispatch cleaning alert to floor waiters'}</span>
-                    </div>
-                  </div>
-                </div>
+              <button
+                type="button"
+                onClick={() => executeSettleDashboardSession('Cash')}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-sm shadow-md shadow-emerald-500/20 transition flex items-center justify-center space-x-2 cursor-pointer active:scale-98"
+              >
+                <span className="text-base">💵</span>
+                <span>Paid in Cash & Vacate</span>
+              </button>
 
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setDashboardVacateConfirm(null)}
-                    className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
-                  >
-                    {t('backCancel') || 'Back / Cancel'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={executeSettleDashboardSession}
-                    className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md shadow-emerald-600/30 transition flex items-center justify-center space-x-1 cursor-pointer"
-                  >
-                    <span>{t('confirmVacateBtn') || '✓ Confirm & Vacate'}</span>
-                  </button>
-                </div>
-              </>
-            )}
+              <button
+                type="button"
+                onClick={() => setDashboardVacateConfirm(null)}
+                className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs transition cursor-pointer mt-1"
+              >
+                {t('cancelNotYet') || 'Cancel'}
+              </button>
+            </div>
 
           </div>
         </div>

@@ -5105,8 +5105,11 @@ export default function App() {
     }
   };
 
-  // Direct Table Vacate (Used by Admin Table Operations & Turnover Management)
-  const handleVacateTable = async (tableNum) => {
+  // Direct Table Vacate (Used by Admin Table Operations, Floor Waiters & Dashboard)
+  const handleVacateTable = async (tableNum, paymentMethod = 'Cash') => {
+    const cleanMethod = (String(paymentMethod || '').trim().toUpperCase() === 'UPI' || String(paymentMethod || '').trim().toUpperCase() === 'ONLINE') ? 'UPI' : 'Cash';
+    const supaMethod = cleanMethod === 'UPI' ? 'UPI_COUNTER' : 'CASH';
+
     const normalizeTbl = (val) => {
       const digits = String(val || '').replace(/[^0-9]/g, '');
       return digits ? String(parseInt(digits, 10)) : String(val || '').trim().toLowerCase();
@@ -5145,15 +5148,15 @@ export default function App() {
       });
     }
 
-    // Complete any active orders for this table & remove all hold flags
+    // Complete any active orders for this table, set payment method & remove all hold flags
     const updatedOrders = orders.map(o => {
       if (normalizeTbl(o.table_number) === targetTblCode && o.status !== 'Completed' && o.status !== 'Cancelled') {
         return {
           ...o,
           status: 'Completed',
           payment_status: 'Paid',
-          payment_mode: o.payment_mode || 'Cash',
-          paid_collected_by: authUser?.name || 'Admin',
+          payment_mode: o.payment_verified_online ? (o.payment_mode || cleanMethod) : cleanMethod,
+          paid_collected_by: authUser?.name || 'Staff',
           settled_at: o.settled_at || new Date().toISOString(),
           completed_at: o.completed_at || new Date().toISOString(),
           items: (o.items || []).map(it => ({ ...it, is_served: true, kitchen_status: 'served' })),
@@ -5169,11 +5172,11 @@ export default function App() {
     setOrders(updatedOrders);
     setLocalStore('orders', updatedOrders);
 
-    // Sync session closure to Supabase Cloud
+    // Sync session closure to Supabase Cloud with selected payment method
     settleTableSessionApi({
       tableNumber: tableNum,
-      paymentMethod: 'Cash',
-      settledBy: authUser?.name || 'Admin'
+      paymentMethod: cleanMethod,
+      settledBy: authUser?.name || 'Staff'
     });
 
     const cleanDigits = String(tableNum || '').replace(/\D/g, '');
@@ -5200,7 +5203,8 @@ export default function App() {
           .update({ 
             status: 'Completed', 
             payment_status: 'Paid', 
-            payment_mode: 'Cash',
+            payment_mode: cleanMethod,
+            payment_method: supaMethod,
             settled_at: new Date().toISOString(),
             completed_at: new Date().toISOString()
           })
@@ -5213,7 +5217,12 @@ export default function App() {
 
         await supabase
           .from('table_sessions')
-          .update({ status: 'COMPLETED', closed_at: new Date().toISOString() })
+          .update({ 
+            status: 'COMPLETED', 
+            payment_status: 'PAID',
+            payment_method: supaMethod,
+            closed_at: new Date().toISOString() 
+          })
           .or(orFilter);
       }
     } catch (e) {
@@ -5233,7 +5242,19 @@ export default function App() {
       return filtered;
     });
 
-    playSound('success');
+    playSound('cash');
+
+    const cleanCall = {
+      id: `clean_${targetTblCode}_${Date.now()}`,
+      tableNumber: tableNum,
+      type: 'table_clean',
+      label: `🧹 Table Vacated — Clean & Reset Table ${tableNum}`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: Date.now(),
+      status: 'pending',
+      dispatchedBy: authUser?.name || 'Staff',
+      priority: 'high'
+    };
 
     // Realtime broadcast to all waiter and kitchen devices
     try {
@@ -5243,32 +5264,30 @@ export default function App() {
         event: 'service_call',
         payload: cleanCall
       }).catch(err => console.warn('Realtime cleaning broadcast error:', err));
+
+      channel.send({
+        type: 'broadcast',
+        event: 'table_updated',
+        payload: { tableNumber: tableNum, status: 'available' }
+      }).catch(err => console.warn('Realtime table update broadcast error:', err));
     } catch (err) {
       console.warn('Realtime cleaning broadcast error:', err);
     }
 
     recordEmployeeActivity({
-      employeeName: authUser?.name || 'Admin',
-      employeeRole: authUser?.role || 'Admin',
+      employeeName: authUser?.name || 'Staff',
+      employeeRole: authUser?.role || 'Staff',
       tableNumber: tableNum,
       actionType: 'TABLE_VACATED_CLEAN_DISPATCH',
-      details: `Table ${tableNum} vacated & settled by Admin. Cleaning alert dispatched to floor waiters.`,
+      details: `Table ${tableNum} vacated & settled via ${cleanMethod} by ${authUser?.name || 'Staff'}. Payment recorded in order.`,
       type: 'table',
       color: 'emerald'
     });
-    playSound('success');
 
     setActiveToast({
       title: `🟢 Table ${tableNum} Vacated & Settled`,
-      message: `Table marked empty. Cleaning alert dispatched to floor waiters.`,
+      message: `Table marked empty. Payment recorded via ${cleanMethod}.`,
       type: 'success'
-    });
-
-    settleTableSessionApi({
-      tableNumber: tableNum,
-      orderId: null,
-      paymentMethod: 'Turnover Check',
-      settledBy: 'Turnover Engine'
     });
 
     if (getBoundSessionTable() === targetTblCode) {
