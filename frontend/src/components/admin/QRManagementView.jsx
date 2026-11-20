@@ -200,7 +200,7 @@ export default function QRManagementView({ tables = [], orders = [], restaurantS
 
         ctx.fillStyle = '#94a3b8';
         ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-        ctx.fillText('Pure Veg Kitchen • Clean & Hygienic • Cloud POS Powered', W / 2, 990);
+        ctx.fillText('powered by optimapsolution.com', W / 2, 990);
 
         // 9. Trigger instant PNG download
         const pngFile = canvas.toDataURL('image/png');
@@ -550,7 +550,7 @@ export default function QRManagementView({ tables = [], orders = [], restaurantS
 
               {/* Standee Footer */}
               <div className="text-[9px] font-bold text-slate-400 pt-2 border-t border-slate-100">
-                Pure Veg Kitchen • Clean & Hygienic • Cloud POS Powered
+                powered by optimapsolution.com
               </div>
 
             </div>

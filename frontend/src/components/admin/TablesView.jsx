@@ -1290,7 +1290,7 @@ export default function TablesView({
                     </div>
 
                     <div className="text-[8px] font-bold text-slate-400 pt-2 border-t border-slate-100">
-                      Pure Veg Kitchen • Clean & Hygienic
+                      powered by optimapsolution.com
                     </div>
                   </div>
 
@@ -1393,7 +1393,7 @@ export default function TablesView({
                     </div>
 
                     <div className="text-[9px] font-bold text-slate-400 pt-2 border-t border-slate-100">
-                      Pure Veg Kitchen • Clean & Hygienic
+                      powered by optimapsolution.com
                     </div>
                   </div>
                 </div>
@@ -1524,7 +1524,7 @@ export default function TablesView({
                 </div>
 
                 <div className="text-[9px] font-bold text-slate-400 pt-2 border-t border-slate-100">
-                  Pure Veg Kitchen • Clean & Hygienic
+                  powered by optimapsolution.com
                 </div>
               </div>
             </div>
