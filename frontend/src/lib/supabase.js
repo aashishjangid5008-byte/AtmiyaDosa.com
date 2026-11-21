@@ -678,6 +678,103 @@ export const dispatchOrderToSupabase = async ({
 /**
  * Updates an order's status in Supabase Cloud.
  */
+export const cancelOrderInSupabase = async (orderIdOrNumber, tableNumber = null, reason = 'Cancelled by staff') => {
+  if (!orderIdOrNumber && !tableNumber) return;
+  try {
+    let orderRow = null;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderIdOrNumber);
+    if (isUuid) {
+      const { data } = await supabase.from('orders').select('id, order_number, table_id, table_number, session_id').eq('id', orderIdOrNumber).maybeSingle();
+      if (data) orderRow = data;
+    }
+
+    if (!orderRow && orderIdOrNumber) {
+      const cleanNum = String(orderIdOrNumber).replace(/^#+/, '').trim();
+      const rawDigits = cleanNum.replace(/\D/g, '');
+      const candidates = Array.from(new Set([cleanNum, rawDigits, `ORD${rawDigits}`, `ORD-${rawDigits}`])).filter(Boolean);
+      const { data } = await supabase.from('orders').select('id, order_number, table_id, table_number, session_id').in('order_number', candidates).maybeSingle();
+      if (data) orderRow = data;
+    }
+
+    if (!orderRow && tableNumber) {
+      const formattedTableNum = normalizeTableNumber(tableNumber);
+      const digits = String(tableNumber).replace(/\D/g, '');
+      const { data } = await supabase.from('orders')
+        .select('id, order_number, table_id, table_number, session_id')
+        .or(`table_number.eq.${formattedTableNum},table_number.eq.T${digits},table_number.eq.${digits}`)
+        .neq('status', 'CANCELLED')
+        .order('placed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data) orderRow = data;
+    }
+
+    const updatePayload = {
+      status: 'CANCELLED',
+      payment_status: 'VOID',
+      special_notes: `[CANCELLED: ${reason}]`,
+      served_at: null
+    };
+
+    if (orderRow?.id) {
+      // 1. Update order status and payment status in Supabase
+      await supabase.from('orders').update(updatePayload).eq('id', orderRow.id);
+
+      // 2. Mark all order_items as CANCELLED
+      await supabase.from('order_items').update({ status: 'CANCELLED' }).eq('order_id', orderRow.id);
+
+      // 3. Check if table session should be closed and table vacated
+      if (orderRow.table_id) {
+        const { data: otherActive } = await supabase
+          .from('orders')
+          .select('id')
+          .eq('table_id', orderRow.table_id)
+          .neq('id', orderRow.id)
+          .neq('status', 'CANCELLED')
+          .neq('status', 'SERVED')
+          .limit(1);
+
+        if (!otherActive || otherActive.length === 0) {
+          if (orderRow.session_id) {
+            await supabase.from('table_sessions').update({
+              status: 'COMPLETED',
+              closed_at: new Date().toISOString()
+            }).eq('id', orderRow.session_id);
+          }
+          await supabase.from('restaurant_tables').update({ status: 'VACANT' }).eq('id', orderRow.table_id);
+        }
+      }
+    } else if (orderIdOrNumber) {
+      const cleanNum = String(orderIdOrNumber).replace(/^#+/, '').trim();
+      const rawDigits = cleanNum.replace(/\D/g, '');
+      const candidates = Array.from(new Set([cleanNum, rawDigits, `ORD${rawDigits}`, `ORD-${rawDigits}`])).filter(Boolean);
+      await supabase.from('orders').update(updatePayload).in('order_number', candidates);
+    }
+
+    // Broadcast cancellation across all connected devices
+    try {
+      const channel = supabase.channel('restaurant_alerts');
+      await channel.send({
+        type: 'broadcast',
+        event: 'order_status_updated',
+        payload: {
+          orderId: orderRow?.id || orderIdOrNumber,
+          orderNumber: orderRow?.order_number || String(orderIdOrNumber).replace(/^#+/, ''),
+          tableNumber: orderRow?.table_number || tableNumber,
+          status: 'Cancelled',
+          reason,
+          total: 0,
+          kds_cleared: true
+        }
+      });
+    } catch (bErr) {
+      console.warn('[SUPABASE] Cancel broadcast notice:', bErr);
+    }
+  } catch (err) {
+    console.warn('[SUPABASE] Order cancellation exception:', err);
+  }
+};
+
 export const updateOrderStatusInSupabase = async (orderIdOrNumber, newStatus) => {
   if (!orderIdOrNumber) return;
 
@@ -697,6 +794,10 @@ export const updateOrderStatusInSupabase = async (orderIdOrNumber, newStatus) =>
   };
   const mapped = statusMap[newStatus] || 'PLACED';
 
+  if (mapped === 'CANCELLED') {
+    return await cancelOrderInSupabase(orderIdOrNumber, null, 'Cancelled');
+  }
+
   try {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderIdOrNumber);
     const updatePayload = {
@@ -707,8 +808,10 @@ export const updateOrderStatusInSupabase = async (orderIdOrNumber, newStatus) =>
     if (isUuid) {
       await supabase.from('orders').update(updatePayload).eq('id', orderIdOrNumber);
     } else {
-      const cleanNum = String(orderIdOrNumber).replace('#', '');
-      await supabase.from('orders').update(updatePayload).eq('order_number', cleanNum);
+      const cleanNum = String(orderIdOrNumber).replace(/^#+/, '').trim();
+      const rawDigits = cleanNum.replace(/\D/g, '');
+      const candidates = Array.from(new Set([cleanNum, rawDigits, `ORD${rawDigits}`, `ORD-${rawDigits}`])).filter(Boolean);
+      await supabase.from('orders').update(updatePayload).in('order_number', candidates);
     }
 
     // Broadcast status change across all active devices

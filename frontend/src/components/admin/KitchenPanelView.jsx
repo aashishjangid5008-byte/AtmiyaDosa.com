@@ -112,7 +112,11 @@ const resolveTicketItems = (order) => {
     }
   }
 
-  return base;
+  // Filter out any cancelled dishes so they NEVER appear in KDS
+  return base.filter(it => {
+    const s = String(it.status || it.kitchen_status || '').toLowerCase().trim();
+    return s !== 'cancelled';
+  });
 };
 
 export default function KitchenPanelView({ 
@@ -191,7 +195,8 @@ export default function KitchenPanelView({
 
     // 1. Cancelled orders must NEVER appear in active KDS
     const s = String(o?.status || '').toLowerCase().trim();
-    if (s === 'cancelled') return true;
+    const paySt = String(o?.payment_status || '').toLowerCase().trim();
+    if (s === 'cancelled' || paySt === 'void') return true;
 
     // 2. Completed / Settled orders (guest has paid and vacated) must NEVER appear in active Live KOTs
     if (s === 'completed' || s === 'settled') return true;

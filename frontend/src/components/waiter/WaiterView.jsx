@@ -2687,6 +2687,8 @@ export default function WaiterView({
           }
 
           list.forEach((it, idx) => {
+            const rawItemSt = String(it.status || it.kitchen_status || '').toLowerCase().trim();
+            if (rawItemSt === 'cancelled') return;
             const isItemServed = Boolean(it.is_served);
             const isItemReady = !isItemServed && (it.kitchen_status === 'ready' || it.kitchen_status === 'prepared');
             allDishes.push({
@@ -3207,11 +3209,15 @@ export default function WaiterView({
             });
           }
 
-          list.forEach((it, idx) => allItems.push({
-            ...it,
-            orderId: o.id || o.order_number,
-            itemIndex: idx
-          }));
+          list.forEach((it, idx) => {
+            const rawItemSt = String(it.status || it.kitchen_status || '').toLowerCase().trim();
+            if (rawItemSt === 'cancelled') return;
+            allItems.push({
+              ...it,
+              orderId: o.id || o.order_number,
+              itemIndex: idx
+            });
+          });
         });
 
         const subtotal = tOrders.reduce((acc, o) => acc + Number(o.subtotal || o.total || 0), 0);

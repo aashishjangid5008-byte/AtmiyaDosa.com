@@ -59,6 +59,7 @@ import {
   RESTAURANT_ID, 
   dispatchOrderToSupabase, 
   updateOrderStatusInSupabase, 
+  cancelOrderInSupabase,
   settleTableSessionInSupabase, 
   settleTableSessionApi,
   verifyStaffTokenApi,
@@ -185,7 +186,10 @@ const mapDbOrderToFrontend = (dbOrd) => {
                                (rawStatusUpper === 'SERVED' && (payStatusLower === 'paid' || payStatusLower === 'void')) ||
                                payStatusLower === 'paid';
 
-  let itms = (dbOrd.order_items || []).map((i) => {
+  let itms = (dbOrd.order_items || []).filter(i => {
+    const rawItemStatus = String(i.status || '').toLowerCase().trim();
+    return rawItemStatus !== 'cancelled';
+  }).map((i) => {
     const rawItemStatus = String(i.status || '').toLowerCase().trim();
     const cleanNameKey = String(i.item_name || i.name || '').toLowerCase().trim();
     const savedState = (i.id && itemStates[i.id]) || 
@@ -321,7 +325,8 @@ const mapDbOrderToFrontend = (dbOrd) => {
     payment_method: dbOrd.payment_method || (isOnline ? 'UPI_COUNTER' : 'CASH'),
     payment_status: isCancelledOrder ? 'Void' : (isCompletedOrder || payStatusLower === 'paid' || dbOrd.payment_status === 'PAID' ? 'Paid' : 'Pending Cash'),
     payment_verified_online: isOnline,
-    special_note: cleanSpecialNote
+    special_note: cleanSpecialNote,
+    kds_cleared: isCancelledOrder ? true : false
   };
 };
 
@@ -1165,64 +1170,112 @@ export default function App() {
           );
           if (!localMatch) return mo;
 
-          // If items were recently modified on this local client (<15s), briefly protect in-flight changes
-          const isRecentlyModified = localMatch.last_modified_at && (syncNow - new Date(localMatch.last_modified_at).getTime() < 15000);
+          // If this order is cancelled either locally or in DB, preserve cancellation immediately!
+          if (localMatch.status === 'Cancelled' || mo.status === 'Cancelled' || String(localMatch.payment_status).toLowerCase() === 'void' || String(mo.payment_status).toLowerCase() === 'void') {
+            return {
+              ...mo,
+              ...localMatch,
+              status: 'Cancelled',
+              payment_status: 'Void',
+              kds_cleared: true,
+              items: (localMatch.items || mo.items || []).map(it => ({ ...it, kitchen_status: 'cancelled', is_served: false, status: 'CANCELLED' })),
+              order_items: (localMatch.order_items || mo.order_items || []).map(it => ({ ...it, kitchen_status: 'cancelled', is_served: false, status: 'CANCELLED' })),
+              last_modified_at: localMatch.last_modified_at || mo.last_modified_at || new Date().toISOString()
+            };
+          }
+
+          // If items were recently modified on this local client (<25s), protect in-flight deletions and additions
+          const isRecentlyModified = localMatch.last_modified_at && (syncNow - new Date(localMatch.last_modified_at).getTime() < 25000);
           const hasDbItems = Array.isArray(mo.items) && mo.items.length > 0;
           const hasLocalItems = Array.isArray(localMatch.items) && localMatch.items.length > 0;
-          // DB is authoritative when it contains items. If DB returned 0 items but local order has dishes, PRESERVE local items!
-          const dbItems = hasDbItems
-            ? mo.items
-            : (hasLocalItems ? localMatch.items : (mo.items || []));
-          const matchedLocalIndices = new Set();
-          const mergedItems = dbItems.map((dbItem) => {
-            const cleanDbName = String(dbItem.name || dbItem.item_name || '').toLowerCase().trim();
-            let localItem = null;
-            let matchedIdx = -1;
 
-            (localMatch.items || []).forEach((it, lIdx) => {
-              if (matchedIdx >= 0 || matchedLocalIndices.has(lIdx)) return;
-              if (it.id && dbItem.id && it.id === dbItem.id) {
-                localItem = it;
-                matchedIdx = lIdx;
-              } else if (it.name && cleanDbName && it.name.toLowerCase().trim() === cleanDbName && (it.round === dbItem.round || !dbItem.round || !it.round)) {
-                localItem = it;
-                matchedIdx = lIdx;
+          let mergedItems = [];
+          if (isRecentlyModified && hasLocalItems) {
+            // Local items are authoritative because staff just deleted or modified items on this terminal!
+            // Map over local items; only update kitchen status from mo.items if matched, but DO NOT resurrect deleted items!
+            mergedItems = localMatch.items.map(localIt => {
+              const cleanLocalName = String(localIt.name || localIt.item_name || '').toLowerCase().trim();
+              const dbItem = (mo.items || []).find(di => 
+                (di.id && localIt.id && di.id === localIt.id) ||
+                (cleanLocalName && String(di.name || di.item_name || '').toLowerCase().trim() === cleanLocalName)
+              );
+              if (!dbItem) return localIt;
+
+              const isLocalPreparing = Boolean(localIt.kitchen_status === 'preparing' || localIt.status === 'PREPARING');
+              const isDbPreparing = Boolean(dbItem.kitchen_status === 'preparing' || String(dbItem.status || '').toLowerCase() === 'preparing');
+              const isExplicitlyPreparing = isLocalPreparing || isDbPreparing;
+
+              const isLocalServed = Boolean(localIt.is_served);
+              const isDbServed = Boolean(dbItem.is_served || dbItem.kitchen_status === 'served');
+              const finalServed = !isExplicitlyPreparing && (isLocalServed || isDbServed);
+
+              const isDbReady = Boolean(dbItem.kitchen_status === 'ready' || String(dbItem.status || '').toLowerCase() === 'ready');
+              const isLocalReady = Boolean(localIt.kitchen_status === 'ready' || localIt.kitchen_status === 'prepared');
+              const finalReady = !finalServed && !isExplicitlyPreparing && (isDbReady || isLocalReady);
+
+              return {
+                ...localIt,
+                round: localIt.round || dbItem.round || 1,
+                kitchen_status: finalServed ? 'served' : (finalReady ? 'ready' : (isExplicitlyPreparing ? 'preparing' : (localIt.kitchen_status || dbItem.kitchen_status || 'placed'))),
+                is_served: finalServed,
+                ready_at: isExplicitlyPreparing ? null : (localIt.ready_at || dbItem.ready_at),
+                served_at: isExplicitlyPreparing ? null : (localIt.served_at || dbItem.served_at)
+              };
+            });
+          } else {
+            // Standard sync from Supabase items with local state merging
+            const dbItems = hasDbItems ? mo.items : (hasLocalItems ? localMatch.items : (mo.items || []));
+            const matchedLocalIndices = new Set();
+            mergedItems = dbItems.map((dbItem) => {
+              const cleanDbName = String(dbItem.name || dbItem.item_name || '').toLowerCase().trim();
+              let localItem = null;
+              let matchedIdx = -1;
+
+              (localMatch.items || []).forEach((it, lIdx) => {
+                if (matchedIdx >= 0 || matchedLocalIndices.has(lIdx)) return;
+                if (it.id && dbItem.id && it.id === dbItem.id) {
+                  localItem = it;
+                  matchedIdx = lIdx;
+                } else if (it.name && cleanDbName && it.name.toLowerCase().trim() === cleanDbName && (it.round === dbItem.round || !dbItem.round || !it.round)) {
+                  localItem = it;
+                  matchedIdx = lIdx;
+                }
+              });
+
+              if (matchedIdx >= 0) {
+                matchedLocalIndices.add(matchedIdx);
               }
+
+              const isLocalPreparing = Boolean(localItem && (localItem.kitchen_status === 'preparing' || localItem.status === 'PREPARING'));
+              const isDbPreparing = Boolean(dbItem.kitchen_status === 'preparing' || String(dbItem.status || '').toLowerCase() === 'preparing');
+              const isExplicitlyPreparing = isLocalPreparing || isDbPreparing;
+
+              const isLocalServed = Boolean(localItem?.is_served);
+              const isDbServed = Boolean(dbItem.is_served || dbItem.kitchen_status === 'served');
+              const finalServed = !isExplicitlyPreparing && (isLocalServed || isDbServed);
+
+              const isDbReady = Boolean(dbItem.kitchen_status === 'ready' || String(dbItem.status || '').toLowerCase() === 'ready');
+              const isLocalReady = Boolean(localItem && (localItem.kitchen_status === 'ready' || localItem.kitchen_status === 'prepared'));
+              const finalReady = !finalServed && !isExplicitlyPreparing && (isDbReady || isLocalReady);
+
+              return {
+                ...dbItem,
+                round: localItem?.round || dbItem.round || 1,
+                is_addon: Boolean(localItem?.is_addon || dbItem.is_addon),
+                kitchen_status: finalServed ? 'served' : (finalReady ? 'ready' : (isExplicitlyPreparing ? 'preparing' : (localItem?.kitchen_status || dbItem.kitchen_status || 'placed'))),
+                is_served: finalServed,
+                ready_at: isExplicitlyPreparing ? null : (localItem?.ready_at || dbItem.ready_at),
+                served_at: isExplicitlyPreparing ? null : (localItem?.served_at || dbItem.served_at)
+              };
             });
 
-            if (matchedIdx >= 0) {
-              matchedLocalIndices.add(matchedIdx);
-            }
-
-            const isLocalPreparing = Boolean(localItem && (localItem.kitchen_status === 'preparing' || localItem.status === 'PREPARING'));
-            const isDbPreparing = Boolean(dbItem.kitchen_status === 'preparing' || String(dbItem.status || '').toLowerCase() === 'preparing');
-            const isExplicitlyPreparing = isLocalPreparing || isDbPreparing;
-
-            const isLocalServed = Boolean(localItem?.is_served);
-            const isDbServed = Boolean(dbItem.is_served || dbItem.kitchen_status === 'served');
-            const finalServed = !isExplicitlyPreparing && (isLocalServed || isDbServed);
-
-            const isDbReady = Boolean(dbItem.kitchen_status === 'ready' || String(dbItem.status || '').toLowerCase() === 'ready');
-            const isLocalReady = Boolean(localItem && (localItem.kitchen_status === 'ready' || localItem.kitchen_status === 'prepared'));
-            const finalReady = !finalServed && !isExplicitlyPreparing && (isDbReady || isLocalReady);
-
-            return {
-              ...dbItem,
-              round: localItem?.round || dbItem.round || 1,
-              is_addon: Boolean(localItem?.is_addon || dbItem.is_addon),
-              kitchen_status: finalServed ? 'served' : (finalReady ? 'ready' : (isExplicitlyPreparing ? 'preparing' : (localItem?.kitchen_status || dbItem.kitchen_status || 'placed'))),
-              is_served: finalServed,
-              ready_at: isExplicitlyPreparing ? null : (localItem?.ready_at || dbItem.ready_at),
-              served_at: isExplicitlyPreparing ? null : (localItem?.served_at || dbItem.served_at)
-            };
-          });
-
-          // Retain any local items (e.g. fresh add-ons) not yet populated in dbItems
-          (localMatch.items || []).forEach((locIt, locIdx) => {
-            if (!matchedLocalIndices.has(locIdx)) {
-              mergedItems.push(locIt);
-            }
-          });
+            // Retain any local items (e.g. fresh add-ons) not yet populated in dbItems
+            (localMatch.items || []).forEach((locIt, locIdx) => {
+              if (!matchedLocalIndices.has(locIdx)) {
+                mergedItems.push(locIt);
+              }
+            });
+          }
 
           const hasUnserved = mergedItems.some(i => !i.is_served);
           const allMergedReady = mergedItems.length > 0 && mergedItems.every(i => i.kitchen_status === 'ready' || i.is_served);
@@ -1243,6 +1296,9 @@ export default function App() {
           }
 
           const orderSettledAt = mo.settled_at || localMatch.settled_at || (preservedStatus === 'Completed' ? (mo.served_at || mo.placed_at || new Date().toISOString()) : null);
+          const calcSubtotal = Number(mergedItems.reduce((acc, it) => acc + (Number(it.price || it.unit_price || 0) * Number(it.qty || it.quantity || 1)), 0).toFixed(2));
+          const calcTotal = Number(calcSubtotal.toFixed(2));
+          const calcSummary = mergedItems.map(i => `${i.qty || i.quantity || 1}x ${i.name || i.item_name}`).join(', ');
 
           return {
             ...mo,
@@ -1251,15 +1307,15 @@ export default function App() {
             round: localMatch.round || mo.round || 1,
             is_addon: Boolean(localMatch.is_addon || mo.is_addon),
             status: preservedStatus,
-            kds_cleared: hasUnserved ? false : (mo.kds_cleared || localMatch.kds_cleared),
+            kds_cleared: preservedStatus === 'Cancelled' ? true : (hasUnserved ? false : (mo.kds_cleared || localMatch.kds_cleared)),
             newly_added_items: hasUnserved ? (localMatch.newly_added_items || mo.newly_added_items) : null,
             newly_added_summary: hasUnserved ? (localMatch.newly_added_summary || mo.newly_added_summary) : null,
             last_addon_at: localMatch.last_addon_at || mo.last_addon_at || null,
             last_modified_at: localMatch.last_modified_at || mo.last_modified_at || null,
-            subtotal: isRecentlyModified ? (localMatch.subtotal || mo.subtotal) : mo.subtotal,
-            total: isRecentlyModified ? (localMatch.total || mo.total) : mo.total,
-            total_amount: isRecentlyModified ? (localMatch.total_amount || mo.total_amount) : mo.total_amount,
-            items_summary: isRecentlyModified ? (localMatch.items_summary || mo.items_summary) : mo.items_summary,
+            subtotal: isRecentlyModified ? (localMatch.subtotal || calcSubtotal) : (hasDbItems ? mo.subtotal : calcSubtotal),
+            total: isRecentlyModified ? (localMatch.total || calcTotal) : (hasDbItems ? mo.total : calcTotal),
+            total_amount: isRecentlyModified ? (localMatch.total_amount || calcTotal) : (hasDbItems ? mo.total_amount : calcTotal),
+            items_summary: isRecentlyModified ? (localMatch.items_summary || calcSummary) : (hasDbItems ? mo.items_summary : calcSummary),
             payment_status: (preservedStatus === 'Completed' || localMatch.payment_status === 'Paid') ? 'Paid' : (mo.payment_status || localMatch.payment_status),
             settled_at: orderSettledAt,
             completed_at: orderSettledAt
@@ -1918,6 +1974,7 @@ export default function App() {
                 const isMatch = matchesOrderId(o, payload.orderId) || 
                                 matchesOrderId(o, payload.orderNumber);
                 if (!isMatch) return o;
+                if (o.status === 'Cancelled' || String(o.payment_status).toLowerCase() === 'void') return o;
                 const items = (o.items || []).map((it, idx) => {
                   const isItemMatch = (payload.itemIndex !== undefined && idx === payload.itemIndex) ||
                                       (payload.itemName && (it.name === payload.itemName || it.item_name === payload.itemName));
@@ -1997,6 +2054,7 @@ export default function App() {
                 const matchesTbl = cleanTbl && oTbl === cleanTbl;
                 const matchesId = matchesOrderId(o, payload.orderId) || matchesOrderId(o, payload.orderNumber);
                 if (!matchesId && !matchesTbl) return o;
+                if (o.status === 'Cancelled' || String(o.payment_status).toLowerCase() === 'void') return o;
 
                 const items = (o.items || []).map((it, idx) => {
                   const isMatch = (payload.itemIndex !== undefined && idx === payload.itemIndex) ||
@@ -2999,10 +3057,28 @@ export default function App() {
       payment_status: 'Void',
       cancel_reason: reason,
       cancelled_by: staff,
-      cancelled_at: new Date().toISOString()
+      cancelled_at: new Date().toISOString(),
+      kds_cleared: true,
+      items: (o.items || []).map(it => ({ ...it, kitchen_status: 'cancelled', is_served: false, status: 'CANCELLED' })),
+      order_items: (o.order_items || []).map(it => ({ ...it, kitchen_status: 'cancelled', is_served: false, status: 'CANCELLED' })),
+      last_modified_at: new Date().toISOString()
     } : o);
     setOrders(updated);
     setLocalStore('orders', updated);
+
+    // Also persist to kds_cleared_order_ids so KDS on this browser or refreshed screens immediately clears it
+    try {
+      const saved = localStorage.getItem('kds_cleared_order_ids');
+      const clearedList = saved ? JSON.parse(saved) : [];
+      const newIds = [
+        targetOrder.id,
+        targetOrder.order_number,
+        targetOrder.supabase_order_id,
+        orderId
+      ].filter(Boolean).map(x => String(x).replace(/^#+/, ''));
+      const updatedCleared = Array.from(new Set([...clearedList, ...newIds]));
+      localStorage.setItem('kds_cleared_order_ids', JSON.stringify(updatedCleared));
+    } catch (e) {}
 
     // Dismiss any pending cancel_request calls for this table/order
     setServiceCalls(prev => {
@@ -3066,14 +3142,16 @@ export default function App() {
           orderNumber: targetOrder.order_number,
           tableNumber: targetOrder.table_number,
           status: 'Cancelled',
+          payment_status: 'Void',
           reason,
-          total: 0
+          total: 0,
+          kds_cleared: true
         }
       });
     } catch (e) {}
 
     // Sync Cancellation to Supabase Cloud
-    updateOrderStatusInSupabase(targetOrder?.supabase_order_id || targetOrder?.id || orderId, 'Cancelled');
+    cancelOrderInSupabase(targetOrder?.supabase_order_id || targetOrder?.id || orderId, targetOrder?.table_number, reason);
   };
 
   // Waiter & Admin Order Ticket Modifier: Add, remove, or modify items within an order
@@ -3139,11 +3217,26 @@ export default function App() {
     try {
       const ordUuid = targetOrder.supabase_order_id || targetOrder.id;
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ordUuid);
-      const cleanOrderNumber = String(targetOrder.order_number || targetOrder.id).replace('#', '');
+      const cleanOrderNumber = String(targetOrder.order_number || targetOrder.id).replace(/^#+/, '').trim();
 
       let resolvedOrderUuid = isUuid ? ordUuid : null;
-      if (!resolvedOrderUuid) {
-        const { data: ord } = await supabase.from('orders').select('id').eq('order_number', cleanOrderNumber).maybeSingle();
+      if (!resolvedOrderUuid && cleanOrderNumber) {
+        const rawDigits = cleanOrderNumber.replace(/\D/g, '');
+        const candidates = Array.from(new Set([cleanOrderNumber, rawDigits, `ORD${rawDigits}`, `ORD-${rawDigits}`])).filter(Boolean);
+        const { data: ord } = await supabase.from('orders').select('id').in('order_number', candidates).maybeSingle();
+        if (ord) resolvedOrderUuid = ord.id;
+      }
+
+      if (!resolvedOrderUuid && targetOrder.table_number) {
+        const formattedTableNum = normalizeTableNumber(targetOrder.table_number);
+        const digits = String(targetOrder.table_number).replace(/\D/g, '');
+        const { data: ord } = await supabase.from('orders')
+          .select('id')
+          .or(`table_number.eq.${formattedTableNum},table_number.eq.T${digits},table_number.eq.${digits}`)
+          .neq('status', 'CANCELLED')
+          .order('placed_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
         if (ord) resolvedOrderUuid = ord.id;
       }
 
