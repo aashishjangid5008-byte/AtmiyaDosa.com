@@ -1784,7 +1784,7 @@ export default function CustomerMenu({
               </div>
             </div>
 
-            {/* Language Selector + Luxury Concierge Service Button */}
+            {/* Language Selector */}
             <div className="flex items-center space-x-1.5 shrink-0">
               <button 
                 type="button"
@@ -1796,16 +1796,6 @@ export default function CustomerMenu({
                 <span className="uppercase text-[11px] font-mono">
                   {currentLang === 'gu' ? 'ગુજરાતી' : (currentLang === 'hi' ? 'हिन्दी' : 'EN')}
                 </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowConciergeModal(true)}
-                className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-bold transition flex items-center space-x-1 cursor-pointer shadow-xs"
-                title="Table Service: Water, Waiter, Bill, Table Cleaning"
-              >
-                <BellRing className="w-3.5 h-3.5" />
-                <span>{t('service')}</span>
               </button>
             </div>
           </div>

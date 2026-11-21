@@ -149,18 +149,6 @@ export default function FoodShowcase3D({
               </div>
             )
           )}
-
-          {onOpenConcierge && (
-            <button
-              type="button"
-              onClick={onOpenConcierge}
-              className="px-3 py-1.5 rounded-full bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-black transition flex items-center space-x-1.5 shadow-xs cursor-pointer"
-              title="Call Captain / Request Water"
-            >
-              <BellRing className="w-3.5 h-3.5" />
-              <span className="hidden xs:inline">{t('callServer') || t('service') || 'Call Server'}</span>
-            </button>
-          )}
         </div>
       </header>
 
