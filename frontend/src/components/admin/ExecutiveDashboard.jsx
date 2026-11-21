@@ -1263,8 +1263,6 @@ export default function ExecutiveDashboard({
           .from('table_sessions')
           .update({ 
             status: 'COMPLETED', 
-            payment_status: 'PAID',
-            payment_method: supaMethod,
             closed_at: new Date().toISOString() 
           })
           .eq('id', session.id);
@@ -1272,7 +1270,7 @@ export default function ExecutiveDashboard({
         if (session.table_id) {
           await supabase
             .from('restaurant_tables')
-            .update({ status: 'VACANT', current_customer_name: null, current_order_id: null })
+            .update({ status: 'VACANT' })
             .eq('id', session.table_id);
         }
       }
@@ -1295,35 +1293,50 @@ export default function ExecutiveDashboard({
         const orFilter = tableVariants.map(v => `table_number.eq.${v}`).join(',');
 
         if (orFilter) {
-          await supabase
+          const ordPayload = { 
+            payment_status: 'PAID', 
+            payment_mode: cleanMethod,
+            payment_method: supaMethod,
+            settled_at: new Date().toISOString(),
+            status: 'COMPLETED'
+          };
+          const { error: ordErr } = await supabase
             .from('orders')
-            .update({ 
-              status: 'COMPLETED', 
-              payment_status: 'PAID', 
-              payment_mode: cleanMethod,
-              payment_method: supaMethod,
-              settled_at: new Date().toISOString()
-            })
+            .update(ordPayload)
             .or(orFilter);
+
+          if (ordErr) {
+            await supabase
+              .from('orders')
+              .update({ ...ordPayload, status: 'SERVED' })
+              .or(orFilter);
+          }
 
           await supabase
             .from('restaurant_tables')
-            .update({ status: 'VACANT', current_customer_name: null, current_order_id: null })
+            .update({ status: 'VACANT' })
             .or(orFilter);
 
-          await supabase
-            .from('table_sessions')
-            .update({ 
-              status: 'COMPLETED', 
-              payment_status: 'PAID',
-              payment_method: supaMethod,
-              closed_at: new Date().toISOString() 
-            })
+          const { data: matchedTbls } = await supabase
+            .from('restaurant_tables')
+            .select('id')
             .or(orFilter);
+
+          if (matchedTbls && matchedTbls.length > 0) {
+            const tIds = matchedTbls.map(t => t.id);
+            await supabase
+              .from('table_sessions')
+              .update({ 
+                status: 'COMPLETED', 
+                closed_at: new Date().toISOString() 
+              })
+              .in('table_id', tIds)
+              .eq('status', 'ACTIVE');
+          }
         }
       }
       await recordEmployeeActivity(
-        'DARSHIT RANA',
+        'Admin Owner',
         'admin',
         'SESSION_SETTLED',
         `Settled session for Table ${tblNum || 'table'} - ₹${session.total_amount} via ${cleanMethod}`,

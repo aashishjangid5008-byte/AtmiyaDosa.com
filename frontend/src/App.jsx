@@ -178,6 +178,12 @@ const mapDbOrderToFrontend = (dbOrd) => {
   }
 
   const hasSpecificStates = Object.keys(itemStates).length > 0;
+  const payStatusLower = String(dbOrd.payment_status || '').toLowerCase().trim();
+  const rawStatusUpper = String(dbOrd.status || '').toUpperCase().trim();
+  const isOrderFullyFinished = rawStatusUpper === 'COMPLETED' || 
+                               rawStatusUpper === 'SETTLED' || 
+                               (rawStatusUpper === 'SERVED' && (payStatusLower === 'paid' || payStatusLower === 'void')) ||
+                               payStatusLower === 'paid';
 
   let itms = (dbOrd.order_items || []).map((i) => {
     const rawItemStatus = String(i.status || '').toLowerCase().trim();
@@ -196,9 +202,7 @@ const mapDbOrderToFrontend = (dbOrd) => {
       isItemServed = true;
     } else if (isSavedReady || isSavedPrep) {
       isItemServed = false;
-    } else if (rawItemStatus === 'served') {
-      isItemServed = true;
-    } else if (dbOrd.status === 'COMPLETED' || dbOrd.status === 'SETTLED') {
+    } else if (rawItemStatus === 'served' || isOrderFullyFinished) {
       isItemServed = true;
     }
 
@@ -251,8 +255,6 @@ const mapDbOrderToFrontend = (dbOrd) => {
   }
 
   let mappedStatus = statusDisplayMap[dbOrd.status] || dbOrd.status || 'Preparing';
-  const payStatusLower = String(dbOrd.payment_status || '').toLowerCase().trim();
-  const rawStatusUpper = String(dbOrd.status || '').toUpperCase().trim();
   
   const allItemsServed = itms.length > 0 && itms.every(it => it.is_served);
   const anyItemServed = itms.some(it => it.is_served);
@@ -1225,15 +1227,15 @@ export default function App() {
           const hasUnserved = mergedItems.some(i => !i.is_served);
           const allMergedReady = mergedItems.length > 0 && mergedItems.every(i => i.kitchen_status === 'ready' || i.is_served);
           let preservedStatus = mo.status;
-          if (localMatch.status === 'Completed' || mo.status === 'Completed') {
-            preservedStatus = hasUnserved ? 'Placed' : 'Completed';
+          if (localMatch.status === 'Completed' || mo.status === 'Completed' || mo.status === 'Settled' || (mo.status === 'Served' && (mo.payment_status?.toLowerCase() === 'paid' || localMatch.payment_status?.toLowerCase() === 'paid')) || localMatch.payment_status === 'Paid') {
+            preservedStatus = 'Completed';
           } else if (localMatch.status === 'Cancelled' || mo.status === 'Cancelled') {
             preservedStatus = 'Cancelled';
           } else if (hasUnserved) {
             // CRITICAL: If there are unserved items (e.g. from an add-on or fresh round), status CANNOT be 'Served'!
             preservedStatus = (String(mo.status || '').toLowerCase() === 'placed') ? 'Placed' : (allMergedReady ? 'Ready' : (localMatch.status === 'Preparing' ? 'Preparing' : 'Placed'));
           } else if (localMatch.status === 'Served' || mo.status === 'Served') {
-            preservedStatus = 'Served';
+            preservedStatus = (localMatch.payment_status?.toLowerCase() === 'paid' || mo.payment_status?.toLowerCase() === 'paid') ? 'Completed' : 'Served';
           } else if (allMergedReady) {
             preservedStatus = 'Ready';
           } else if (mergedItems.some(i => i.kitchen_status === 'ready' || i.is_served || i.kitchen_status === 'preparing') || localMatch.status === 'Preparing') {
@@ -1258,7 +1260,7 @@ export default function App() {
             total: isRecentlyModified ? (localMatch.total || mo.total) : mo.total,
             total_amount: isRecentlyModified ? (localMatch.total_amount || mo.total_amount) : mo.total_amount,
             items_summary: isRecentlyModified ? (localMatch.items_summary || mo.items_summary) : mo.items_summary,
-            payment_status: preservedStatus === 'Completed' ? 'Paid' : (mo.payment_status || localMatch.payment_status),
+            payment_status: (preservedStatus === 'Completed' || localMatch.payment_status === 'Paid') ? 'Paid' : (mo.payment_status || localMatch.payment_status),
             settled_at: orderSettledAt,
             completed_at: orderSettledAt
           };
@@ -1292,7 +1294,7 @@ export default function App() {
       // Reconcile tables with latest orders
       setTables(prevTables => {
         const activeTbls = new Set(
-          mappedDbOrders
+          merged
             .filter(o => {
               const st = (o.status || '').toLowerCase();
               const paySt = (o.payment_status || '').toLowerCase();
@@ -1319,7 +1321,7 @@ export default function App() {
           const code = (t.number || '').replace(/\D/g, '').padStart(2, '0');
           const hasActive = activeTbls.has(code);
           if (hasActive) {
-            const matchOrd = mappedDbOrders.find(o => (o.table_number || '').replace(/\D/g, '').padStart(2, '0') === code);
+            const matchOrd = merged.find(o => (o.table_number || '').replace(/\D/g, '').padStart(2, '0') === code);
             return {
               ...t,
               status: 'occupied',
@@ -1346,7 +1348,7 @@ export default function App() {
         const existingCodes = new Set((reconciled || []).map(t => (t.number || '').replace(/\D/g, '').padStart(2, '0')));
         activeTbls.forEach(code => {
           if (!existingCodes.has(code)) {
-            const matchOrd = mappedDbOrders.find(o => (o.table_number || '').replace(/\D/g, '').padStart(2, '0') === code);
+            const matchOrd = merged.find(o => (o.table_number || '').replace(/\D/g, '').padStart(2, '0') === code);
             const rawTbl = matchOrd?.table_number || `T${code}`;
             const cleanDigits = rawTbl.replace(/[^0-9]/g, '');
             const tableNumStr = cleanDigits 
@@ -1424,7 +1426,9 @@ export default function App() {
             }
             if (map.has(key)) {
               const existing = map.get(key);
-              const isVacant = String(existing.status || '').toLowerCase() === 'vacant' || String(existing.status || '').toLowerCase() === 'available';
+              const isLocallyVacated = (pt.status === 'available' || pt.status === 'vacant') && !pt.current_order_id;
+              const isDbVacant = String(existing.status || '').toLowerCase() === 'vacant' || String(existing.status || '').toLowerCase() === 'available';
+              const isVacant = isLocallyVacated || isDbVacant;
               map.set(key, {
                 ...existing,
                 current_order_id: isVacant ? null : (pt.current_order_id || existing.current_order_id),
@@ -3199,8 +3203,7 @@ export default function App() {
         if (targetOrder.session_id) {
           try {
             await supabase.from('table_sessions').update({
-              total_amount: total,
-              items_summary: summaryStr
+              total_amount: total
             }).eq('id', targetOrder.session_id);
           } catch (sessErr) {
             console.warn('[SUPABASE] Session total update notice:', sessErr);
@@ -5240,32 +5243,65 @@ export default function App() {
 
     try {
       if (orFilter) {
-        await supabase
+        // 1. Settle all active dining orders for this table in Supabase
+        const orderPayload = { 
+          payment_status: 'PAID', 
+          payment_mode: cleanMethod,
+          payment_method: supaMethod,
+          settled_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+          status: 'COMPLETED'
+        };
+        const { error: ordErr } = await supabase
           .from('orders')
-          .update({ 
-            status: 'Completed', 
-            payment_status: 'Paid', 
-            payment_mode: cleanMethod,
-            payment_method: supaMethod,
-            settled_at: new Date().toISOString(),
-            completed_at: new Date().toISOString()
-          })
+          .update(orderPayload)
           .or(orFilter);
 
+        if (ordErr) {
+          // If DB check constraint restricts status to SERVED, retry with 'SERVED'
+          await supabase
+            .from('orders')
+            .update({ ...orderPayload, status: 'SERVED' })
+            .or(orFilter);
+        }
+
+        // 2. Mark order_items as served in Supabase
+        const targetOrderIds = updatedOrders
+          .filter(o => normalizeTbl(o.table_number) === targetTblCode)
+          .map(o => o.supabase_order_id || o.id)
+          .filter(Boolean);
+        if (targetOrderIds.length > 0) {
+          try {
+            await supabase
+              .from('order_items')
+              .update({ status: 'SERVED' })
+              .in('order_id', targetOrderIds);
+          } catch (itemErr) {}
+        }
+
+        // 3. Mark restaurant_tables as VACANT (only valid column in schema)
         await supabase
           .from('restaurant_tables')
-          .update({ status: 'VACANT', current_customer_name: null, current_order_id: null })
+          .update({ status: 'VACANT' })
           .or(orFilter);
 
-        await supabase
-          .from('table_sessions')
-          .update({ 
-            status: 'COMPLETED', 
-            payment_status: 'PAID',
-            payment_method: supaMethod,
-            closed_at: new Date().toISOString() 
-          })
+        // 4. Resolve table_id to close active sessions in table_sessions
+        const { data: matchedTbls } = await supabase
+          .from('restaurant_tables')
+          .select('id')
           .or(orFilter);
+
+        if (matchedTbls && matchedTbls.length > 0) {
+          const tIds = matchedTbls.map(t => t.id);
+          await supabase
+            .from('table_sessions')
+            .update({ 
+              status: 'COMPLETED', 
+              closed_at: new Date().toISOString() 
+            })
+            .in('table_id', tIds)
+            .eq('status', 'ACTIVE');
+        }
       }
     } catch (e) {
       console.warn('Order status sync error during vacate:', e);

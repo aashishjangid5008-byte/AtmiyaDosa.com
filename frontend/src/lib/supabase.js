@@ -948,22 +948,20 @@ export const settleTableSessionInSupabase = async (tableNumber, orderIdOrNumber,
       }
 
       if (tableData?.id) {
-        // 2. Complete active session
+        // 2. Complete active session (only valid columns in table_sessions schema)
         await supabase
           .from('table_sessions')
           .update({
             status: 'COMPLETED',
-            payment_status: 'PAID',
-            payment_method: mappedPaymentMethod,
             closed_at: new Date().toISOString()
           })
           .eq('table_id', tableData.id)
           .eq('status', 'ACTIVE');
 
-        // 3. Mark Table as VACANT
+        // 3. Mark Table as VACANT (only valid column in restaurant_tables schema)
         await supabase
           .from('restaurant_tables')
-          .update({ status: 'VACANT', current_customer_name: null, current_order_id: null })
+          .update({ status: 'VACANT' })
           .eq('id', tableData.id);
       }
     }
@@ -2142,7 +2140,7 @@ export const permanentlyDeleteOrdersFromSupabase = async (orderIdsOrNumbers = []
 
           await supabaseAdmin
             .from('restaurant_tables')
-            .update({ status: 'VACANT', current_order_id: null, current_session_id: null })
+            .update({ status: 'VACANT' })
             .or(`table_number.eq.${supabaseTNum},table_number.eq.${tNoDash},table_number.eq.${tShort},table_number.eq.${tblNum}`);
         }
       } catch (tblErr) {
@@ -2202,7 +2200,7 @@ export const purgeAllOrdersFromSupabaseCloud = async () => {
     // 4. Reset all restaurant_tables to VACANT
     await supabaseAdmin
       .from('restaurant_tables')
-      .update({ status: 'VACANT', current_order_id: null, current_session_id: null })
+      .update({ status: 'VACANT' })
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
     // 5. Broadcast reset event across all devices
@@ -2253,7 +2251,7 @@ export const purgeTodayOrdersFromSupabaseCloud = async () => {
     // 3. Reset all tables to VACANT if no remaining active orders
     await supabaseAdmin
       .from('restaurant_tables')
-      .update({ status: 'VACANT', current_order_id: null, current_session_id: null })
+      .update({ status: 'VACANT' })
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
     // 4. Broadcast
