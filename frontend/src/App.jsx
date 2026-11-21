@@ -1161,6 +1161,7 @@ export default function App() {
         .filter(o => !DEMO_ORDER_IDS.has(o.order_number) && !DEMO_ORDER_IDS.has(o.id))
         .map(mapDbOrderToFrontend);
 
+      let finalMergedOrders = mappedDbOrders;
       setOrders(prev => {
         const merged = mappedDbOrders.map(mo => {
           const localMatch = (prev || []).find(po => 
@@ -1343,6 +1344,7 @@ export default function App() {
             merged.push(po);
           }
         });
+        finalMergedOrders = merged;
         setLocalStore('orders', merged);
         return merged;
       });
@@ -1350,7 +1352,7 @@ export default function App() {
       // Reconcile tables with latest orders
       setTables(prevTables => {
         const activeTbls = new Set(
-          merged
+          finalMergedOrders
             .filter(o => {
               const st = (o.status || '').toLowerCase();
               const paySt = (o.payment_status || '').toLowerCase();
@@ -1377,7 +1379,7 @@ export default function App() {
           const code = (t.number || '').replace(/\D/g, '').padStart(2, '0');
           const hasActive = activeTbls.has(code);
           if (hasActive) {
-            const matchOrd = merged.find(o => (o.table_number || '').replace(/\D/g, '').padStart(2, '0') === code);
+            const matchOrd = finalMergedOrders.find(o => (o.table_number || '').replace(/\D/g, '').padStart(2, '0') === code);
             return {
               ...t,
               status: 'occupied',
@@ -1404,7 +1406,7 @@ export default function App() {
         const existingCodes = new Set((reconciled || []).map(t => (t.number || '').replace(/\D/g, '').padStart(2, '0')));
         activeTbls.forEach(code => {
           if (!existingCodes.has(code)) {
-            const matchOrd = merged.find(o => (o.table_number || '').replace(/\D/g, '').padStart(2, '0') === code);
+            const matchOrd = finalMergedOrders.find(o => (o.table_number || '').replace(/\D/g, '').padStart(2, '0') === code);
             const rawTbl = matchOrd?.table_number || `T${code}`;
             const cleanDigits = rawTbl.replace(/[^0-9]/g, '');
             const tableNumStr = cleanDigits 
