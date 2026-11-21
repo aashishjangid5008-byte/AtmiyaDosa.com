@@ -198,29 +198,32 @@ export default function KitchenPanelView({
     const paySt = String(o?.payment_status || '').toLowerCase().trim();
     if (s === 'cancelled' || paySt === 'void') return true;
 
-    // 2. Completed / Settled orders (guest has paid and vacated) must NEVER appear in active Live KOTs
-    if (s === 'completed' || s === 'settled') return true;
-
-    // 3. Stale orders older than 4 hours (from previous shifts/days) must NEVER clutter the live kitchen
+    // 2. Stale orders older than 4 hours (from previous shifts/days) must NEVER clutter the live kitchen
     const totalSecs = getElapsedSeconds(o);
     if (totalSecs > 4 * 60 * 60) {
       return true;
     }
 
     const items = resolveTicketItems(o);
-    const hasUnservedFood = items.some(it => !it.is_served);
+    const hasUnservedFood = items.some(it => !it.is_served && String(it.status || it.kitchen_status || '').toLowerCase() !== 'cancelled');
 
-    // 4. If all items on this ticket are already served, hide it from live kitchen
+    // 3. If there is NO unserved food on this ticket, hide it from live kitchen
     if (!hasUnservedFood) {
       return true;
     }
 
+    // 4. If table session was settled/vacated and ALL food was served, hide it.
+    // BUT if fresh add-on items are ordered, hasUnservedFood is true, so KEEP IT VISIBLE!
+    if ((s === 'completed' || s === 'settled') && !hasUnservedFood) {
+      return true;
+    }
+
     // 5. If ticket was dismissed/cleared by chef, hide ONLY if there is NO unserved food left
-    const idKey = String(o?.id || o?.order_number || o?.supabase_order_id || '').replace(/^#+/, '');
-    const orderNumKey = String(o?.order_number || '').replace(/^#+/, '');
-    const dbIdKey = String(o?.supabase_order_id || '').replace(/^#+/, '');
-    const clearedSet = new Set(clearedOrderIds.map(x => String(x).replace(/^#+/, '')));
-    const isCleared = o?.kds_cleared || clearedSet.has(idKey) || (orderNumKey && clearedSet.has(orderNumKey)) || (dbIdKey && clearedSet.has(dbIdKey));
+    const idKey = String(o?.id || o?.order_number || o?.supabase_order_id || '').replace(/^#+/, '').replace(/^ORD-?/i, '').trim();
+    const orderNumKey = String(o?.order_number || '').replace(/^#+/, '').replace(/^ORD-?/i, '').trim();
+    const dbIdKey = String(o?.supabase_order_id || '').trim();
+    const clearedSet = new Set(clearedOrderIds.map(x => String(x).replace(/^#+/, '').replace(/^ORD-?/i, '').trim()));
+    const isCleared = o?.kds_cleared || (idKey && clearedSet.has(idKey)) || (orderNumKey && clearedSet.has(orderNumKey)) || (dbIdKey && clearedSet.has(dbIdKey));
 
     if (isCleared && !hasUnservedFood) {
       return true;
@@ -232,20 +235,25 @@ export default function KitchenPanelView({
   // Automatically restore tickets from cleared state when a new unserved add-on arrives
   useEffect(() => {
     if (!clearedOrderIds || clearedOrderIds.length === 0) return;
-    const unservedOrderIds = orders
-      .filter(o => {
-        const s = String(o?.status || '').toLowerCase().trim();
-        if (s === 'cancelled' || s === 'completed' || s === 'settled') return false;
-        if (getElapsedSeconds(o) > 4 * 60 * 60) return false;
-        const items = resolveTicketItems(o);
-        return items.length > 0 && items.some(it => !it.is_served);
-      })
-      .map(o => String(o?.id || o?.order_number || o?.supabase_order_id || ''))
-      .filter(Boolean);
+    const unservedOrderKeys = new Set();
+    orders.forEach(o => {
+      const s = String(o?.status || '').toLowerCase().trim();
+      if (s === 'cancelled') return;
+      if (getElapsedSeconds(o) > 4 * 60 * 60) return;
+      const items = resolveTicketItems(o);
+      const hasUnserved = items.some(it => !it.is_served && String(it.status || it.kitchen_status || '').toLowerCase() !== 'cancelled');
+      if (hasUnserved) {
+        if (o.id) unservedOrderKeys.add(String(o.id).replace(/^#+/, '').replace(/^ORD-?/i, '').trim());
+        if (o.order_number) unservedOrderKeys.add(String(o.order_number).replace(/^#+/, '').replace(/^ORD-?/i, '').trim());
+        if (o.supabase_order_id) unservedOrderKeys.add(String(o.supabase_order_id).trim());
+      }
+    });
 
-    if (unservedOrderIds.length > 0) {
-      const unservedSet = new Set(unservedOrderIds);
-      const filtered = clearedOrderIds.filter(id => !unservedSet.has(id));
+    if (unservedOrderKeys.size > 0) {
+      const filtered = clearedOrderIds.filter(id => {
+        const clean = String(id).replace(/^#+/, '').replace(/^ORD-?/i, '').trim();
+        return !unservedOrderKeys.has(clean) && !unservedOrderKeys.has(String(id).trim());
+      });
       if (filtered.length !== clearedOrderIds.length) {
         setClearedOrderIds(filtered);
         try {
@@ -1142,11 +1150,6 @@ export default function KitchenPanelView({
     const isWarning = urgency === 'warning';
     const isVeryOld = totalSecs > 120 * 60; // Older than 2 hours
     
-    const s = String(order.status || '').toLowerCase().trim();
-    const isPlaced = s === 'placed' || s === 'pending';
-    const isCooking = s === 'preparing' || s === 'cooking';
-    const isReady = s === 'ready';
-    // 1. Multi-tier resilient items resolution (guarantees dishes are NEVER missing or blank)
     const displayItems = [...resolveTicketItems(order)];
 
     // If order has special_note mentioning Mineral Water and displayItems is empty, ensure it's in displayItems
@@ -1169,7 +1172,13 @@ export default function KitchenPanelView({
     }
 
     const allItemsServed = displayItems.length > 0 && displayItems.every(it => it.is_served);
-    const isServed = s === 'served' || s === 'completed' || s === 'settled' || allItemsServed;
+    const hasUnservedFood = displayItems.some(it => !it.is_served && String(it.kitchen_status || it.status || '').toLowerCase() !== 'cancelled');
+    const isServed = allItemsServed && (s === 'served' || s === 'completed' || s === 'settled');
+
+    const s = String(order.status || '').toLowerCase().trim();
+    const isPlaced = (s === 'placed' || s === 'pending') || (hasUnservedFood && !allItemsServed);
+    const isCooking = (s === 'preparing' || s === 'cooking') && !allItemsServed;
+    const isReady = s === 'ready' && !allItemsServed;
 
     const oId = order.id && order.id !== 'undefined' ? String(order.id).trim() : null;
     const oNum = order.order_number && order.order_number !== 'undefined' ? String(order.order_number).trim() : null;

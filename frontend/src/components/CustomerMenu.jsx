@@ -118,7 +118,9 @@ export const resolveCustomerOrderItems = (order, menuItems = []) => {
         offer_tag: it.offer_tag || (isFreeOffer ? 'Buy 2 Fancy Dosa Get 1 Free' : null),
         image_url: it.image_url || it.imageUrl || it.image || it.photo || menuItem?.image_url || null,
         cooking_note: it.cooking_note || it.note || it.customNote || it.customizations || null,
-        is_served: Boolean(it.is_served || (order.status || '').toLowerCase() === 'served' || (order.status || '').toLowerCase() === 'completed'),
+        is_served: (it.is_served === false || String(it.kitchen_status || it.status || '').toLowerCase() === 'placed' || it.is_addon || (order.round > 1 && it.round === order.round))
+          ? Boolean(it.is_served)
+          : Boolean(it.is_served || (order.status || '').toLowerCase() === 'served' || (order.status || '').toLowerCase() === 'completed'),
         kitchen_status: String(it.kitchen_status || it.status || 'placed').toLowerCase(),
         is_addon: Boolean(it.is_addon || (order.round > 1 && it.round === order.round)),
         round: it.round || order.round || 1
@@ -134,8 +136,12 @@ export const resolveCustomerOrderItems = (order, menuItems = []) => {
       const unitPrice = isFreeOffer 
         ? 0 
         : parseFloat((oi.unit_price !== undefined && oi.unit_price !== null) ? oi.unit_price : (oi.price !== undefined && oi.price !== null ? oi.price : (menuItem?.price || menuItem?.finalPrice || menuItem?.final_price || 0)));
-      const isServed = (oi.status || '').toLowerCase() === 'served' || (order.status || '').toLowerCase() === 'served' || (order.status || '').toLowerCase() === 'completed';
-      const kitchenStatus = (oi.status || '').toLowerCase() === 'ready' ? 'ready' : ((oi.status || '').toLowerCase() === 'preparing' ? 'preparing' : 'placed');
+      const rawOiStatus = (oi.status || '').toLowerCase();
+      const isExplicitlyUnserved = oi.is_served === false || rawOiStatus === 'placed' || rawOiStatus === 'preparing';
+      const isServed = isExplicitlyUnserved 
+        ? false 
+        : (rawOiStatus === 'served' || (order.status || '').toLowerCase() === 'served' || (order.status || '').toLowerCase() === 'completed');
+      const kitchenStatus = rawOiStatus === 'ready' ? 'ready' : (rawOiStatus === 'preparing' ? 'preparing' : (isServed ? 'served' : 'placed'));
       return {
         id: oi.id || `oi_${idx}`,
         name: oi.item_name || oi.name || 'Dish Item',

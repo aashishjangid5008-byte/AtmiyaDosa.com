@@ -477,6 +477,7 @@ export const dispatchOrderToSupabase = async ({
         .from('orders')
         .update({
           status: 'PLACED',
+          served_at: null,
           subtotal: Number(parseFloat(subtotal || 0).toFixed(2)),
           tax_amount: Number(parseFloat(tax || 0).toFixed(2)),
           discount_amount: Number(parseFloat(discount || 0).toFixed(2)),
@@ -642,8 +643,14 @@ export const dispatchOrderToSupabase = async ({
           order_number: orderNumberStr,
           table_number: formattedTableNum,
           customer_name: guestName,
+          items: items || [],
+          order_items: items || [],
           items_summary: (items || []).map(i => `${i.qty || i.quantity || 1}x ${i.name || i.item_name || 'Dish'}`).join(', '),
+          subtotal: subtotal,
+          tax: tax,
           total: total,
+          status: 'Placed',
+          kds_cleared: false,
           payment_mode: payment_mode,
           channel: isTakeaway ? 'Takeaway' : (channel || 'Dine-In'),
           order_source: isTakeaway ? 'Takeaway' : (order_source || 'Table QR'),

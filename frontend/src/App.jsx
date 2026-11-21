@@ -261,13 +261,18 @@ const mapDbOrderToFrontend = (dbOrd) => {
   let mappedStatus = statusDisplayMap[dbOrd.status] || dbOrd.status || 'Preparing';
   
   const allItemsServed = itms.length > 0 && itms.every(it => it.is_served);
+  const hasUnserved = itms.some(it => !it.is_served);
   const anyItemServed = itms.some(it => it.is_served);
   const allItemsReadyOrServed = itms.length > 0 && itms.every(it => it.is_served || it.kitchen_status === 'ready');
 
-  if (rawStatusUpper === 'COMPLETED' || rawStatusUpper === 'SETTLED' || mappedStatus === 'Completed' || (allItemsServed && (payStatusLower === 'paid' || payStatusLower === 'settled'))) {
-    mappedStatus = 'Completed';
-  } else if (rawStatusUpper === 'CANCELLED' || mappedStatus === 'Cancelled') {
+  if (rawStatusUpper === 'CANCELLED' || mappedStatus === 'Cancelled') {
     mappedStatus = 'Cancelled';
+  } else if (hasUnserved) {
+    // CRITICAL: If there are unserved items (e.g. from an add-on after previous round handover),
+    // status CANNOT be 'Served' or 'Completed'! It must be Placed, Preparing, or Ready.
+    mappedStatus = allItemsReadyOrServed ? 'Ready' : ((rawStatusUpper === 'PREPARING' || rawStatusUpper === 'COOKING' || anyItemServed) ? 'Preparing' : 'Placed');
+  } else if (rawStatusUpper === 'COMPLETED' || rawStatusUpper === 'SETTLED' || mappedStatus === 'Completed' || (allItemsServed && (payStatusLower === 'paid' || payStatusLower === 'settled'))) {
+    mappedStatus = 'Completed';
   } else if (rawStatusUpper === 'SERVED' || allItemsServed) {
     if (payStatusLower === 'paid' || payStatusLower === 'settled') {
       mappedStatus = 'Completed';
@@ -1281,13 +1286,13 @@ export default function App() {
           const hasUnserved = mergedItems.some(i => !i.is_served);
           const allMergedReady = mergedItems.length > 0 && mergedItems.every(i => i.kitchen_status === 'ready' || i.is_served);
           let preservedStatus = mo.status;
-          if (localMatch.status === 'Completed' || mo.status === 'Completed' || mo.status === 'Settled' || (mo.status === 'Served' && (mo.payment_status?.toLowerCase() === 'paid' || localMatch.payment_status?.toLowerCase() === 'paid')) || localMatch.payment_status === 'Paid') {
-            preservedStatus = 'Completed';
-          } else if (localMatch.status === 'Cancelled' || mo.status === 'Cancelled') {
+          if (localMatch.status === 'Cancelled' || mo.status === 'Cancelled' || String(localMatch.payment_status).toLowerCase() === 'void' || String(mo.payment_status).toLowerCase() === 'void') {
             preservedStatus = 'Cancelled';
           } else if (hasUnserved) {
-            // CRITICAL: If there are unserved items (e.g. from an add-on or fresh round), status CANNOT be 'Served'!
-            preservedStatus = (String(mo.status || '').toLowerCase() === 'placed') ? 'Placed' : (allMergedReady ? 'Ready' : (localMatch.status === 'Preparing' ? 'Preparing' : 'Placed'));
+            // CRITICAL: If there are unserved items (e.g. from an add-on or fresh round), status CANNOT be 'Served' or 'Completed'!
+            preservedStatus = (String(mo.status || '').toLowerCase() === 'placed') ? 'Placed' : (allMergedReady ? 'Ready' : 'Preparing');
+          } else if (localMatch.status === 'Completed' || mo.status === 'Completed' || mo.status === 'Settled' || ((mo.status === 'Served' || localMatch.status === 'Served') && (mo.payment_status?.toLowerCase() === 'paid' || localMatch.payment_status?.toLowerCase() === 'paid')) || localMatch.payment_status === 'Paid') {
+            preservedStatus = 'Completed';
           } else if (localMatch.status === 'Served' || mo.status === 'Served') {
             preservedStatus = (localMatch.payment_status?.toLowerCase() === 'paid' || mo.payment_status?.toLowerCase() === 'paid') ? 'Completed' : 'Served';
           } else if (allMergedReady) {
@@ -3624,6 +3629,29 @@ export default function App() {
     // 1. Immediately update UI & local state for zero-latency UX
     setOrders(updated);
     setLocalStore('orders', updated);
+
+    // Un-clear order from KDS cleared IDs so it immediately pops up on Kitchen Display screen
+    try {
+      const savedCleared = localStorage.getItem('kds_cleared_order_ids');
+      if (savedCleared) {
+        const parsed = JSON.parse(savedCleared);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const matchKeys = new Set([
+            String(finalOrder.id || '').replace(/^#+/, '').replace(/^ORD-?/i, '').trim(),
+            String(finalOrder.order_number || '').replace(/^#+/, '').replace(/^ORD-?/i, '').trim(),
+            String(finalOrder.supabase_order_id || '').trim(),
+            String(activeParent?.id || '').replace(/^#+/, '').replace(/^ORD-?/i, '').trim(),
+            String(activeParent?.order_number || '').replace(/^#+/, '').replace(/^ORD-?/i, '').trim(),
+            String(activeParent?.supabase_order_id || '').trim()
+          ].filter(Boolean));
+          const filtered = parsed.filter(id => {
+            const clean = String(id || '').replace(/^#+/, '').replace(/^ORD-?/i, '').trim();
+            return !matchKeys.has(clean) && !matchKeys.has(String(id).trim());
+          });
+          localStorage.setItem('kds_cleared_order_ids', JSON.stringify(filtered));
+        }
+      }
+    } catch (e) {}
 
     // Update corresponding dining table status to occupied with guest info (DINE-IN ONLY)
     if (!isTakeawayOrder) {
