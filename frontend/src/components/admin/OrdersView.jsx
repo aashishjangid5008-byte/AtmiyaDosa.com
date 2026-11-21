@@ -90,6 +90,15 @@ export default function OrdersView({
     return digits ? String(parseInt(digits, 10)) : String(val || '').trim().toLowerCase();
   };
 
+  // Helper: Identify Takeaway / Parcel orders
+  const isTakeawayOrder = (o) => {
+    if (!o) return false;
+    const src = String(o.order_source || '').toLowerCase();
+    const ch = String(o.channel || '').toLowerCase();
+    const tbl = String(o.table_number || '').toLowerCase();
+    return src === 'takeaway' || src === 'counter' || ch === 'takeaway' || tbl.includes('takeaway') || tbl.includes('parcel');
+  };
+
   // Helper: Determine if order is completed or settled
   const isOrderCompleted = (o) => {
     if (!o) return false;
@@ -178,13 +187,6 @@ export default function OrdersView({
   const activeOrdersCount = orders.filter(o => !isOrderCompleted(o) && o.status !== 'Cancelled').length;
   const completedOrdersCount = orders.filter(isOrderCompleted).length;
   const unseenOrdersCount = orders.filter(o => !safeSeenOrderIds.includes(o.id) && !isOrderCompleted(o) && o.status !== 'Cancelled').length;
-  const isTakeawayOrder = (o) => {
-    if (!o) return false;
-    const src = String(o.order_source || '').toLowerCase();
-    const ch = String(o.channel || '').toLowerCase();
-    const tbl = String(o.table_number || '').toLowerCase();
-    return src === 'takeaway' || src === 'counter' || ch === 'takeaway' || tbl.includes('takeaway') || tbl.includes('parcel');
-  };
 
   const dineInCount = orders.filter(o => !isTakeawayOrder(o)).length;
   const takeawayCount = orders.filter(isTakeawayOrder).length;

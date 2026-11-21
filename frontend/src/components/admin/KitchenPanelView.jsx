@@ -77,18 +77,24 @@ const resolveTicketItems = (order) => {
     });
   }
 
-  // 4. Ensure newly added items are only used as fallback if base is completely empty
-  if (base.length === 0 && Array.isArray(order.newly_added_items) && order.newly_added_items.length > 0) {
+  // 4. Merge newly added add-on items if not already present in base
+  if (Array.isArray(order.newly_added_items) && order.newly_added_items.length > 0) {
     order.newly_added_items.forEach(newItem => {
-      base.push({
-        ...newItem,
-        qty: newItem.qty || newItem.quantity || 1,
-        quantity: newItem.qty || newItem.quantity || 1,
-        round: newItem.round || order.round || 2,
-        is_addon: true,
-        kitchen_status: newItem.kitchen_status || 'placed',
-        is_served: Boolean(newItem.is_served)
-      });
+      const alreadyInBase = base.some(b => 
+        (b.id && newItem.id && b.id === newItem.id) ||
+        (String(b.name || '').toLowerCase().trim() === String(newItem.name || '').toLowerCase().trim() && (b.round === newItem.round || (b.is_addon && newItem.is_addon)))
+      );
+      if (!alreadyInBase) {
+        base.push({
+          ...newItem,
+          qty: newItem.qty || newItem.quantity || 1,
+          quantity: newItem.qty || newItem.quantity || 1,
+          round: newItem.round || order.round || 2,
+          is_addon: true,
+          kitchen_status: newItem.kitchen_status || 'placed',
+          is_served: Boolean(newItem.is_served)
+        });
+      }
     });
   }
 
@@ -291,9 +297,12 @@ export default function KitchenPanelView({
     return orders.filter(o => {
       if (isOrderCompletedOrCleared(o)) return false;
       const s = String(o?.status || '').toLowerCase().trim();
-      return s === 'placed' || s === 'pending';
+      const items = resolveTicketItems(o);
+      const hasUnserved = items.some(it => !it.is_served && String(it.status || it.kitchen_status || '').toLowerCase() !== 'cancelled');
+      const isFreshAddon = (o?.is_addon || (o?.round && o?.round > 1) || o?.newly_added_summary) && hasUnserved;
+      return s === 'placed' || s === 'pending' || isFreshAddon;
     });
-  }, [orders, clearedOrderIds]);
+  }, [orders, clearedOrderIds, isOrderCompletedOrCleared]);
 
   // 2. Cooking Tab: Orders with items being prepared or ready on pass
   const preparingOrders = useMemo(() => {
@@ -1144,6 +1153,7 @@ export default function KitchenPanelView({
   // ULTRA-LEGIBLE, PHONE-OPTIMIZED ORDER TICKET CARD (HUMAN-MADE & PREMIUM)
   // ---------------------------------------------------------------------------
   function renderMobileOrderCard(order, cardIdx = 0) {
+    const s = String(order?.status || '').toLowerCase().trim();
     const totalSecs = getElapsedSeconds(order);
     const urgency = getUrgencyLevel(totalSecs);
     const isRush = urgency === 'rush';
@@ -1175,7 +1185,6 @@ export default function KitchenPanelView({
     const hasUnservedFood = displayItems.some(it => !it.is_served && String(it.kitchen_status || it.status || '').toLowerCase() !== 'cancelled');
     const isServed = allItemsServed && (s === 'served' || s === 'completed' || s === 'settled');
 
-    const s = String(order.status || '').toLowerCase().trim();
     const isPlaced = (s === 'placed' || s === 'pending') || (hasUnservedFood && !allItemsServed);
     const isCooking = (s === 'preparing' || s === 'cooking') && !allItemsServed;
     const isReady = s === 'ready' && !allItemsServed;

@@ -273,8 +273,10 @@ const mapDbOrderToFrontend = (dbOrd) => {
     mappedStatus = 'Completed';
   } else if (hasUnserved) {
     // CRITICAL: If there are unserved items (e.g. from an add-on after previous round handover),
-    // status CANNOT be 'Served' or 'Completed'! It must be Placed, Preparing, or Ready.
-    mappedStatus = allItemsReadyOrServed ? 'Ready' : ((rawStatusUpper === 'PREPARING' || rawStatusUpper === 'COOKING' || anyItemServed) ? 'Preparing' : 'Placed');
+    // status CANNOT be 'Served' or 'Completed'! If raw status is PLACED, keep it Placed so KDS chimes and flags as new order!
+    mappedStatus = allItemsReadyOrServed 
+      ? 'Ready' 
+      : ((rawStatusUpper === 'PLACED') ? 'Placed' : ((rawStatusUpper === 'PREPARING' || rawStatusUpper === 'COOKING') ? 'Preparing' : 'Placed'));
   } else if (rawStatusUpper === 'SERVED' || allItemsServed) {
     if (payStatusLower === 'paid' || payStatusLower === 'settled') {
       mappedStatus = 'Completed';
@@ -1205,7 +1207,7 @@ export default function App() {
               const cleanLocalName = String(localIt.name || localIt.item_name || '').toLowerCase().trim();
               const dbItem = (mo.items || []).find(di => 
                 (di.id && localIt.id && di.id === localIt.id) ||
-                (cleanLocalName && String(di.name || di.item_name || '').toLowerCase().trim() === cleanLocalName)
+                (cleanLocalName && String(di.name || di.item_name || '').toLowerCase().trim() === cleanLocalName && (localIt.round === di.round || !di.round))
               );
               if (!dbItem) return localIt;
 
@@ -1230,6 +1232,18 @@ export default function App() {
                 served_at: isExplicitlyPreparing ? null : (localIt.served_at || dbItem.served_at)
               };
             });
+
+            // Append any fresh add-on items from DB that were placed on another device
+            (mo.items || []).forEach(dbIt => {
+              const cleanDbName = String(dbIt.name || dbIt.item_name || '').toLowerCase().trim();
+              const foundInLocal = localMatch.items.some(lit => 
+                (lit.id && dbIt.id && lit.id === dbIt.id) ||
+                (lit.name && cleanDbName && lit.name.toLowerCase().trim() === cleanDbName && (lit.round === dbIt.round || (!lit.round && !dbIt.round)))
+              );
+              if (!foundInLocal) {
+                mergedItems.push(dbIt);
+              }
+            });
           } else {
             // Standard sync from Supabase items with local state merging
             const dbItems = hasDbItems ? mo.items : (hasLocalItems ? localMatch.items : (mo.items || []));
@@ -1244,7 +1258,7 @@ export default function App() {
                 if (it.id && dbItem.id && it.id === dbItem.id) {
                   localItem = it;
                   matchedIdx = lIdx;
-                } else if (it.name && cleanDbName && it.name.toLowerCase().trim() === cleanDbName && (it.round === dbItem.round || !dbItem.round || !it.round)) {
+                } else if (it.name && cleanDbName && it.name.toLowerCase().trim() === cleanDbName && (Boolean(it.is_addon) === Boolean(dbItem.is_addon)) && (it.round === dbItem.round || !dbItem.round || !it.round)) {
                   localItem = it;
                   matchedIdx = lIdx;
                 }
