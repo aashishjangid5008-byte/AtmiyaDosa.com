@@ -491,10 +491,21 @@ async def sync_settle_session_to_supabase(
     }
     base_url = f"{settings.SUPABASE_URL}/rest/v1"
 
-    # Normalize table number to T-01 format
+    # Normalize table number variants to ensure comprehensive matching in Supabase
     raw_tbl = str(table_number or "01")
     digits = "".join([c for c in raw_tbl if c.isdigit()])
-    table_num = f"T-{digits.zfill(2)}" if digits else "T-01"
+    pad_num = digits.zfill(2) if digits else "01"
+    table_num = f"T-{pad_num}"
+
+    table_variants = list({
+        table_num,
+        f"T{pad_num}",
+        f"T-{digits}" if digits else "",
+        f"T{digits}" if digits else "",
+        str(int(digits)) if digits else "",
+        pad_num,
+        f"Table {digits}" if digits else ""
+    } - {""})
 
     pay_method = "CASH" if (payment_method or "").upper() == "CASH" else "UPI_COUNTER"
     closed_at = datetime.now(timezone.utc).isoformat()
@@ -503,8 +514,9 @@ async def sync_settle_session_to_supabase(
         try:
             # 1. Resolve table_id
             table_id = None
+            tbl_in_str = ",".join(table_variants)
             t_resp = await client.get(
-                f"{base_url}/restaurant_tables?table_number=eq.{table_num}&select=id",
+                f"{base_url}/restaurant_tables?table_number=in.({tbl_in_str})&select=id",
                 headers=headers
             )
             if t_resp.status_code == 200 and t_resp.json():
@@ -544,19 +556,55 @@ async def sync_settle_session_to_supabase(
                     headers=headers,
                     json={"status": "VACANT"}
                 )
+            else:
+                await client.patch(
+                    f"{base_url}/restaurant_tables?table_number=in.({tbl_in_str})",
+                    headers=headers,
+                    json={"status": "VACANT"}
+                )
 
-            # 4. Settle all active orders for this table
+            # 4. Settle all active orders for this table in Supabase
+            order_patch_payload = {
+                "session_id": None,
+                "status": "SERVED",
+                "payment_status": "PAID",
+                "payment_method": pay_method,
+                "served_at": closed_at
+            }
+
+            # Update orders by table number variants
             await client.patch(
-                f"{base_url}/orders?table_number=eq.{table_num}&status=neq.CANCELLED",
+                f"{base_url}/orders?table_number=in.({tbl_in_str})&status=neq.CANCELLED",
                 headers=headers,
-                json={
-                    "session_id": None,
-                    "status": "COMPLETED",
-                    "payment_status": "PAID",
-                    "payment_method": pay_method,
-                    "served_at": closed_at
-                }
+                json=order_patch_payload
             )
+
+            # If specific order_id was provided, update it directly as well
+            if order_id:
+                clean_ord = str(order_id).replace("#", "")
+                is_uuid = len(clean_ord) == 36 and clean_ord.count("-") == 4
+                if is_uuid:
+                    await client.patch(
+                        f"{base_url}/orders?id=eq.{clean_ord}",
+                        headers=headers,
+                        json=order_patch_payload
+                    )
+                else:
+                    await client.patch(
+                        f"{base_url}/orders?order_number=eq.{clean_ord}",
+                        headers=headers,
+                        json=order_patch_payload
+                    )
+
+            # If terminated sessions exist, also settle any orders associated with them
+            if terminated_sessions:
+                sess_ids = ",".join([s for s in terminated_sessions if s])
+                if sess_ids:
+                    await client.patch(
+                        f"{base_url}/orders?session_id=in.({sess_ids})",
+                        headers=headers,
+                        json=order_patch_payload
+                    )
 
             print(f"[SUPABASE] Successfully terminated session(s) for Table {table_num} and marked VACANT.")
             return {

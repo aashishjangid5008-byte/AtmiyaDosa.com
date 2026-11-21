@@ -462,6 +462,19 @@ export default function CustomerMenu({
 
   // Active table order in the kitchen queue (Locks QR to table session)
   const activeTableOrder = React.useMemo(() => {
+    // If the table is marked vacant / available in tables AND this customer device has not placed an order,
+    // do NOT adopt previous dining session orders! A new QR scan on a vacant table starts completely fresh!
+    const tableObj = (tables || []).find(t => isTableMatch(t.number, currentTable) || t.id === currentTable);
+    const isTableVacant = tableObj && (
+      (tableObj.status || '').toLowerCase() === 'available' || 
+      (tableObj.status || '').toLowerCase() === 'vacant' || 
+      tableObj.is_occupied === false
+    ) && !tableObj.current_order_id;
+
+    if (isTableVacant && !placedOrderId) {
+      return null;
+    }
+
     const tableOrders = orders.filter(o => 
       isTableMatch(o.table_number, currentTable) && isOrderActive(o)
     );
@@ -470,9 +483,14 @@ export default function CustomerMenu({
       const matchPlaced = tableOrders.find(o => o.id === placedOrderId || o.order_number === String(placedOrderId).replace('#', ''));
       if (matchPlaced) return matchPlaced;
     }
+
+    if (isTableVacant) {
+      return null;
+    }
+
     tableOrders.sort((a, b) => new Date(b.placed_at || b.created_at || 0) - new Date(a.placed_at || a.created_at || 0));
     return tableOrders[0];
-  }, [orders, currentTable, placedOrderId]);
+  }, [orders, currentTable, placedOrderId, tables]);
 
   const activeOrderDisplayId = activeTableOrder?.id 
     ? (String(activeTableOrder.id).startsWith('#') ? activeTableOrder.id : `#${activeTableOrder.id}`)

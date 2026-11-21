@@ -1084,12 +1084,10 @@ export const settleTableSessionInSupabase = async (tableNumber, orderIdOrNumber,
       }
     }
 
-    // 4. Update order payment status to PAID, session_id to null and status to SERVED / COMPLETED
     const updatePayload = {
       session_id: null,
       payment_status: 'PAID',
       payment_method: mappedPaymentMethod,
-      payment_mode: mappedPaymentMethod === 'UPI_COUNTER' ? 'UPI' : 'Cash',
       status: 'SERVED', // DB check constraint permits 'SERVED', 'CANCELLED', 'READY', 'PREPARING', 'PLACED'
       served_at: new Date().toISOString()
     };

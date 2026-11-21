@@ -5488,54 +5488,52 @@ export default function App() {
       const orderPayload = { 
         session_id: null,
         payment_status: 'PAID', 
-        payment_mode: cleanMethod,
         payment_method: supaMethod,
-        settled_at: new Date().toISOString(),
-        completed_at: new Date().toISOString(),
-        status: 'COMPLETED'
+        status: 'SERVED',
+        served_at: new Date().toISOString()
       };
 
       // 1. Settle orders by primary IDs
-      const targetOrderIds = updatedOrders
+      const rawTargetOrderIds = updatedOrders
         .filter(isOrderForTable)
         .map(o => o.supabase_order_id || o.id)
         .filter(Boolean);
 
-      if (targetOrderIds.length > 0) {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const uuidIds = rawTargetOrderIds.filter(id => uuidRegex.test(String(id)));
+      const nonUuidNumbers = rawTargetOrderIds
+        .filter(id => !uuidRegex.test(String(id)))
+        .map(id => String(id).replace('#', ''));
+
+      if (uuidIds.length > 0) {
         try {
-          const { error: idErr } = await supabase
+          await supabase
             .from('orders')
             .update(orderPayload)
-            .in('id', targetOrderIds);
-
-          if (idErr) {
-            await supabase
-              .from('orders')
-              .update({ ...orderPayload, status: 'SERVED' })
-              .in('id', targetOrderIds);
-          }
+            .in('id', uuidIds);
 
           await supabase
             .from('order_items')
             .update({ status: 'SERVED' })
-            .in('order_id', targetOrderIds);
+            .in('order_id', uuidIds);
         } catch (itemErr) {}
+      }
+
+      if (nonUuidNumbers.length > 0) {
+        try {
+          await supabase
+            .from('orders')
+            .update(orderPayload)
+            .in('order_number', nonUuidNumbers);
+        } catch (ordNumErr) {}
       }
 
       if (orFilter) {
         // 2. Settle all active dining orders for this table in Supabase
-        const { error: ordErr } = await supabase
+        await supabase
           .from('orders')
           .update(orderPayload)
           .or(orFilter);
-
-        if (ordErr) {
-          // If DB check constraint restricts status to SERVED, retry with 'SERVED'
-          await supabase
-            .from('orders')
-            .update({ ...orderPayload, status: 'SERVED' })
-            .or(orFilter);
-        }
 
         // 3. Mark restaurant_tables as VACANT (only valid column in schema)
         await supabase
