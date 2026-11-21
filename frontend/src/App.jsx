@@ -86,7 +86,7 @@ import {
   API_BASE_URL
 } from './lib/supabase';
 import { getDishCuisine } from './lib/cuisines';
-import { getTranslation } from './lib/translations';
+import { getTranslation, normalizeDishName, deduplicateOrderItems } from './lib/translations';
 import { playSound } from './lib/sound';
 import { sanitizeOrderPayload } from './lib/sanitizer';
 import { isFancyDosaItem } from './lib/authenticMenuData';
@@ -234,6 +234,8 @@ const mapDbOrderToFrontend = (dbOrd) => {
       qty: i.quantity || 1,
       kitchen_status: kitchenStatus,
       is_served: isItemServed,
+      is_free_offer: Boolean(i.is_free_offer || i.menu_item_id === 'free_mysore_offer' || String(i.item_name || '').toLowerCase().includes('offer - free')),
+      offer_tag: i.offer_tag || (String(i.item_name || '').toLowerCase().includes('offer - free') ? 'Buy 2 Fancy Dosa Get 1 Free' : null),
       cooking_note: i.cooking_note || null,
       note: i.cooking_note || null,
       customizations: i.cooking_note || null
@@ -259,6 +261,9 @@ const mapDbOrderToFrontend = (dbOrd) => {
       });
     }
   }
+
+  // Guarantee clean deduplication of items coming from database
+  itms = deduplicateOrderItems(itms);
 
   let mappedStatus = statusDisplayMap[dbOrd.status] || dbOrd.status || 'Preparing';
   
@@ -1204,10 +1209,10 @@ export default function App() {
             // Local items are authoritative because staff just deleted or modified items on this terminal!
             // Map over local items; only update kitchen status from mo.items if matched, but DO NOT resurrect deleted items!
             mergedItems = localMatch.items.map(localIt => {
-              const cleanLocalName = String(localIt.name || localIt.item_name || '').toLowerCase().trim();
+              const cleanLocalName = normalizeDishName(localIt.name || localIt.item_name);
               const dbItem = (mo.items || []).find(di => 
                 (di.id && localIt.id && di.id === localIt.id) ||
-                (cleanLocalName && String(di.name || di.item_name || '').toLowerCase().trim() === cleanLocalName && (localIt.round === di.round || !di.round))
+                (cleanLocalName && normalizeDishName(di.name || di.item_name) === cleanLocalName && (localIt.round === di.round || !di.round))
               );
               if (!dbItem) return localIt;
 
@@ -1235,10 +1240,10 @@ export default function App() {
 
             // Append any fresh add-on items from DB that were placed on another device
             (mo.items || []).forEach(dbIt => {
-              const cleanDbName = String(dbIt.name || dbIt.item_name || '').toLowerCase().trim();
+              const cleanDbName = normalizeDishName(dbIt.name || dbIt.item_name);
               const foundInLocal = localMatch.items.some(lit => 
                 (lit.id && dbIt.id && lit.id === dbIt.id) ||
-                (lit.name && cleanDbName && lit.name.toLowerCase().trim() === cleanDbName && (lit.round === dbIt.round || (!lit.round && !dbIt.round)))
+                (cleanDbName && normalizeDishName(lit.name || lit.item_name) === cleanDbName && (lit.round === dbIt.round || (!lit.round && !dbIt.round)))
               );
               if (!foundInLocal) {
                 mergedItems.push(dbIt);
@@ -1249,7 +1254,7 @@ export default function App() {
             const dbItems = hasDbItems ? mo.items : (hasLocalItems ? localMatch.items : (mo.items || []));
             const matchedLocalIndices = new Set();
             mergedItems = dbItems.map((dbItem) => {
-              const cleanDbName = String(dbItem.name || dbItem.item_name || '').toLowerCase().trim();
+              const cleanDbName = normalizeDishName(dbItem.name || dbItem.item_name);
               let localItem = null;
               let matchedIdx = -1;
 
@@ -1258,9 +1263,12 @@ export default function App() {
                 if (it.id && dbItem.id && it.id === dbItem.id) {
                   localItem = it;
                   matchedIdx = lIdx;
-                } else if (it.name && cleanDbName && it.name.toLowerCase().trim() === cleanDbName && (Boolean(it.is_addon) === Boolean(dbItem.is_addon)) && (it.round === dbItem.round || !dbItem.round || !it.round)) {
-                  localItem = it;
-                  matchedIdx = lIdx;
+                } else if (cleanDbName) {
+                  const cleanLocalName = normalizeDishName(it.name || it.item_name);
+                  if (cleanLocalName && cleanLocalName === cleanDbName) {
+                    localItem = it;
+                    matchedIdx = lIdx;
+                  }
                 }
               });
 
@@ -1298,6 +1306,9 @@ export default function App() {
               }
             });
           }
+
+          // CRITICAL: Guarantee zero item duplication across tickets
+          mergedItems = deduplicateOrderItems(mergedItems);
 
           const isLocalCompleted = localMatch.status === 'Completed' || localMatch.payment_status === 'Paid';
           const isDbCompleted = mo.status === 'Completed' || mo.status === 'Settled' || mo.payment_status?.toLowerCase() === 'paid';
@@ -3521,13 +3532,20 @@ export default function App() {
         }
       }
 
-    const isAddonOrder = Boolean(activeParent);
-    const roundNumber = isAddonOrder ? ((activeParent.round || 1) + 1) : 1;
+    // An order is strictly an add-on ONLY IF explicitly flagged by CustomerMenu/Waiter OR matching activeParent id directly
+    const isAddonOrder = Boolean(
+      newOrder.is_addon || 
+      (activeParent && (
+        matchesOrderId(activeParent, newOrder.id) || 
+        matchesOrderId(activeParent, newOrder.parent_order_id)
+      ))
+    );
+    const roundNumber = isAddonOrder && activeParent ? ((activeParent.round || 1) + 1) : 1;
 
     // Tag order with round metadata and link to parent table session
     newOrder.is_addon = isAddonOrder;
     newOrder.round = roundNumber;
-    newOrder.parent_order_id = isAddonOrder ? (activeParent.id || activeParent.order_number) : null;
+    newOrder.parent_order_id = (isAddonOrder && activeParent) ? (activeParent.id || activeParent.order_number) : null;
 
     // Enforce proper payment classification
     const isOnline = newOrder.payment_mode === 'UPI' || newOrder.payment_verified_online === true;
@@ -3567,7 +3585,8 @@ export default function App() {
                     };
                   })
                 : []));
-      const mergedItems = [...parentBaseItems];
+      const deduplicatedBase = deduplicateOrderItems(parentBaseItems);
+      const mergedItems = [...deduplicatedBase];
 
       const newItemsList = (Array.isArray(newOrder.items) && newOrder.items.length > 0)
         ? newOrder.items
@@ -3580,35 +3599,47 @@ export default function App() {
           ? 'served' 
           : (newItem.kitchen_status || 'placed');
 
-        mergedItems.push({
-          ...newItem,
-          id: newItem.id || `addon_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-          quantity: addedQty,
-          qty: addedQty,
-          price: Number(newItem.price || newItem.unit_price || newItem.finalPrice || 0),
-          round: roundNumber,
-          is_addon: true,
-          kitchen_status: targetKitchenStatus,
-          is_served: isDeliveredByWaiter,
-          served_at: isDeliveredByWaiter ? (newItem.served_at || Date.now()) : null
+        // Check if this item is already in mergedItems
+        const cleanNewName = normalizeDishName(newItem.name || newItem.item_name);
+        const isAlreadyInMerged = mergedItems.some(mi => {
+          if (mi.id && newItem.id && mi.id === newItem.id) return true;
+          const cleanMiName = normalizeDishName(mi.name || mi.item_name);
+          return Boolean(cleanMiName && cleanMiName === cleanNewName && (mi.round === roundNumber || (!mi.round && roundNumber === 1)));
         });
+
+        if (!isAlreadyInMerged) {
+          mergedItems.push({
+            ...newItem,
+            id: newItem.id || `addon_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+            quantity: addedQty,
+            qty: addedQty,
+            price: Number(newItem.price || newItem.unit_price || newItem.finalPrice || 0),
+            round: roundNumber,
+            is_addon: true,
+            kitchen_status: targetKitchenStatus,
+            is_served: isDeliveredByWaiter,
+            served_at: isDeliveredByWaiter ? (newItem.served_at || Date.now()) : null
+          });
+        }
       });
+
+      const finalDeduplicatedItems = deduplicateOrderItems(mergedItems);
 
       const addedSubtotal = parseFloat(newOrder.subtotal || 0);
       const addedTax = 0;
       const addedDiscount = parseFloat(newOrder.discount || 0);
       const addedTotal = parseFloat(newOrder.total || newOrder.total_amount || 0);
 
-      const itemsSum = Number(mergedItems.reduce((acc, it) => acc + (Number(it.price || it.unit_price || it.finalPrice || 0) * Number(it.quantity || it.qty || 1)), 0).toFixed(2));
+      const itemsSum = Number(finalDeduplicatedItems.reduce((acc, it) => acc + (Number(it.price || it.unit_price || it.finalPrice || 0) * Number(it.quantity || it.qty || 1)), 0).toFixed(2));
       const fallbackSubtotal = Number((parseFloat(activeParent.subtotal || 0) + addedSubtotal).toFixed(2));
       const cumulativeSubtotal = itemsSum > 0 ? Math.max(itemsSum, fallbackSubtotal) : fallbackSubtotal;
       const cumulativeTax = 0;
       const cumulativeDiscount = Number((parseFloat(activeParent.discount || 0) + addedDiscount).toFixed(2));
       const cumulativeTotal = Math.max(0, Number((cumulativeSubtotal - cumulativeDiscount).toFixed(2)));
-      const summaryStr = mergedItems.map(i => `${i.quantity || i.qty || 1}x ${i.name || i.item_name}`).join(', ');
+      const summaryStr = finalDeduplicatedItems.map(i => `${i.quantity || i.qty || 1}x ${i.name || i.item_name}`).join(', ');
 
-      const allItemsServed = mergedItems.length > 0 && mergedItems.every(i => i.is_served);
-      const allItemsReady = mergedItems.length > 0 && mergedItems.every(i => i.kitchen_status === 'ready' || i.is_served);
+      const allItemsServed = finalDeduplicatedItems.length > 0 && finalDeduplicatedItems.every(i => i.is_served);
+      const allItemsReady = finalDeduplicatedItems.length > 0 && finalDeduplicatedItems.every(i => i.kitchen_status === 'ready' || i.is_served);
       const nextOrderStatus = allItemsServed ? 'Served' : (allItemsReady ? 'Ready' : 'Placed');
 
       finalOrder = {
@@ -3618,8 +3649,8 @@ export default function App() {
         supabase_order_id: activeParent.supabase_order_id || null,
         session_id: activeParent.session_id || null,
         table_number: activeParent.table_number || newOrder.table_number,
-        items: mergedItems,
-        order_items: mergedItems,
+        items: finalDeduplicatedItems,
+        order_items: finalDeduplicatedItems,
         subtotal: cumulativeSubtotal,
         tax: cumulativeTax,
         discount: cumulativeDiscount,
@@ -3649,7 +3680,15 @@ export default function App() {
         updated = [finalOrder, ...orders];
       }
     } else {
-      updated = [newOrder, ...orders];
+      const cleanItems = deduplicateOrderItems(newOrder.items || []);
+      finalOrder = {
+        ...newOrder,
+        items: cleanItems,
+        order_items: cleanItems,
+        newly_added_items: null,
+        newly_added_summary: null
+      };
+      updated = [finalOrder, ...orders];
     }
 
     // 1. Immediately update UI & local state for zero-latency UX

@@ -2447,3 +2447,72 @@ export const getTranslation = (lang = 'en', key = '') => {
   const currentLangDict = TRANSLATIONS[lang] || TRANSLATIONS.en;
   return currentLangDict[key] || TRANSLATIONS.en[key] || key;
 };
+
+/**
+ * Strips out regional script parentheses and normalizes dish name for exact matching.
+ * E.g., "Onion Paper (ડુંગળી પેપર ઢોસા)" -> "onion paper"
+ *       "Mysore Dosa (Offer - Free) (માયસોર ઢોસા (ઓફર - ફ્રી))" -> "mysore dosa (offer - free)"
+ */
+export const normalizeDishName = (name) => {
+  if (!name) return '';
+  return String(name)
+    .replace(/\s*\([^)]*[\u0900-\u0AFF][^)]*\)/g, '')
+    .replace(/[\u0900-\u0AFF]+/g, '')
+    .trim()
+    .toLowerCase();
+};
+
+/**
+ * Deduplicates order items array by unique dish and round, preventing duplicate item creation.
+ * Merges richer fields (gujarati, kitchen status, served flag) into a single clean entry.
+ */
+export const deduplicateOrderItems = (items) => {
+  if (!Array.isArray(items) || items.length <= 1) return items || [];
+
+  const seen = [];
+  items.forEach(item => {
+    if (!item) return;
+    const normName = normalizeDishName(item.name || item.item_name);
+    const itemRound = Number(item.round) || 1;
+    const isAddon = Boolean(item.is_addon || (item.round && item.round > 1));
+
+    const existingIdx = seen.findIndex(s => {
+      // 1. Direct item ID match
+      if (s.id && item.id && s.id === item.id) return true;
+      // 2. Normalized dish name match within the same round / addon tier
+      const sNorm = normalizeDishName(s.name || s.item_name);
+      if (sNorm && normName && sNorm === normName) {
+        const sRound = Number(s.round) || 1;
+        const sAddon = Boolean(s.is_addon || (s.round && s.round > 1));
+        return sRound === itemRound && sAddon === isAddon;
+      }
+      return false;
+    });
+
+    if (existingIdx === -1) {
+      seen.push(item);
+    } else {
+      const existing = seen[existingIdx];
+      const isServed = Boolean(existing.is_served || item.is_served);
+      const isReady = isServed ? false : Boolean(existing.kitchen_status === 'ready' || item.kitchen_status === 'ready');
+      const kStatus = isServed ? 'served' : (isReady ? 'ready' : (existing.kitchen_status || item.kitchen_status || 'placed'));
+
+      seen[existingIdx] = {
+        ...item,
+        ...existing,
+        id: existing.id || item.id,
+        name: existing.name || item.name || item.item_name,
+        gujarati: existing.gujarati || item.gujarati || null,
+        gujarati_name: existing.gujarati_name || item.gujarati_name || null,
+        image_url: existing.image_url || item.image_url || existing.imageUrl || item.imageUrl || null,
+        cooking_note: existing.cooking_note || item.cooking_note || existing.note || item.note || null,
+        kitchen_status: kStatus,
+        is_served: isServed,
+        ready_at: existing.ready_at || item.ready_at || null,
+        served_at: existing.served_at || item.served_at || null
+      };
+    }
+  });
+
+  return seen;
+};

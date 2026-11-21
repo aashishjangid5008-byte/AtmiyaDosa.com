@@ -19,7 +19,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { playSound, unlockAudio } from '../../lib/sound';
-import { getTranslation, getDishDisplayName } from '../../lib/translations';
+import { getTranslation, getDishDisplayName, normalizeDishName, deduplicateOrderItems } from '../../lib/translations';
 import { getDishCuisine, CUISINE_CONFIG } from '../../lib/cuisines';
 import { speakOrderAlert, speakSystemTestAlert } from '../../lib/notifications';
 import { supabase } from '../../lib/supabase';
@@ -77,13 +77,15 @@ const resolveTicketItems = (order) => {
     });
   }
 
-  // 4. Merge newly added add-on items if not already present in base
-  if (Array.isArray(order.newly_added_items) && order.newly_added_items.length > 0) {
+  // 4. Merge newly added add-on items ONLY IF order is an add-on order and items are not already in base
+  if (order.is_addon && Array.isArray(order.newly_added_items) && order.newly_added_items.length > 0) {
     order.newly_added_items.forEach(newItem => {
-      const alreadyInBase = base.some(b => 
-        (b.id && newItem.id && b.id === newItem.id) ||
-        (String(b.name || '').toLowerCase().trim() === String(newItem.name || '').toLowerCase().trim() && (b.round === newItem.round || (b.is_addon && newItem.is_addon)))
-      );
+      const cleanNewName = normalizeDishName(newItem.name || newItem.item_name);
+      const alreadyInBase = base.some(b => {
+        if (b.id && newItem.id && b.id === newItem.id) return true;
+        const cleanBaseName = normalizeDishName(b.name || b.item_name);
+        return Boolean(cleanBaseName && cleanBaseName === cleanNewName && (b.round === newItem.round || (b.is_addon && newItem.is_addon)));
+      });
       if (!alreadyInBase) {
         base.push({
           ...newItem,
@@ -118,11 +120,13 @@ const resolveTicketItems = (order) => {
     }
   }
 
-  // Filter out any cancelled dishes so they NEVER appear in KDS
-  return base.filter(it => {
+  // Filter out any cancelled dishes so they NEVER appear in KDS, and deduplicate items
+  const activeDishes = base.filter(it => {
     const s = String(it.status || it.kitchen_status || '').toLowerCase().trim();
     return s !== 'cancelled';
   });
+
+  return deduplicateOrderItems(activeDishes);
 };
 
 export default function KitchenPanelView({ 

@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import { deduplicateOrderItems } from './translations';
 
 /**
  * Generates and downloads a clean, strictly SINGLE-PAGE 80mm THERMAL RECEIPT TICKET PDF.
@@ -34,7 +35,8 @@ export function downloadSinglePageBillPdf({
       year: 'numeric'
     });
 
-    const items = Array.isArray(order.items) ? order.items : [];
+    const rawItems = Array.isArray(order.items) ? order.items : [];
+    const items = deduplicateOrderItems(rawItems);
     const paymentMode = order.payment_mode || 'Cash on Delivery';
     const paymentStatus = order.payment_status || (order.status === 'Completed' || order.status === 'served' ? 'Paid' : 'Payment Due');
     const collector = order.paid_collected_by || 'Cashier / Floor Staff';
@@ -353,7 +355,8 @@ export function printSinglePageReceipt({
       year: 'numeric'
     });
 
-    const items = Array.isArray(order.items) ? order.items : [];
+    const rawItems = Array.isArray(order.items) ? order.items : [];
+    const items = deduplicateOrderItems(rawItems);
     const paymentMode = order.payment_mode || 'Cash on Delivery';
     const paymentStatus = order.payment_status || (order.status === 'Completed' || order.status === 'served' ? 'Paid' : 'Payment Due');
     const collector = order.paid_collected_by || 'Cashier / Floor Staff';

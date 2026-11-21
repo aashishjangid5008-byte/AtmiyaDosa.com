@@ -25,7 +25,7 @@ import {
   Lock,
   Trash2
 } from 'lucide-react';
-import { getTranslation } from '../../lib/translations';
+import { getTranslation, deduplicateOrderItems } from '../../lib/translations';
 import { downloadSinglePageBillPdf, printSinglePageReceipt } from '../../lib/generateBillPdf';
 
 export default function OrdersView({ 
@@ -1069,7 +1069,7 @@ export default function OrdersView({
               <div className="border-b border-dashed my-2 border-slate-300"></div>
               
               <div className="space-y-1 text-left text-xs">
-                {(selectedOrder.items || selectedOrder.order_items || []).map((it, idx) => {
+                {deduplicateOrderItems(selectedOrder.items || selectedOrder.order_items || []).map((it, idx) => {
                   const qty = it.qty || it.quantity || 1;
                   const price = it.price || it.finalPrice || it.unit_price || 0;
                   const name = it.name || it.item_name || 'Dish Item';

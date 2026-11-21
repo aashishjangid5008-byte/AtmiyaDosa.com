@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { deduplicateOrderItems } from './translations';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://sfrnxmzrjfxcqqwsjnka.supabase.co';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmcm54bXpyamZ4Y3Fxd3NqbmthIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM4NzU0MzksImV4cCI6MjEwOTQ1MTQzOX0.QSLqOmTHisq3NrmUaHFqr3AGzAAR2K8d9wijqwpe0kI';
@@ -524,7 +525,8 @@ export const dispatchOrderToSupabase = async ({
     }
 
     // 5. Insert Order Items into `order_items`
-    if (createdOrder && items && items.length > 0) {
+    const cleanItems = deduplicateOrderItems(items);
+    if (createdOrder && cleanItems && cleanItems.length > 0) {
       // If we are re-syncing the same existing order, clear old rows first
       if (existingDbOrder) {
         try {
@@ -537,7 +539,7 @@ export const dispatchOrderToSupabase = async ({
         }
       }
 
-      const orderItemRows = items.map((item) => {
+      const orderItemRows = cleanItems.map((item) => {
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id);
         const qty = Math.max(1, parseInt(item.qty || item.quantity, 10) || 1);
         const unitPrice = Number(item.price || item.finalPrice || item.unit_price) || 0;

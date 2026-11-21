@@ -42,7 +42,7 @@ import {
 } from 'lucide-react';
 import { playSound } from '../../lib/sound';
 import { speakTableCleanAlert, speakServiceAlert } from '../../lib/notifications';
-import { getTranslation, getDishDisplayName, getCategoryLabel } from '../../lib/translations';
+import { getTranslation, getDishDisplayName, getCategoryLabel, deduplicateOrderItems } from '../../lib/translations';
 import { isFancyDosaItem } from '../../lib/authenticMenuData';
 
 export const OWNER_PIN = '2026';
@@ -3187,7 +3187,7 @@ export default function WaiterView({
       {viewingBillTable && (() => {
         const tOrders = getTableActiveOrders(viewingBillTable.number);
         const activeOrder = tOrders[0] || null;
-        const allItems = [];
+        const rawAllItems = [];
         tOrders.forEach(o => {
           let list = (Array.isArray(o.items) && o.items.length > 0)
             ? o.items
@@ -3212,7 +3212,7 @@ export default function WaiterView({
           list.forEach((it, idx) => {
             const rawItemSt = String(it.status || it.kitchen_status || '').toLowerCase().trim();
             if (rawItemSt === 'cancelled') return;
-            allItems.push({
+            rawAllItems.push({
               ...it,
               orderId: o.id || o.order_number,
               itemIndex: idx
@@ -3220,10 +3220,13 @@ export default function WaiterView({
           });
         });
 
-        const subtotal = tOrders.reduce((acc, o) => acc + Number(o.subtotal || o.total || 0), 0);
-        const tax = tOrders.reduce((acc, o) => acc + Number(o.tax || 0), 0);
-        const discount = tOrders.reduce((acc, o) => acc + Number(o.discount || 0), 0);
-        const total = tOrders.reduce((acc, o) => acc + Number(o.total || o.total_amount || 0), 0);
+        const allItems = deduplicateOrderItems(rawAllItems);
+
+        const calculatedSubtotal = allItems.reduce((acc, it) => acc + (Number(it.price || 0) * Number(it.qty || it.quantity || 1)), 0);
+        const subtotal = activeOrder ? Number(activeOrder.subtotal || calculatedSubtotal) : calculatedSubtotal;
+        const tax = 0;
+        const discount = activeOrder ? Number(activeOrder.discount || 0) : 0;
+        const total = activeOrder ? Number(activeOrder.total || activeOrder.total_amount || (subtotal - discount)) : Math.max(0, subtotal - discount);
 
         // Group items by round or addon status
         const round1Items = allItems.filter(it => !it.is_addon && (it.round === 1 || !it.round));
