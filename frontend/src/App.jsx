@@ -5541,7 +5541,7 @@ export default function App() {
           .update({ status: 'VACANT' })
           .or(orFilter);
 
-        // 4. Resolve table_id to close active sessions in table_sessions
+        // 4. Resolve table_id to delete active sessions in table_sessions
         const { data: matchedTbls } = await supabase
           .from('restaurant_tables')
           .select('id')
@@ -5549,16 +5549,22 @@ export default function App() {
 
         if (matchedTbls && matchedTbls.length > 0) {
           const tIds = matchedTbls.map(t => t.id);
-          await supabase
-            .from('table_sessions')
-            .update({ 
-              status: 'COMPLETED', 
-              payment_method: supaMethod,
-              payment_status: 'PAID',
-              closed_at: new Date().toISOString() 
-            })
-            .in('table_id', tIds)
-            .eq('status', 'ACTIVE');
+          try {
+            await supabase
+              .from('table_sessions')
+              .delete()
+              .in('table_id', tIds);
+          } catch (delErr) {
+            await supabase
+              .from('table_sessions')
+              .update({ 
+                status: 'COMPLETED', 
+                payment_method: supaMethod,
+                payment_status: 'PAID',
+                closed_at: new Date().toISOString() 
+              })
+              .in('table_id', tIds);
+          }
         }
       }
     } catch (e) {

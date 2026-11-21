@@ -248,7 +248,25 @@ export default function CustomerMenu({
   const [jainOnly, setJainOnly] = useState(false);
   const [spicyOnly, setSpicyOnly] = useState(false);
 
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem(`atmiya_cart_${currentTable}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (cart && cart.length > 0) {
+        sessionStorage.setItem(`atmiya_cart_${currentTable}`, JSON.stringify(cart));
+      } else {
+        sessionStorage.removeItem(`atmiya_cart_${currentTable}`);
+      }
+    } catch {}
+  }, [cart, currentTable]);
+
   const [showCartDrawer, setShowCartDrawer] = useState(false);
   const [showOrderTracker, setShowOrderTracker] = useState(false);
   const [trackerFilter, setTrackerFilter] = useState('all'); // 'all' | 'cooking' | 'delivered'
@@ -266,7 +284,25 @@ export default function CustomerMenu({
   const [specialNote, setSpecialNote] = useState('');
   const [paymentMode, setPaymentMode] = useState('Cash'); // Strictly Cash / COD (Pay at Counter / Table)
   const [orderSuccess, setOrderSuccess] = useState(false);
-  const [placedOrderId, setPlacedOrderId] = useState('');
+  const [placedOrderId, setPlacedOrderId] = useState(() => {
+    try {
+      return sessionStorage.getItem(`atmiya_placed_order_${currentTable}`) || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const updatePlacedOrderId = React.useCallback((id) => {
+    setPlacedOrderId(id || '');
+    try {
+      if (id) {
+        sessionStorage.setItem(`atmiya_placed_order_${currentTable}`, id);
+      } else {
+        sessionStorage.removeItem(`atmiya_placed_order_${currentTable}`);
+      }
+    } catch {}
+  }, [currentTable]);
+
   const [paidSuccessOrder, setPaidSuccessOrder] = useState(null);
   const [serviceNotice, setServiceNotice] = useState('');
   const [nowTick, setNowTick] = useState(Date.now());
@@ -462,19 +498,6 @@ export default function CustomerMenu({
 
   // Active table order in the kitchen queue (Locks QR to table session)
   const activeTableOrder = React.useMemo(() => {
-    // If the table is marked vacant / available in tables AND this customer device has not placed an order,
-    // do NOT adopt previous dining session orders! A new QR scan on a vacant table starts completely fresh!
-    const tableObj = (tables || []).find(t => isTableMatch(t.number, currentTable) || t.id === currentTable);
-    const isTableVacant = tableObj && (
-      (tableObj.status || '').toLowerCase() === 'available' || 
-      (tableObj.status || '').toLowerCase() === 'vacant' || 
-      tableObj.is_occupied === false
-    ) && !tableObj.current_order_id;
-
-    if (isTableVacant && !placedOrderId) {
-      return null;
-    }
-
     const tableOrders = orders.filter(o => 
       isTableMatch(o.table_number, currentTable) && isOrderActive(o)
     );
@@ -483,14 +506,9 @@ export default function CustomerMenu({
       const matchPlaced = tableOrders.find(o => o.id === placedOrderId || o.order_number === String(placedOrderId).replace('#', ''));
       if (matchPlaced) return matchPlaced;
     }
-
-    if (isTableVacant) {
-      return null;
-    }
-
     tableOrders.sort((a, b) => new Date(b.placed_at || b.created_at || 0) - new Date(a.placed_at || a.created_at || 0));
     return tableOrders[0];
-  }, [orders, currentTable, placedOrderId, tables]);
+  }, [orders, currentTable, placedOrderId]);
 
   const activeOrderDisplayId = activeTableOrder?.id 
     ? (String(activeTableOrder.id).startsWith('#') ? activeTableOrder.id : `#${activeTableOrder.id}`)
@@ -558,12 +576,14 @@ export default function CustomerMenu({
         setShowCartDrawer(false);
         setShowOrderTracker(false);
         setShowUpiPaymentModal(false);
-        setPlacedOrderId('');
+        updatePlacedOrderId('');
         setPaidSuccessOrder(null);
         setOrderSuccess(false);
         try {
           sessionStorage.removeItem('atmiya_session_id');
           sessionStorage.removeItem('guest_session_id');
+          sessionStorage.removeItem(`atmiya_placed_order_${currentTable}`);
+          sessionStorage.removeItem(`atmiya_cart_${currentTable}`);
           localStorage.removeItem('active_table_order');
         } catch (err) {}
         playSound('success');
@@ -572,13 +592,13 @@ export default function CustomerMenu({
 
     window.addEventListener('table_session_terminated', handleSessionTerminated);
     return () => window.removeEventListener('table_session_terminated', handleSessionTerminated);
-  }, [currentTable, orders]);
+  }, [currentTable, orders, updatePlacedOrderId]);
 
   // Auto-detect when user's running order was settled by cashier/waiter
   React.useEffect(() => {
     if (placedOrderId && !activeTableOrder && !settledSessionReceipt) {
       const foundCompleted = orders.find(o => o.id === placedOrderId && (o.status === 'Completed' || o.status === 'Served'));
-      if (foundCompleted && foundCompleted.payment_status === 'Paid') {
+      if (foundCompleted && (foundCompleted.payment_status === 'Paid' || String(foundCompleted.payment_status).toLowerCase() === 'paid')) {
         setSettledSessionReceipt({
           tableNumber: currentTable,
           paymentMethod: foundCompleted.payment_mode || 'Cash',
@@ -587,12 +607,16 @@ export default function CustomerMenu({
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           ordersCount: 1
         });
-        setPlacedOrderId('');
+        updatePlacedOrderId('');
         setOrderSuccess(false);
+        try {
+          sessionStorage.removeItem(`atmiya_placed_order_${currentTable}`);
+          sessionStorage.removeItem(`atmiya_cart_${currentTable}`);
+        } catch (e) {}
         playSound('success');
       }
     }
-  }, [placedOrderId, activeTableOrder, settledSessionReceipt, orders, currentTable]);
+  }, [placedOrderId, activeTableOrder, settledSessionReceipt, orders, currentTable, updatePlacedOrderId]);
 
   // If table already has an active order running in the kitchen on initial load, default to dishes view
   const initialMountStageRef = React.useRef(false);
@@ -1159,13 +1183,15 @@ export default function CustomerMenu({
   };
 
   const handleConfirmOrder = () => {
-    if (cart.length === 0 || isPlacingOrder) return;
-    setIsPlacingOrder(true);
+    if (cart.length === 0) return;
+    if (isPlacingOrder) return;
 
     // Validate Customer Full Name
     const trimmedName = (customerName || activeTableOrder?.customer_name || '').trim();
     if (!trimmedName) {
       setValidationError('Please enter your Name so the kitchen & waiter know who this order is for.');
+      setIsPlacingOrder(false);
+      playSound('error');
       return;
     }
 
@@ -1174,154 +1200,176 @@ export default function CustomerMenu({
     const cleanPhone = rawPhone.replace(/[^0-9]/g, '').slice(-10);
     if (cleanPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanPhone)) {
       setValidationError('Please enter a valid 10-digit Mobile Number (e.g. 98250 14820) for table order tracking & loyalty rewards.');
+      setIsPlacingOrder(false);
+      playSound('error');
       return;
     }
 
     setValidationError('');
+    setIsPlacingOrder(true);
 
-    // Persist locally for recurring orders during this visit
     try {
-      localStorage.setItem('guest_customer_name', trimmedName);
-      localStorage.setItem('guest_customer_phone', cleanPhone);
-    } catch (e) {
-      console.error('Local customer storage error:', e);
+      // Persist locally for recurring orders during this visit
+      try {
+        localStorage.setItem('guest_customer_name', trimmedName);
+        localStorage.setItem('guest_customer_phone', cleanPhone);
+      } catch (e) {
+        console.error('Local customer storage error:', e);
+      }
+
+      const isOnline = false;
+      const isAddon = Boolean(activeTableOrder);
+      const roundNum = isAddon ? ((activeTableOrder.round || 1) + 1) : 1;
+
+      const orderItems = [
+        ...cart.map(i => ({
+          id: i.id,
+          name: i.name,
+          english_name: i.english_name || i.name,
+          gujarati: i.gujarati || i.gujarati_name || i.name,
+          hindi: i.hindi || i.hindi_name || null,
+          price: i.price,
+          qty: i.qty,
+          quantity: i.qty,
+          image_url: i.image_url || i.imageUrl || i.image || i.photo || null,
+          customizations: i.customizations || null,
+          cooking_note: i.cooking_note || i.note || null,
+          kitchen_status: 'placed',
+          is_served: false,
+          is_addon: isAddon,
+          round: roundNum,
+          is_free_offer: Boolean(i.is_free_offer),
+          offer_tag: i.offer_tag || null
+        }))
+      ];
+
+      const orderSummary = cart.map(i => `${i.qty}x ${i.name}`).join(', ');
+
+      let finalOrderObj;
+
+      if (activeTableOrder) {
+        // CONTINUOUS SESSION BILL: Keep the exact same order ID for the entire dining session!
+        // Add-on dishes are appended into the single order and single bill!
+        finalOrderObj = {
+          id: activeTableOrder.id,
+          order_number: activeTableOrder.order_number || String(activeTableOrder.id).replace('#', ''),
+          supabase_order_id: activeTableOrder.supabase_order_id || null,
+          session_id: activeTableOrder.session_id || null,
+          table_number: currentTable,
+          customer_name: trimmedName || activeTableOrder.customer_name,
+          customer_phone: cleanPhone || activeTableOrder.customer_phone,
+          items: orderItems,
+          order_items: orderItems,
+          items_summary: orderSummary,
+          newly_added_items: orderItems,
+          newly_added_summary: orderSummary,
+          subtotal: subtotal,
+          tax: tax,
+          discount: discount || 0,
+          promo_code: appliedPromo?.code || null,
+          promo_details: appliedPromo,
+          total: totalAmount,
+          total_amount: totalAmount,
+          status: 'Placed',
+          channel: activeTableOrder.channel || 'Dine-In QR',
+          placed_at: activeTableOrder.placed_at || new Date().toISOString(),
+          last_addon_at: new Date().toISOString(),
+          created_at: activeTableOrder.created_at || new Date().toISOString(),
+          time: activeTableOrder.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          payment_mode: 'Cash',
+          payment_status: 'Pending Cash',
+          payment_verified_online: false,
+          paid_collected_by: 'Cashier Desk / Floor Waiter',
+          special_note: specialNote ? specialNote.trim() : null,
+          is_addon: true,
+          round: roundNum,
+          parent_order_id: null
+        };
+      } else {
+        const newId = `#ORD${Math.floor(1000 + Math.random() * 9000)}`;
+        finalOrderObj = {
+          id: newId,
+          order_number: newId.replace('#', ''),
+          table_number: currentTable,
+          customer_name: trimmedName,
+          customer_phone: cleanPhone,
+          items: orderItems,
+          order_items: orderItems,
+          items_summary: orderSummary,
+          newly_added_items: null,
+          newly_added_summary: null,
+          subtotal: subtotal,
+          tax: tax,
+          discount: discount || 0,
+          promo_code: appliedPromo?.code || null,
+          promo_details: appliedPromo,
+          total: totalAmount,
+          total_amount: totalAmount,
+          status: 'Placed',
+          channel: 'Dine-In QR',
+          placed_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          payment_mode: 'Cash',
+          payment_status: 'Pending Cash',
+          payment_verified_online: false,
+          paid_collected_by: 'Cashier Desk / Floor Waiter',
+          special_note: specialNote || '',
+          is_addon: false,
+          round: 1,
+          parent_order_id: null
+        };
+      }
+
+      // Direct Cash at Counter / Floor Ordering (Pure COD Flow)
+      finalizeAndPlaceOrder(finalOrderObj);
+    } catch (orderErr) {
+      console.error('Error preparing order:', orderErr);
+      setIsPlacingOrder(false);
     }
-
-    const isOnline = false;
-    const isAddon = Boolean(activeTableOrder);
-    const roundNum = isAddon ? ((activeTableOrder.round || 1) + 1) : 1;
-
-    const orderItems = [
-      ...cart.map(i => ({
-        id: i.id,
-        name: i.name,
-        english_name: i.english_name || i.name,
-        gujarati: i.gujarati || i.gujarati_name || i.name,
-        hindi: i.hindi || i.hindi_name || null,
-        price: i.price,
-        qty: i.qty,
-        quantity: i.qty,
-        image_url: i.image_url || i.imageUrl || i.image || i.photo || null,
-        customizations: i.customizations || null,
-        cooking_note: i.cooking_note || i.note || null,
-        kitchen_status: 'placed',
-        is_served: false,
-        is_addon: isAddon,
-        round: roundNum,
-        is_free_offer: Boolean(i.is_free_offer),
-        offer_tag: i.offer_tag || null
-      }))
-    ];
-
-    const orderSummary = cart.map(i => `${i.qty}x ${i.name}`).join(', ');
-
-    let finalOrderObj;
-
-    if (activeTableOrder) {
-      // CONTINUOUS SESSION BILL: Keep the exact same order ID for the entire dining session!
-      // Add-on dishes are appended into the single order and single bill!
-      finalOrderObj = {
-        id: activeTableOrder.id,
-        order_number: activeTableOrder.order_number || String(activeTableOrder.id).replace('#', ''),
-        supabase_order_id: activeTableOrder.supabase_order_id || null,
-        session_id: activeTableOrder.session_id || null,
-        table_number: currentTable,
-        customer_name: trimmedName || activeTableOrder.customer_name,
-        customer_phone: cleanPhone || activeTableOrder.customer_phone,
-        items: orderItems,
-        order_items: orderItems,
-        items_summary: orderSummary,
-        newly_added_items: orderItems,
-        newly_added_summary: orderSummary,
-        subtotal: subtotal,
-        tax: tax,
-        discount: discount || 0,
-        promo_code: appliedPromo?.code || null,
-        promo_details: appliedPromo,
-        total: totalAmount,
-        total_amount: totalAmount,
-        status: 'Placed',
-        channel: activeTableOrder.channel || 'Dine-In QR',
-        placed_at: activeTableOrder.placed_at || new Date().toISOString(),
-        last_addon_at: new Date().toISOString(),
-        created_at: activeTableOrder.created_at || new Date().toISOString(),
-        time: activeTableOrder.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        payment_mode: 'Cash',
-        payment_status: 'Pending Cash',
-        payment_verified_online: false,
-        paid_collected_by: 'Cashier Desk / Floor Waiter',
-        special_note: specialNote ? specialNote.trim() : null,
-        is_addon: true,
-        round: roundNum,
-        parent_order_id: null
-      };
-    } else {
-      const newId = `#ORD${Math.floor(1000 + Math.random() * 9000)}`;
-      finalOrderObj = {
-        id: newId,
-        order_number: newId.replace('#', ''),
-        table_number: currentTable,
-        customer_name: trimmedName,
-        customer_phone: cleanPhone,
-        items: orderItems,
-        order_items: orderItems,
-        items_summary: orderSummary,
-        newly_added_items: null,
-        newly_added_summary: null,
-        subtotal: subtotal,
-        tax: tax,
-        discount: discount || 0,
-        promo_code: appliedPromo?.code || null,
-        promo_details: appliedPromo,
-        total: totalAmount,
-        total_amount: totalAmount,
-        status: 'Placed',
-        channel: 'Dine-In QR',
-        placed_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        payment_mode: 'Cash',
-        payment_status: 'Pending Cash',
-        payment_verified_online: false,
-        paid_collected_by: 'Cashier Desk / Floor Waiter',
-        special_note: specialNote || '',
-        is_addon: false,
-        round: 1,
-        parent_order_id: null
-      };
-    }
-
-    // Direct Cash at Counter / Floor Ordering (Pure COD Flow)
-    finalizeAndPlaceOrder(finalOrderObj);
   };
 
   const finalizeAndPlaceOrder = (orderObj) => {
-    // Permanently store & update Customer Relations / CRM profile
-    const savedCustomer = saveCustomerProfile({
-      name: orderObj.customer_name,
-      phone: orderObj.customer_phone,
-      tableNumber: currentTable,
-      orderId: orderObj.id,
-      orderTotal: orderObj.total_amount,
-      items: cart,
-      paymentMode: orderObj.payment_mode
-    });
+    try {
+      // Permanently store & update Customer Relations / CRM profile
+      try {
+        const savedCustomer = saveCustomerProfile({
+          name: orderObj.customer_name,
+          phone: orderObj.customer_phone,
+          tableNumber: currentTable,
+          orderId: orderObj.id,
+          orderTotal: orderObj.total_amount,
+          items: cart,
+          paymentMode: orderObj.payment_mode
+        });
 
-    if (savedCustomer) {
-      setRecognizedCustomer(savedCustomer);
+        if (savedCustomer) {
+          setRecognizedCustomer(savedCustomer);
+        }
+      } catch (crmErr) {
+        console.warn('CRM profile save notice:', crmErr);
+      }
+
+      if (onPlaceOrder) {
+        onPlaceOrder(orderObj);
+      }
+      playSound('success');
+      updatePlacedOrderId(orderObj.id);
+      setPaidSuccessOrder(orderObj);
+      setOrderSuccess(true);
+      setCart([]);
+      try {
+        sessionStorage.removeItem(`atmiya_cart_${currentTable}`);
+      } catch (e) {}
+      setShowCartDrawer(false);
+      setShowUpiPaymentModal(false);
+      setPendingOrderPayload(null);
+      setUpiIntentData(null);
+    } catch (err) {
+      console.error('Order placement execution error:', err);
+    } finally {
+      setTimeout(() => setIsPlacingOrder(false), 1500);
     }
-
-    onPlaceOrder(orderObj);
-    playSound('success');
-    setPlacedOrderId(orderObj.id);
-    setPaidSuccessOrder(orderObj);
-    setOrderSuccess(true);
-    setCart([]);
-    setShowCartDrawer(false);
-    setShowUpiPaymentModal(false);
-    setPendingOrderPayload(null);
-    setUpiIntentData(null);
-    setTimeout(() => setIsPlacingOrder(false), 2000);
   };
 
   const handleCopyUpiId = (idToCopy) => {
@@ -2913,14 +2961,17 @@ export default function CustomerMenu({
 
             <button
               onClick={handleConfirmOrder}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-sm shadow-xl shadow-orange-500/25 transition flex items-center justify-center space-x-2 cursor-pointer"
+              disabled={isPlacingOrder}
+              className={`w-full py-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-sm shadow-xl shadow-orange-500/25 transition flex items-center justify-center space-x-2 cursor-pointer ${isPlacingOrder ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
               <span>
-                {activeTableOrder 
-                  ? `Add to Existing Bill ${activeOrderDisplayId} • +₹${totalAmount.toFixed(2)}`
-                  : t('confirmOrderBtn').replace('{table}', currentTable).replace('{amount}', totalAmount.toFixed(2))}
+                {isPlacingOrder
+                  ? 'Placing Order...'
+                  : (activeTableOrder 
+                      ? `Add to Existing Bill ${activeOrderDisplayId} • +₹${totalAmount.toFixed(2)}`
+                      : t('confirmOrderBtn').replace('{table}', currentTable).replace('{amount}', totalAmount.toFixed(2)))}
               </span>
-              <ArrowRight className="w-4 h-4" />
+              {!isPlacingOrder && <ArrowRight className="w-4 h-4" />}
             </button>
 
           </div>
@@ -4229,9 +4280,13 @@ export default function CustomerMenu({
               type="button"
               onClick={() => {
                 setSettledSessionReceipt(null);
-                setPlacedOrderId('');
+                updatePlacedOrderId('');
                 setOrderSuccess(false);
                 setCart([]);
+                try {
+                  sessionStorage.removeItem(`atmiya_cart_${currentTable}`);
+                  sessionStorage.removeItem(`atmiya_placed_order_${currentTable}`);
+                } catch (e) {}
                 setShowCartDrawer(false);
                 setShowOrderTracker(false);
               }}

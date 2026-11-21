@@ -1066,15 +1066,22 @@ export const settleTableSessionInSupabase = async (tableNumber, orderIdOrNumber,
       }
 
       if (tableData?.id) {
-        // 2. Complete active session (only valid columns in table_sessions schema)
-        await supabase
-          .from('table_sessions')
-          .update({
-            status: 'COMPLETED',
-            closed_at: new Date().toISOString()
-          })
-          .eq('table_id', tableData.id)
-          .eq('status', 'ACTIVE');
+        // 2. Delete / Complete active session in table_sessions
+        try {
+          await supabase
+            .from('table_sessions')
+            .delete()
+            .eq('table_id', tableData.id);
+        } catch (delErr) {
+          await supabase
+            .from('table_sessions')
+            .update({
+              status: 'COMPLETED',
+              closed_at: new Date().toISOString()
+            })
+            .eq('table_id', tableData.id)
+            .eq('status', 'ACTIVE');
+        }
 
         // 3. Mark Table as VACANT (only valid column in restaurant_tables schema)
         await supabase

@@ -522,48 +522,7 @@ async def sync_settle_session_to_supabase(
             if t_resp.status_code == 200 and t_resp.json():
                 table_id = t_resp.json()[0]["id"]
 
-            # 2. Terminate active session in table_sessions
-            terminated_sessions = []
-            if session_id:
-                sess_patch = await client.patch(
-                    f"{base_url}/table_sessions?id=eq.{session_id}",
-                    headers=headers,
-                    json={
-                        "status": "COMPLETED",
-                        "closed_at": closed_at
-                    }
-                )
-                if sess_patch.status_code in [200, 204]:
-                    terminated_sessions.append(session_id)
-            elif table_id:
-                sess_patch = await client.patch(
-                    f"{base_url}/table_sessions?table_id=eq.{table_id}&status=eq.ACTIVE",
-                    headers=headers,
-                    json={
-                        "status": "COMPLETED",
-                        "closed_at": closed_at
-                    }
-                )
-                if sess_patch.status_code == 200:
-                    data = sess_patch.json()
-                    if isinstance(data, list):
-                        terminated_sessions = [s.get("id") for s in data]
-
-            # 3. Mark Table as VACANT
-            if table_id:
-                await client.patch(
-                    f"{base_url}/restaurant_tables?id=eq.{table_id}",
-                    headers=headers,
-                    json={"status": "VACANT"}
-                )
-            else:
-                await client.patch(
-                    f"{base_url}/restaurant_tables?table_number=in.({tbl_in_str})",
-                    headers=headers,
-                    json={"status": "VACANT"}
-                )
-
-            # 4. Settle all active orders for this table in Supabase
+            # 1. Settle all active orders for this table in Supabase (unlink session_id)
             order_patch_payload = {
                 "session_id": None,
                 "status": "SERVED",
@@ -596,15 +555,39 @@ async def sync_settle_session_to_supabase(
                         json=order_patch_payload
                     )
 
-            # If terminated sessions exist, also settle any orders associated with them
-            if terminated_sessions:
-                sess_ids = ",".join([s for s in terminated_sessions if s])
-                if sess_ids:
-                    await client.patch(
-                        f"{base_url}/orders?session_id=in.({sess_ids})",
-                        headers=headers,
-                        json=order_patch_payload
+            # 2. Delete / Terminate active session in table_sessions
+            terminated_sessions = []
+            if session_id:
+                try:
+                    await client.delete(
+                        f"{base_url}/table_sessions?id=eq.{session_id}",
+                        headers=headers
                     )
+                    terminated_sessions.append(session_id)
+                except Exception:
+                    pass
+            elif table_id:
+                try:
+                    await client.delete(
+                        f"{base_url}/table_sessions?table_id=eq.{table_id}",
+                        headers=headers
+                    )
+                except Exception:
+                    pass
+
+            # 3. Mark Table as VACANT
+            if table_id:
+                await client.patch(
+                    f"{base_url}/restaurant_tables?id=eq.{table_id}",
+                    headers=headers,
+                    json={"status": "VACANT"}
+                )
+            else:
+                await client.patch(
+                    f"{base_url}/restaurant_tables?table_number=in.({tbl_in_str})",
+                    headers=headers,
+                    json={"status": "VACANT"}
+                )
 
             print(f"[SUPABASE] Successfully terminated session(s) for Table {table_num} and marked VACANT.")
             return {
