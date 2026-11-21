@@ -127,7 +127,6 @@ import ReportsAnalytics from './components/admin/ReportsAnalytics';
 import QRManagementView from './components/admin/QRManagementView';
 import SettingsView from './components/admin/SettingsView';
 import QuickPosModal from './components/admin/QuickPosModal';
-import CustomerCRM from './components/admin/CustomerCRM';
 
 import CustomerMenu from './components/CustomerMenu';
 
@@ -204,6 +203,8 @@ const mapDbOrderToFrontend = (dbOrd) => {
     let isItemServed = false;
     if (isOrderFullyFinished) {
       isItemServed = true;
+    } else if (rawItemStatus === 'placed' || rawItemStatus === 'preparing' || rawItemStatus === 'cooking') {
+      isItemServed = false;
     } else if (isSavedServed) {
       isItemServed = true;
     } else if (isSavedReady || isSavedPrep) {
@@ -1208,21 +1209,33 @@ export default function App() {
           if (isRecentlyModified && hasLocalItems) {
             // Local items are authoritative because staff just deleted or modified items on this terminal!
             // Map over local items; only update kitchen status from mo.items if matched, but DO NOT resurrect deleted items!
+            const matchedDbIndices = new Set();
             mergedItems = localMatch.items.map(localIt => {
               const cleanLocalName = normalizeDishName(localIt.name || localIt.item_name);
-              const dbItem = (mo.items || []).find(di => 
-                (di.id && localIt.id && di.id === localIt.id) ||
-                (cleanLocalName && normalizeDishName(di.name || di.item_name) === cleanLocalName && (localIt.round === di.round || !di.round))
-              );
+              let matchedDbIdx = -1;
+              const dbItem = (mo.items || []).find((di, diIdx) => {
+                if (matchedDbIndices.has(diIdx)) return false;
+                const matchId = Boolean(di.id && localIt.id && di.id === localIt.id);
+                const matchName = Boolean(cleanLocalName && normalizeDishName(di.name || di.item_name) === cleanLocalName);
+                if (matchId || matchName) {
+                  matchedDbIdx = diIdx;
+                  return true;
+                }
+                return false;
+              });
+              if (matchedDbIdx >= 0) {
+                matchedDbIndices.add(matchedDbIdx);
+              }
               if (!dbItem) return localIt;
 
               const isLocalPreparing = Boolean(localIt.kitchen_status === 'preparing' || localIt.status === 'PREPARING');
               const isDbPreparing = Boolean(dbItem.kitchen_status === 'preparing' || String(dbItem.status || '').toLowerCase() === 'preparing');
               const isExplicitlyPreparing = isLocalPreparing || isDbPreparing;
 
+              const isFreshAddonUnserved = Boolean(localIt.is_addon && !localIt.is_served);
               const isLocalServed = Boolean(localIt.is_served);
               const isDbServed = Boolean(dbItem.is_served || dbItem.kitchen_status === 'served');
-              const finalServed = !isExplicitlyPreparing && (isLocalServed || isDbServed);
+              const finalServed = !isFreshAddonUnserved && !isExplicitlyPreparing && (isLocalServed || isDbServed);
 
               const isDbReady = Boolean(dbItem.kitchen_status === 'ready' || String(dbItem.status || '').toLowerCase() === 'ready');
               const isLocalReady = Boolean(localIt.kitchen_status === 'ready' || localIt.kitchen_status === 'prepared');
@@ -1238,14 +1251,9 @@ export default function App() {
               };
             });
 
-            // Append any fresh add-on items from DB that were placed on another device
-            (mo.items || []).forEach(dbIt => {
-              const cleanDbName = normalizeDishName(dbIt.name || dbIt.item_name);
-              const foundInLocal = localMatch.items.some(lit => 
-                (lit.id && dbIt.id && lit.id === dbIt.id) ||
-                (cleanDbName && normalizeDishName(lit.name || lit.item_name) === cleanDbName && (lit.round === dbIt.round || (!lit.round && !dbIt.round)))
-              );
-              if (!foundInLocal) {
+            // Append any fresh items from DB that were placed on another device and not in local items
+            (mo.items || []).forEach((dbIt, dbIdx) => {
+              if (!matchedDbIndices.has(dbIdx)) {
                 mergedItems.push(dbIt);
               }
             });
@@ -3494,6 +3502,8 @@ export default function App() {
       if (!isTakeawayOrder) {
         const isOrderEligibleParent = (o) => {
           if (!o) return false;
+          // Orders with cleared/null session_id or from vacated table sessions can NEVER be parent!
+          if (o.session_id === null || o.current_session_id === null) return false;
           const st = String(o.status || '').toLowerCase().trim();
           const paySt = String(o.payment_status || '').toLowerCase().trim();
           return st !== 'cancelled' && st !== 'completed' && st !== 'settled' && paySt !== 'paid' && paySt !== 'void';
@@ -3523,7 +3533,7 @@ export default function App() {
 
             if (candidateOrders.length > 0) {
               candidateOrders.sort((a, b) => new Date(b.placed_at || b.created_at || 0) - new Date(a.placed_at || a.created_at || 0));
-              const isTableVacated = tblObj && (tblObj.status === 'available' || tblObj.status === 'vacant') && !tblObj.current_order_id;
+              const isTableVacated = tblObj && (tblObj.status === 'available' || tblObj.status === 'vacant' || tblObj.is_occupied === false);
               if (!isTableVacated) {
                 activeParent = candidateOrders[0];
               }
@@ -3599,18 +3609,23 @@ export default function App() {
           ? 'served' 
           : (newItem.kitchen_status || 'placed');
 
-        // Check if this item is already in mergedItems
+        // Check if this item is already in mergedItems FOR THIS ADD-ON ROUND
         const cleanNewName = normalizeDishName(newItem.name || newItem.item_name);
         const isAlreadyInMerged = mergedItems.some(mi => {
-          if (mi.id && newItem.id && mi.id === newItem.id) return true;
-          const cleanMiName = normalizeDishName(mi.name || mi.item_name);
-          return Boolean(cleanMiName && cleanMiName === cleanNewName && (mi.round === roundNumber || (!mi.round && roundNumber === 1)));
+          const miRound = Number(mi.round) || 1;
+          const isSameRound = miRound === roundNumber;
+          if (isSameRound) {
+            if (mi.id && newItem.id && mi.id === newItem.id) return true;
+            const cleanMiName = normalizeDishName(mi.name || mi.item_name);
+            if (cleanMiName && cleanNewName && cleanMiName === cleanNewName) return true;
+          }
+          return false;
         });
 
         if (!isAlreadyInMerged) {
           mergedItems.push({
             ...newItem,
-            id: newItem.id || `addon_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+            id: `addon_r${roundNumber}_${newItem.id || Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
             quantity: addedQty,
             qty: addedQty,
             price: Number(newItem.price || newItem.unit_price || newItem.finalPrice || 0),
@@ -3716,6 +3731,18 @@ export default function App() {
           localStorage.setItem('kds_cleared_order_ids', JSON.stringify(filtered));
         }
       }
+    } catch (e) {}
+
+    // Dispatch real-time KDS un-clear event to instantly restore ticket on kitchen screen
+    try {
+      window.dispatchEvent(new CustomEvent('kds_ticket_reactivated', {
+        detail: {
+          orderId: finalOrder.id,
+          orderNumber: finalOrder.order_number,
+          supabaseId: finalOrder.supabase_order_id,
+          tableNumber: finalOrder.table_number
+        }
+      }));
     } catch (e) {}
 
     // Update corresponding dining table status to occupied with guest info (DINE-IN ONLY)
@@ -5399,6 +5426,8 @@ export default function App() {
           paid_collected_by: authUser?.name || 'Staff',
           settled_at: o.settled_at || new Date().toISOString(),
           completed_at: o.completed_at || new Date().toISOString(),
+          session_id: null,
+          current_session_id: null,
           items: (o.items || []).map(it => ({ ...it, is_served: true, kitchen_status: 'served' })),
           order_items: (o.order_items || []).map(it => ({ ...it, is_served: true, kitchen_status: 'served', status: 'SERVED' })),
           on_hold: false,
@@ -5417,6 +5446,15 @@ export default function App() {
       localStorage.setItem('orders', JSON.stringify(updatedOrders));
       localStorage.setItem('atmiya_orders', JSON.stringify(updatedOrders));
       window.dispatchEvent(new Event('restaurant_data_updated'));
+      window.dispatchEvent(new CustomEvent('table_session_terminated', {
+        detail: {
+          tableNumber: tableNum,
+          targetTblCode,
+          paymentMethod: cleanMethod,
+          sessionId: null,
+          terminatedAt: new Date().toISOString()
+        }
+      }));
     } catch (e) {}
 
     // Sync session closure to Supabase Cloud with selected payment method
@@ -5445,6 +5483,7 @@ export default function App() {
 
     try {
       const orderPayload = { 
+        session_id: null,
         payment_status: 'PAID', 
         payment_mode: cleanMethod,
         payment_method: supaMethod,
@@ -5566,6 +5605,18 @@ export default function App() {
         event: 'table_updated',
         payload: { tableNumber: tableNum, status: 'available' }
       }).catch(err => console.warn('Realtime table update broadcast error:', err));
+
+      channel.send({
+        type: 'broadcast',
+        event: 'table_session_settled',
+        payload: { tableNumber: tableNum, sessionId: null, targetTblCode }
+      }).catch(err => console.warn('Realtime table settlement broadcast error:', err));
+
+      channel.send({
+        type: 'broadcast',
+        event: 'table_session_terminated',
+        payload: { tableNumber: tableNum, sessionId: null, targetTblCode }
+      }).catch(err => console.warn('Realtime table termination broadcast error:', err));
     } catch (err) {
       console.warn('Realtime cleaning broadcast error:', err);
     }
@@ -6185,17 +6236,6 @@ export default function App() {
                   <span>{t('employees')}</span>
                 </button>
 
-                {/* VIP Guests & CRM */}
-                <button
-                  onClick={() => { setActiveTab('crm'); setMobileSidebarOpen(false); }}
-                  className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-2xl text-xs font-black transition ${
-                    activeTab === 'crm' ? navActiveStyle : navInactiveStyle
-                  }`}
-                >
-                  <Sparkles className="w-4 h-4 text-amber-500" />
-                  <span>{t('guestCrmLoyalty') || 'Guest CRM & Loyalty'}</span>
-                </button>
-
                 {/* Reports & Analytics */}
                 <button
                   onClick={() => { setActiveTab('reports'); setMobileSidebarOpen(false); }}
@@ -6775,14 +6815,6 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'crm' && isAdminUser && (
-            <CustomerCRM
-              customers={customers}
-              onAddPoints={handleAddCustomerPoints}
-              onSaveCustomer={handleSaveCustomerFromAdmin}
-              restaurantSettings={settings}
-            />
-          )}
 
           {activeTab === 'settings' && isAdminUser && (
             <SettingsView

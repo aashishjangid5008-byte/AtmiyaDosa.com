@@ -550,6 +550,7 @@ async def sync_settle_session_to_supabase(
                 f"{base_url}/orders?table_number=eq.{table_num}&status=neq.CANCELLED",
                 headers=headers,
                 json={
+                    "session_id": None,
                     "status": "COMPLETED",
                     "payment_status": "PAID",
                     "payment_method": pay_method,

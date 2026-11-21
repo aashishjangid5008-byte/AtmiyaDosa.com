@@ -428,6 +428,7 @@ async def settle_table_bill(
         order["status"] = "Completed"
         order["payment_status"] = "Paid"
         order["payment_mode"] = body.payment_method
+        order["session_id"] = None
         if waiter_id_val:
             order["paid_collected_by_id"] = waiter_id_val
         if body.settled_by:

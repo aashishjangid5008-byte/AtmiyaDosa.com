@@ -416,9 +416,10 @@ export const dispatchOrderToSupabase = async ({
       if (!existingDbOrder && sessionId) {
         const { data: activeOrderForSession } = await supabase
           .from('orders')
-          .select('id, order_number, placed_at, special_notes')
+          .select('id, order_number, placed_at, special_notes, status, payment_status')
           .eq('session_id', sessionId)
-          .neq('status', 'CANCELLED')
+          .not('status', 'in', '("CANCELLED","COMPLETED","SETTLED")')
+          .not('payment_status', 'in', '("PAID","paid","VOID","void")')
           .order('placed_at', { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -432,13 +433,16 @@ export const dispatchOrderToSupabase = async ({
         }
       }
 
-      // D. Check by table_id: If table has a recent order placed within 2.5 hours, merge into it
-      if (!existingDbOrder && tableId) {
+      // D. Check by table_id: Only merge into an ACTIVE dining order that belongs to an active session!
+      // Completed, Settled, Paid, or orders without active session must NEVER be merged!
+      if (!existingDbOrder && tableId && sessionId) {
         const { data: latestTableOrder } = await supabase
           .from('orders')
-          .select('id, order_number, placed_at, special_notes')
+          .select('id, order_number, placed_at, special_notes, status, payment_status')
           .eq('table_id', tableId)
-          .neq('status', 'CANCELLED')
+          .eq('session_id', sessionId)
+          .not('status', 'in', '("CANCELLED","COMPLETED","SETTLED")')
+          .not('payment_status', 'in', '("PAID","paid","VOID","void")')
           .order('placed_at', { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -462,8 +466,10 @@ export const dispatchOrderToSupabase = async ({
           if (kdsStatesMatch) {
             const prevStates = JSON.parse(kdsStatesMatch[1]);
             const cleanStates = {};
+            // Remove state entries for any dish that is unserved or newly added so it never inherits 'served'
+            const unservedNames = new Set((items || []).filter(it => !it.is_served).map(it => String(it.name || it.item_name || '').toLowerCase().trim()));
             Object.keys(prevStates).forEach(k => {
-              if (k.length > 5 && isNaN(Number(k)) && k !== 'all') {
+              if (k.length > 5 && isNaN(Number(k)) && k !== 'all' && !unservedNames.has(k.toLowerCase())) {
                 cleanStates[k] = prevStates[k];
               }
             });
@@ -1078,8 +1084,9 @@ export const settleTableSessionInSupabase = async (tableNumber, orderIdOrNumber,
       }
     }
 
-    // 4. Update order payment status to PAID and status to SERVED / COMPLETED
+    // 4. Update order payment status to PAID, session_id to null and status to SERVED / COMPLETED
     const updatePayload = {
+      session_id: null,
       payment_status: 'PAID',
       payment_method: mappedPaymentMethod,
       payment_mode: mappedPaymentMethod === 'UPI_COUNTER' ? 'UPI' : 'Cash',

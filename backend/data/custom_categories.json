@@ -1,1 +1,135 @@
-[]
+[
+  {
+    "id": "cat_01",
+    "name": "Plain Paper Dosa",
+    "gujarati": "પ્લેન પેપર ઢોસા",
+    "icon": "Layers",
+    "percentage": 10
+  },
+  {
+    "id": "cat_02",
+    "name": "Masala Dosa",
+    "gujarati": "મસાલા ઢોસા",
+    "icon": "Utensils",
+    "percentage": 10
+  },
+  {
+    "id": "cat_03",
+    "name": "Chinese Rice",
+    "gujarati": "ચાઈનીઝ રાઈસ",
+    "icon": "ShoppingBag",
+    "percentage": 10
+  },
+  {
+    "id": "cat_04",
+    "name": "Starter",
+    "gujarati": "સ્ટાર્ટર",
+    "icon": "Flame",
+    "percentage": 10
+  },
+  {
+    "id": "cat_05",
+    "name": "Mysore Dosa",
+    "gujarati": "માયસોર ઢોસા",
+    "icon": "Flame",
+    "percentage": 10
+  },
+  {
+    "id": "cat_06",
+    "name": "Fancy Dosa",
+    "gujarati": "ફેન્સી ઢોસા",
+    "icon": "Sparkles",
+    "percentage": 10
+  },
+  {
+    "id": "cat_07",
+    "name": "Maggi",
+    "gujarati": "મેગી",
+    "icon": "Flame",
+    "percentage": 10
+  },
+  {
+    "id": "cat_08",
+    "name": "Noodles",
+    "gujarati": "નુડલ્સ",
+    "icon": "Utensils",
+    "percentage": 10
+  },
+  {
+    "id": "cat_09",
+    "name": "Soup",
+    "gujarati": "સુપ",
+    "icon": "Coffee",
+    "percentage": 10
+  },
+  {
+    "id": "cat_10",
+    "name": "Papad",
+    "gujarati": "પાપડ અને ફ્રેન્ચ ફ્રાઈસ",
+    "icon": "Sparkles",
+    "percentage": 10
+  },
+  {
+    "id": "cat_11",
+    "name": "Special Item",
+    "gujarati": "સ્પેશિયલ આઈટમ",
+    "icon": "Award",
+    "percentage": 10
+  },
+  {
+    "id": "cat_12",
+    "name": "Pav Bhaji",
+    "gujarati": "પાંઉભાજી",
+    "icon": "UtensilsCrossed",
+    "percentage": 10
+  },
+  {
+    "id": "cat_13",
+    "name": "Pulav",
+    "gujarati": "પુલાવ",
+    "icon": "Soup",
+    "percentage": 10
+  },
+  {
+    "id": "cat_14",
+    "name": "Uttapam",
+    "gujarati": "ઉત્તપમ",
+    "icon": "Layers",
+    "percentage": 10
+  },
+  {
+    "id": "cat_15",
+    "name": "Idali",
+    "gujarati": "ઇડલી",
+    "icon": "Circle",
+    "percentage": 10
+  },
+  {
+    "id": "cat_16",
+    "name": "Vada & Dhokala",
+    "gujarati": "વડા અને ઢોકળા",
+    "icon": "Sun",
+    "percentage": 10
+  },
+  {
+    "id": "cat_17",
+    "name": "Unlimited - Masala Dosa",
+    "gujarati": "અનલિમિટેડ મસાલા ઢોસા",
+    "icon": "HeartHandshake",
+    "percentage": 10
+  },
+  {
+    "id": "cat_18",
+    "name": "Unlimited - Chinese",
+    "gujarati": "અનલિમિટેડ ચાઈનીઝ",
+    "icon": "HeartHandshake",
+    "percentage": 10
+  },
+  {
+    "id": "cat_19",
+    "name": "Combo",
+    "gujarati": "કોમ્બો ઓફર્સ",
+    "icon": "Tag",
+    "percentage": 10
+  }
+]

@@ -13,6 +13,30 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True, scope="module")
 def clean_orders_state():
+    from app.database import CANONICAL_MENU, load_authentic_sample_menu
+    if len(CANONICAL_MENU) < 23:
+        load_authentic_sample_menu()
+    CANONICAL_MENU["item_atmiya_01"] = {
+        "id": "item_atmiya_01",
+        "name": "Mysore Masala Dosa",
+        "price": 130.0,
+        "category": "Mysore Dosa",
+        "is_available": True
+    }
+    CANONICAL_MENU["item_atmiya_02"] = {
+        "id": "item_atmiya_02",
+        "name": "Paneer Mysore Dosa",
+        "price": 150.0,
+        "category": "Mysore Dosa",
+        "is_available": True
+    }
+    CANONICAL_MENU["item_atmiya_22"] = {
+        "id": "item_atmiya_22",
+        "name": "Cold Drink",
+        "price": 40.0,
+        "category": "Beverages",
+        "is_available": True
+    }
     CANONICAL_ORDERS.clear()
     if os.path.exists(ORDERS_FILE):
         with open(ORDERS_FILE, "w", encoding="utf-8") as f:

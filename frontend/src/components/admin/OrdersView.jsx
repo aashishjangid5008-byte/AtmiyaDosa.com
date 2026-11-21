@@ -112,8 +112,12 @@ export default function OrdersView({
     if (tables && tables.length > 0 && o.table_number && !isTakeawayOrder(o)) {
       const oTblCode = normalizeTbl(o.table_number);
       const matchedTable = tables.find(t => normalizeTbl(t.number) === oTblCode);
-      if (matchedTable && (matchedTable.status === 'available' || !matchedTable.is_occupied) && !matchedTable.current_order_id) {
-        return true;
+      if (matchedTable) {
+        const tblSt = String(matchedTable.status || '').toLowerCase().trim();
+        const isVacant = tblSt === 'available' || tblSt === 'vacant' || matchedTable.is_occupied === false;
+        if (isVacant) {
+          return true;
+        }
       }
     }
     return false;

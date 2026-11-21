@@ -84,7 +84,12 @@ const resolveTicketItems = (order) => {
       const alreadyInBase = base.some(b => {
         if (b.id && newItem.id && b.id === newItem.id) return true;
         const cleanBaseName = normalizeDishName(b.name || b.item_name);
-        return Boolean(cleanBaseName && cleanBaseName === cleanNewName && (b.round === newItem.round || (b.is_addon && newItem.is_addon)));
+        if (cleanBaseName && cleanBaseName === cleanNewName) {
+          if (b.is_addon || (b.round && b.round > 1) || (!b.is_served && !newItem.is_served)) {
+            return true;
+          }
+        }
+        return false;
       });
       if (!alreadyInBase) {
         base.push({
@@ -217,30 +222,42 @@ export default function KitchenPanelView({
     const items = resolveTicketItems(o);
     const hasUnservedFood = items.some(it => !it.is_served && String(it.status || it.kitchen_status || '').toLowerCase() !== 'cancelled');
 
-    // 3. If there is NO unserved food on this ticket, hide it from live kitchen
-    if (!hasUnservedFood) {
-      return true;
+    // 3. If there is unserved food, the ticket MUST ALWAYS BE SHOWN in live kitchen (even after prior handover)!
+    if (hasUnservedFood) {
+      return false;
     }
 
-    // 4. If table session was settled/vacated and ALL food was served, hide it.
-    // BUT if fresh add-on items are ordered, hasUnservedFood is true, so KEEP IT VISIBLE!
-    if ((s === 'completed' || s === 'settled') && !hasUnservedFood) {
-      return true;
-    }
+    // 4. If all food is served, hide from live kitchen
+    return true;
+  }, [getElapsedSeconds]);
 
-    // 5. If ticket was dismissed/cleared by chef, hide ONLY if there is NO unserved food left
-    const idKey = String(o?.id || o?.order_number || o?.supabase_order_id || '').replace(/^#+/, '').replace(/^ORD-?/i, '').trim();
-    const orderNumKey = String(o?.order_number || '').replace(/^#+/, '').replace(/^ORD-?/i, '').trim();
-    const dbIdKey = String(o?.supabase_order_id || '').trim();
-    const clearedSet = new Set(clearedOrderIds.map(x => String(x).replace(/^#+/, '').replace(/^ORD-?/i, '').trim()));
-    const isCleared = o?.kds_cleared || (idKey && clearedSet.has(idKey)) || (orderNumKey && clearedSet.has(orderNumKey)) || (dbIdKey && clearedSet.has(dbIdKey));
+  // Listen for real-time ticket reactivations (e.g. customer placed add-on after handover)
+  useEffect(() => {
+    const handleReactivate = (e) => {
+      const detail = e.detail || {};
+      const keysToRemove = new Set([
+        detail.orderId && String(detail.orderId).replace(/^#+/, '').replace(/^ORD-?/i, '').trim(),
+        detail.orderNumber && String(detail.orderNumber).replace(/^#+/, '').replace(/^ORD-?/i, '').trim(),
+        detail.supabaseId && String(detail.supabaseId).trim()
+      ].filter(Boolean));
 
-    if (isCleared && !hasUnservedFood) {
-      return true;
-    }
+      if (keysToRemove.size > 0) {
+        setClearedOrderIds(prev => {
+          const next = prev.filter(id => {
+            const clean = String(id).replace(/^#+/, '').replace(/^ORD-?/i, '').trim();
+            return !keysToRemove.has(clean) && !keysToRemove.has(String(id).trim());
+          });
+          try {
+            localStorage.setItem('kds_cleared_order_ids', JSON.stringify(next));
+          } catch (err) {}
+          return next;
+        });
+      }
+    };
 
-    return false;
-  }, [clearedOrderIds, getElapsedSeconds]);
+    window.addEventListener('kds_ticket_reactivated', handleReactivate);
+    return () => window.removeEventListener('kds_ticket_reactivated', handleReactivate);
+  }, []);
 
   // Automatically restore tickets from cleared state when a new unserved add-on arrives
   useEffect(() => {

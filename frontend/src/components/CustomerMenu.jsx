@@ -271,6 +271,7 @@ export default function CustomerMenu({
   const [serviceNotice, setServiceNotice] = useState('');
   const [nowTick, setNowTick] = useState(Date.now());
   const [cancelWaitersCalled, setCancelWaitersCalled] = useState({});
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
 
   // 1-second interval for live 5-minute countdown and freshness timers
   useEffect(() => {
@@ -437,6 +438,11 @@ export default function CustomerMenu({
       return false;
     }
 
+    // Orders from vacated tables with session_id: null can NEVER be active!
+    if (order.session_id === null && !order.current_session_id) {
+      return false;
+    }
+
     const st = String(order.status || '').toLowerCase().trim();
     const paySt = String(order.payment_status || '').toLowerCase().trim();
 
@@ -461,9 +467,9 @@ export default function CustomerMenu({
 
   // Active table order in the kitchen queue (Locks QR to table session)
   const activeTableOrder = React.useMemo(() => {
-    // If the table is marked vacant/available in restaurant tables and has no current order, no active session!
+    // If the table is marked vacant/available in restaurant tables, no active session!
     const tableObj = (tables || []).find(t => isTableMatch(t.number, currentTable) || t.id === currentTable);
-    if (tableObj && (tableObj.status === 'available' || tableObj.status === 'vacant') && !tableObj.current_order_id) {
+    if (tableObj && (tableObj.status === 'available' || tableObj.status === 'vacant' || tableObj.is_occupied === false)) {
       return null;
     }
 
@@ -546,7 +552,13 @@ export default function CustomerMenu({
         setShowOrderTracker(false);
         setShowUpiPaymentModal(false);
         setPlacedOrderId('');
+        setPaidSuccessOrder(null);
         setOrderSuccess(false);
+        try {
+          sessionStorage.removeItem('atmiya_session_id');
+          sessionStorage.removeItem('guest_session_id');
+          localStorage.removeItem('active_table_order');
+        } catch (err) {}
         playSound('success');
       }
     };
@@ -554,6 +566,17 @@ export default function CustomerMenu({
     window.addEventListener('table_session_terminated', handleSessionTerminated);
     return () => window.removeEventListener('table_session_terminated', handleSessionTerminated);
   }, [currentTable, orders]);
+
+  // Auto-clean customer session when table is vacated or available in restaurant tables
+  React.useEffect(() => {
+    const tableObj = (tables || []).find(t => isTableMatch(t.number, currentTable) || t.id === currentTable);
+    if (tableObj && (tableObj.status === 'available' || tableObj.status === 'vacant' || tableObj.is_occupied === false)) {
+      if (placedOrderId) setPlacedOrderId('');
+      if (paidSuccessOrder) setPaidSuccessOrder(null);
+      if (orderSuccess) setOrderSuccess(false);
+      if (showOrderTracker) setShowOrderTracker(false);
+    }
+  }, [tables, currentTable, placedOrderId, paidSuccessOrder, orderSuccess, showOrderTracker]);
 
   // Auto-detect when user's running order was settled by cashier/waiter
   React.useEffect(() => {
@@ -1140,7 +1163,8 @@ export default function CustomerMenu({
   };
 
   const handleConfirmOrder = () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || isPlacingOrder) return;
+    setIsPlacingOrder(true);
 
     // Validate Customer Full Name
     const trimmedName = (customerName || activeTableOrder?.customer_name || '').trim();
@@ -1301,6 +1325,7 @@ export default function CustomerMenu({
     setShowUpiPaymentModal(false);
     setPendingOrderPayload(null);
     setUpiIntentData(null);
+    setTimeout(() => setIsPlacingOrder(false), 2000);
   };
 
   const handleCopyUpiId = (idToCopy) => {

@@ -2477,14 +2477,17 @@ export const deduplicateOrderItems = (items) => {
     const isAddon = Boolean(item.is_addon || (item.round && item.round > 1));
 
     const existingIdx = seen.findIndex(s => {
-      // 1. Direct item ID match
+      const sRound = Number(s.round) || 1;
+      const sAddon = Boolean(s.is_addon || (s.round && s.round > 1));
+      const isSameRoundTier = sRound === itemRound && sAddon === isAddon;
+      if (!isSameRoundTier) return false;
+
+      // 1. Direct item ID match within the same round
       if (s.id && item.id && s.id === item.id) return true;
       // 2. Normalized dish name match within the same round / addon tier
       const sNorm = normalizeDishName(s.name || s.item_name);
       if (sNorm && normName && sNorm === normName) {
-        const sRound = Number(s.round) || 1;
-        const sAddon = Boolean(s.is_addon || (s.round && s.round > 1));
-        return sRound === itemRound && sAddon === isAddon;
+        return true;
       }
       return false;
     });
