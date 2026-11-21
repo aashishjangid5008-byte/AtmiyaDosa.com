@@ -1328,6 +1328,8 @@ export default function ExecutiveDashboard({
               .from('table_sessions')
               .update({ 
                 status: 'COMPLETED', 
+                payment_method: supaMethod,
+                payment_status: 'PAID',
                 closed_at: new Date().toISOString() 
               })
               .in('table_id', tIds)
@@ -1344,6 +1346,14 @@ export default function ExecutiveDashboard({
       );
       // Immediately mark session as COMPLETED in live state to update occupancy right away
       setLiveSessions(prev => prev.map(s => s.id === session.id ? { ...s, status: 'COMPLETED', payment_method: supaMethod, payment_status: 'PAID' } : s));
+      setLiveOrders(prev => prev.map(o => {
+        const oTblCode = String(o.table_number || '').replace(/\D/g, '');
+        const targetCode = String(tblNum || '').replace(/\D/g, '');
+        if (oTblCode && targetCode && oTblCode === targetCode) {
+          return { ...o, status: 'COMPLETED', payment_status: 'PAID' };
+        }
+        return o;
+      }));
 
       if (onVacateTable && tblNum) {
         onVacateTable(tblNum, cleanMethod);

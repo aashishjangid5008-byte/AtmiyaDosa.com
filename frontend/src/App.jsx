@@ -202,11 +202,13 @@ const mapDbOrderToFrontend = (dbOrd) => {
     const isSavedPrep = savedState === 'preparing' || savedState === 'cooking' || savedState === 'placed';
 
     let isItemServed = false;
-    if (isSavedServed) {
+    if (isOrderFullyFinished) {
+      isItemServed = true;
+    } else if (isSavedServed) {
       isItemServed = true;
     } else if (isSavedReady || isSavedPrep) {
       isItemServed = false;
-    } else if (rawItemStatus === 'served' || isOrderFullyFinished) {
+    } else if (rawItemStatus === 'served') {
       isItemServed = true;
     }
 
@@ -244,7 +246,7 @@ const mapDbOrderToFrontend = (dbOrd) => {
     if (waterMatch) {
       const waterQty = parseInt(waterMatch[1], 10) || 1;
       const savedWaterState = itemStates['0'] || itemStates['water'] || itemStates['all'];
-      const isWaterServed = savedWaterState === 'served' || (!hasSpecificStates && dbOrd.status === 'SERVED') || dbOrd.status === 'COMPLETED' || dbOrd.status === 'SETTLED';
+      const isWaterServed = isOrderFullyFinished || savedWaterState === 'served' || (!hasSpecificStates && dbOrd.status === 'SERVED') || dbOrd.status === 'COMPLETED' || dbOrd.status === 'SETTLED';
       const isWaterReady = isWaterServed || dbOrd.status === 'READY' || savedWaterState === 'ready';
       itms.push({
         id: `addon_water_${dbOrd.id}`,
@@ -267,12 +269,12 @@ const mapDbOrderToFrontend = (dbOrd) => {
 
   if (rawStatusUpper === 'CANCELLED' || mappedStatus === 'Cancelled') {
     mappedStatus = 'Cancelled';
+  } else if (isOrderFullyFinished || rawStatusUpper === 'COMPLETED' || rawStatusUpper === 'SETTLED' || mappedStatus === 'Completed' || (allItemsServed && (payStatusLower === 'paid' || payStatusLower === 'settled')) || payStatusLower === 'paid') {
+    mappedStatus = 'Completed';
   } else if (hasUnserved) {
     // CRITICAL: If there are unserved items (e.g. from an add-on after previous round handover),
     // status CANNOT be 'Served' or 'Completed'! It must be Placed, Preparing, or Ready.
     mappedStatus = allItemsReadyOrServed ? 'Ready' : ((rawStatusUpper === 'PREPARING' || rawStatusUpper === 'COOKING' || anyItemServed) ? 'Preparing' : 'Placed');
-  } else if (rawStatusUpper === 'COMPLETED' || rawStatusUpper === 'SETTLED' || mappedStatus === 'Completed' || (allItemsServed && (payStatusLower === 'paid' || payStatusLower === 'settled'))) {
-    mappedStatus = 'Completed';
   } else if (rawStatusUpper === 'SERVED' || allItemsServed) {
     if (payStatusLower === 'paid' || payStatusLower === 'settled') {
       mappedStatus = 'Completed';
@@ -328,7 +330,7 @@ const mapDbOrderToFrontend = (dbOrd) => {
     time: dbOrd.placed_at ? new Date(dbOrd.placed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '12:00 PM',
     payment_mode: isOnline ? 'UPI' : 'Cash',
     payment_method: dbOrd.payment_method || (isOnline ? 'UPI_COUNTER' : 'CASH'),
-    payment_status: isCancelledOrder ? 'Void' : (isCompletedOrder || payStatusLower === 'paid' || dbOrd.payment_status === 'PAID' ? 'Paid' : 'Pending Cash'),
+    payment_status: isCancelledOrder ? 'Void' : (isCompletedOrder || isOrderFullyFinished || payStatusLower === 'paid' || dbOrd.payment_status === 'PAID' ? 'Paid' : 'Pending Cash'),
     payment_verified_online: isOnline,
     special_note: cleanSpecialNote,
     kds_cleared: isCancelledOrder ? true : false
@@ -1283,11 +1285,21 @@ export default function App() {
             });
           }
 
-          const hasUnserved = mergedItems.some(i => !i.is_served);
+          const isLocalCompleted = localMatch.status === 'Completed' || localMatch.payment_status === 'Paid';
+          const isDbCompleted = mo.status === 'Completed' || mo.status === 'Settled' || mo.payment_status?.toLowerCase() === 'paid';
+          const isOrderFinished = isLocalCompleted || isDbCompleted;
+
+          if (isOrderFinished) {
+            mergedItems = mergedItems.map(it => ({ ...it, is_served: true, kitchen_status: 'served' }));
+          }
+
+          const hasUnserved = isOrderFinished ? false : mergedItems.some(i => !i.is_served);
           const allMergedReady = mergedItems.length > 0 && mergedItems.every(i => i.kitchen_status === 'ready' || i.is_served);
           let preservedStatus = mo.status;
           if (localMatch.status === 'Cancelled' || mo.status === 'Cancelled' || String(localMatch.payment_status).toLowerCase() === 'void' || String(mo.payment_status).toLowerCase() === 'void') {
             preservedStatus = 'Cancelled';
+          } else if (isOrderFinished) {
+            preservedStatus = 'Completed';
           } else if (hasUnserved) {
             // CRITICAL: If there are unserved items (e.g. from an add-on or fresh round), status CANNOT be 'Served' or 'Completed'!
             preservedStatus = (String(mo.status || '').toLowerCase() === 'placed') ? 'Placed' : (allMergedReady ? 'Ready' : 'Preparing');
@@ -1322,7 +1334,7 @@ export default function App() {
             total: isRecentlyModified ? (localMatch.total || calcTotal) : (hasDbItems ? mo.total : calcTotal),
             total_amount: isRecentlyModified ? (localMatch.total_amount || calcTotal) : (hasDbItems ? mo.total_amount : calcTotal),
             items_summary: isRecentlyModified ? (localMatch.items_summary || calcSummary) : (hasDbItems ? mo.items_summary : calcSummary),
-            payment_status: (preservedStatus === 'Completed' || localMatch.payment_status === 'Paid') ? 'Paid' : (mo.payment_status || localMatch.payment_status),
+            payment_status: (preservedStatus === 'Completed' || isOrderFinished || localMatch.payment_status === 'Paid') ? 'Paid' : (mo.payment_status || localMatch.payment_status),
             settled_at: orderSettledAt,
             completed_at: orderSettledAt
           };
@@ -5161,7 +5173,6 @@ export default function App() {
     const updatedOrders = orders.map(o => {
       const isThisTableOrder = resolvedTableNum && 
         normalizeTbl(o.table_number) === normalizeTbl(resolvedTableNum) && 
-        o.status !== 'Completed' && 
         o.status !== 'Cancelled';
 
       if (isThisTableOrder || o.id === orderId) {
@@ -5316,9 +5327,17 @@ export default function App() {
       });
     }
 
+    const isOrderForTable = (o) => {
+      if (!o) return false;
+      const oTblCode = normalizeTbl(o.table_number);
+      if (oTblCode && targetTblCode && oTblCode === targetTblCode) return true;
+      if (String(o.table_number || '').trim().toLowerCase() === String(tableNum || '').trim().toLowerCase()) return true;
+      return false;
+    };
+
     // Complete any active orders for this table, set payment method & remove all hold flags
     const updatedOrders = orders.map(o => {
-      if (normalizeTbl(o.table_number) === targetTblCode && o.status !== 'Completed' && o.status !== 'Cancelled') {
+      if (isOrderForTable(o) && o.status !== 'Cancelled') {
         return {
           ...o,
           status: 'Completed',
@@ -5328,17 +5347,24 @@ export default function App() {
           settled_at: o.settled_at || new Date().toISOString(),
           completed_at: o.completed_at || new Date().toISOString(),
           items: (o.items || []).map(it => ({ ...it, is_served: true, kitchen_status: 'served' })),
+          order_items: (o.order_items || []).map(it => ({ ...it, is_served: true, kitchen_status: 'served', status: 'SERVED' })),
           on_hold: false,
           is_hold: false,
           hold: false,
           table_held: false,
-          kitchen_status: 'served'
+          kitchen_status: 'served',
+          kds_cleared: true
         };
       }
       return o;
     });
     setOrders(updatedOrders);
     setLocalStore('orders', updatedOrders);
+    try {
+      localStorage.setItem('orders', JSON.stringify(updatedOrders));
+      localStorage.setItem('atmiya_orders', JSON.stringify(updatedOrders));
+      window.dispatchEvent(new Event('restaurant_data_updated'));
+    } catch (e) {}
 
     // Sync session closure to Supabase Cloud with selected payment method
     settleTableSessionApi({
@@ -5365,16 +5391,44 @@ export default function App() {
     const orFilter = tableVariants.map(v => `table_number.eq.${v}`).join(',');
 
     try {
+      const orderPayload = { 
+        payment_status: 'PAID', 
+        payment_mode: cleanMethod,
+        payment_method: supaMethod,
+        settled_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+        status: 'COMPLETED'
+      };
+
+      // 1. Settle orders by primary IDs
+      const targetOrderIds = updatedOrders
+        .filter(isOrderForTable)
+        .map(o => o.supabase_order_id || o.id)
+        .filter(Boolean);
+
+      if (targetOrderIds.length > 0) {
+        try {
+          const { error: idErr } = await supabase
+            .from('orders')
+            .update(orderPayload)
+            .in('id', targetOrderIds);
+
+          if (idErr) {
+            await supabase
+              .from('orders')
+              .update({ ...orderPayload, status: 'SERVED' })
+              .in('id', targetOrderIds);
+          }
+
+          await supabase
+            .from('order_items')
+            .update({ status: 'SERVED' })
+            .in('order_id', targetOrderIds);
+        } catch (itemErr) {}
+      }
+
       if (orFilter) {
-        // 1. Settle all active dining orders for this table in Supabase
-        const orderPayload = { 
-          payment_status: 'PAID', 
-          payment_mode: cleanMethod,
-          payment_method: supaMethod,
-          settled_at: new Date().toISOString(),
-          completed_at: new Date().toISOString(),
-          status: 'COMPLETED'
-        };
+        // 2. Settle all active dining orders for this table in Supabase
         const { error: ordErr } = await supabase
           .from('orders')
           .update(orderPayload)
@@ -5386,20 +5440,6 @@ export default function App() {
             .from('orders')
             .update({ ...orderPayload, status: 'SERVED' })
             .or(orFilter);
-        }
-
-        // 2. Mark order_items as served in Supabase
-        const targetOrderIds = updatedOrders
-          .filter(o => normalizeTbl(o.table_number) === targetTblCode)
-          .map(o => o.supabase_order_id || o.id)
-          .filter(Boolean);
-        if (targetOrderIds.length > 0) {
-          try {
-            await supabase
-              .from('order_items')
-              .update({ status: 'SERVED' })
-              .in('order_id', targetOrderIds);
-          } catch (itemErr) {}
         }
 
         // 3. Mark restaurant_tables as VACANT (only valid column in schema)
@@ -5420,6 +5460,8 @@ export default function App() {
             .from('table_sessions')
             .update({ 
               status: 'COMPLETED', 
+              payment_method: supaMethod,
+              payment_status: 'PAID',
               closed_at: new Date().toISOString() 
             })
             .in('table_id', tIds)
@@ -6561,6 +6603,7 @@ export default function App() {
           {activeTab === 'orders' && (
             <OrdersView
               orders={orders}
+              tables={tables}
               seenOrderIds={seenOrderIds}
               onMarkOrderAsSeen={markOrderAsSeen}
               onMarkAllOrdersAsSeen={markAllCurrentOrdersAsSeen}

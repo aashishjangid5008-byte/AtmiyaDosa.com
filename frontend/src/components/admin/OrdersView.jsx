@@ -30,6 +30,7 @@ import { downloadSinglePageBillPdf, printSinglePageReceipt } from '../../lib/gen
 
 export default function OrdersView({ 
   orders = [], 
+  tables = [],
   seenOrderIds = [],
   onMarkOrderAsSeen,
   onMarkAllOrdersAsSeen,
@@ -84,13 +85,28 @@ export default function OrdersView({
   const rowBorder = 'border-slate-100';
   const inputBg = 'bg-slate-100 border-transparent text-slate-800 placeholder-slate-400';
 
+  const normalizeTbl = (val) => {
+    const digits = String(val || '').replace(/[^0-9]/g, '');
+    return digits ? String(parseInt(digits, 10)) : String(val || '').trim().toLowerCase();
+  };
+
   // Helper: Determine if order is completed or settled
   const isOrderCompleted = (o) => {
     if (!o) return false;
     const st = String(o.status || '').toLowerCase().trim();
     const paySt = String(o.payment_status || '').toLowerCase().trim();
     if (st === 'completed' || st === 'settled') return true;
+    if (paySt === 'paid' || paySt === 'settled') return true;
     if (st === 'served' && (paySt === 'paid' || paySt === 'settled')) return true;
+
+    // Check if dining table has been vacated / available
+    if (tables && tables.length > 0 && o.table_number && !isTakeawayOrder(o)) {
+      const oTblCode = normalizeTbl(o.table_number);
+      const matchedTable = tables.find(t => normalizeTbl(t.number) === oTblCode);
+      if (matchedTable && (matchedTable.status === 'available' || !matchedTable.is_occupied) && !matchedTable.current_order_id) {
+        return true;
+      }
+    }
     return false;
   };
 
@@ -173,6 +189,7 @@ export default function OrdersView({
   const dineInCount = orders.filter(o => !isTakeawayOrder(o)).length;
   const takeawayCount = orders.filter(isTakeawayOrder).length;
   const cashPendingOrders = orders.filter(o => 
+    !isOrderCompleted(o) &&
     o.status !== 'Cancelled' && 
     o.payment_mode === 'Cash' && 
     o.payment_status !== 'Paid' && 
@@ -571,17 +588,17 @@ export default function OrdersView({
                 </tr>
               ) : (
                 sortedFilteredOrders.map((order, idx) => {
-                  const isCancelled = order.status === 'Cancelled';
+                  const isCancelled = order.status === 'Cancelled' || String(order.payment_status || '').toLowerCase() === 'void';
                   const isCompleted = isOrderCompleted(order);
                   const dt = formatOrderDateTime(order);
                   const payStatusLower = (order.payment_status || '').toLowerCase();
-                  const isPaid = payStatusLower === 'paid';
+                  const isPaid = isCompleted || payStatusLower === 'paid' || payStatusLower === 'settled';
                   const isOnline = Boolean(order.payment_verified_online || order.payment_mode === 'UPI' || order.payment_mode?.includes('Online') || order.payment_mode?.includes('Razorpay'));
 
                   const isOnlinePaid = !isCancelled && isPaid && isOnline;
                   const isCashPaid = !isCancelled && isPaid && !isOnline;
-                  const isUpiPending = !isCancelled && !isPaid && isOnline && order.payment_status !== 'Void';
-                  const isCashPending = !isCancelled && !isPaid && !isOnline && order.payment_status !== 'Void';
+                  const isUpiPending = !isCancelled && !isCompleted && !isPaid && isOnline && order.payment_status !== 'Void';
+                  const isCashPending = !isCancelled && !isCompleted && !isPaid && !isOnline && order.payment_status !== 'Void';
                   const elapsedMins = getElapsedWaitMinutes(order.placed_at || order.time);
                   const isSelected = selectedOrderIds.includes(order.id);
 
@@ -722,21 +739,33 @@ export default function OrdersView({
                             </span>
                             <div className="text-[9px] text-slate-400 font-mono">No Payment Due</div>
                           </div>
-                        ) : isOnlinePaid ? (
-                          <div className="space-y-0.5">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                              <Check className="w-3 h-3 text-emerald-600" />
-                              <span>{order.payment_mode || 'UPI'} Paid</span>
-                            </span>
-                            <div className="text-[9px] font-mono font-bold text-slate-700 truncate max-w-[130px]">
-                              {order.transaction_id ? `Ref: ${order.transaction_id}` : 'Verified UPI'}
-                            </div>
-                            {order.paid_collected_by && (
-                              <div className="text-[8px] text-slate-500 font-mono truncate max-w-[130px]" title={order.paid_collected_by}>
-                                {order.paid_collected_by}
+                        ) : (isCompleted || isPaid) ? (
+                          isOnline ? (
+                            <div className="space-y-0.5">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                <span>{order.payment_mode || 'UPI'} Paid</span>
+                              </span>
+                              <div className="text-[9px] font-mono font-bold text-slate-700 truncate max-w-[130px]">
+                                {order.transaction_id ? `Ref: ${order.transaction_id}` : 'Verified UPI'}
                               </div>
-                            )}
-                          </div>
+                              {order.paid_collected_by && (
+                                <div className="text-[8px] text-slate-500 font-mono truncate max-w-[130px]" title={order.paid_collected_by}>
+                                  by {order.paid_collected_by}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="space-y-0.5">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                <span>Paid in Cash</span>
+                              </span>
+                              <div className="text-[9px] text-slate-500 font-mono">
+                                by {order.paid_collected_by || 'Staff'}
+                              </div>
+                            </div>
+                          )
                         ) : isUpiPending ? (
                           <div className="space-y-1">
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300">
@@ -765,7 +794,7 @@ export default function OrdersView({
                               Receive Cash
                             </button>
                           </div>
-                        ) : isCashPaid ? (
+                        ) : (
                           <div className="space-y-0.5">
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
                               <Check className="w-3 h-3 text-emerald-600" />
@@ -776,18 +805,6 @@ export default function OrdersView({
                                 by {order.paid_collected_by}
                               </div>
                             )}
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300">
-                              Cash Pending
-                            </span>
-                            <button
-                              onClick={() => { setCashCollectingOrder(order); setCollectorName(currentStaff?.name || 'Admin Owner'); }}
-                              className="block px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] shadow-xs transition cursor-pointer"
-                            >
-                              Receive Cash
-                            </button>
                           </div>
                         )}
                       </td>
