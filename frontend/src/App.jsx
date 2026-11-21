@@ -3117,6 +3117,11 @@ export default function App() {
     } : o);
     setOrders(updated);
     setLocalStore('orders', updated);
+    try {
+      localStorage.setItem('orders', JSON.stringify(updated));
+      localStorage.setItem('atmiya_orders', JSON.stringify(updated));
+      window.dispatchEvent(new Event('restaurant_data_updated'));
+    } catch (e) {}
 
     // Also persist to kds_cleared_order_ids so KDS on this browser or refreshed screens immediately clears it
     try {
@@ -3502,8 +3507,6 @@ export default function App() {
       if (!isTakeawayOrder) {
         const isOrderEligibleParent = (o) => {
           if (!o) return false;
-          // Orders with cleared/null session_id or from vacated table sessions can NEVER be parent!
-          if (o.session_id === null || o.current_session_id === null) return false;
           const st = String(o.status || '').toLowerCase().trim();
           const paySt = String(o.payment_status || '').toLowerCase().trim();
           return st !== 'cancelled' && st !== 'completed' && st !== 'settled' && paySt !== 'paid' && paySt !== 'void';

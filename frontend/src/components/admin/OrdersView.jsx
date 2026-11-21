@@ -107,19 +107,6 @@ export default function OrdersView({
     if (st === 'completed' || st === 'settled') return true;
     if (paySt === 'paid' || paySt === 'settled') return true;
     if (st === 'served' && (paySt === 'paid' || paySt === 'settled')) return true;
-
-    // Check if dining table has been vacated / available
-    if (tables && tables.length > 0 && o.table_number && !isTakeawayOrder(o)) {
-      const oTblCode = normalizeTbl(o.table_number);
-      const matchedTable = tables.find(t => normalizeTbl(t.number) === oTblCode);
-      if (matchedTable) {
-        const tblSt = String(matchedTable.status || '').toLowerCase().trim();
-        const isVacant = tblSt === 'available' || tblSt === 'vacant' || matchedTable.is_occupied === false;
-        if (isVacant) {
-          return true;
-        }
-      }
-    }
     return false;
   };
 
@@ -843,7 +830,14 @@ export default function OrdersView({
                           return (
                             <select
                               value={currentDisplayStatus}
-                              onChange={(e) => onUpdateStatus?.(order.id, e.target.value)}
+                              onChange={(e) => {
+                                if (e.target.value === 'Cancelled') {
+                                  setCancellingOrder(order);
+                                  setCancelReason('Cancelled by admin / staff');
+                                } else {
+                                  onUpdateStatus?.(order.id, e.target.value);
+                                }
+                              }}
                               className={`px-2.5 py-1 rounded-full text-xs font-bold border shadow-2xs cursor-pointer focus:outline-none transition ${
                                 st === 'ready'
                                   ? 'bg-blue-50 text-blue-800 border-blue-200 focus:ring-1 focus:ring-blue-400'
@@ -860,6 +854,7 @@ export default function OrdersView({
                               <option value="Ready">🔵 Ready</option>
                               <option value="Served">🟢 Served</option>
                               <option value="Completed">✅ Completed</option>
+                              <option value="Cancelled">❌ Cancelled</option>
                             </select>
                           );
                         })()}
@@ -907,7 +902,7 @@ export default function OrdersView({
                             <Download className="w-3.5 h-3.5" />
                           </button>
 
-                          {!isCancelled && !isCompleted && (
+                          {!isCancelled && (
                             <button
                               onClick={() => { setCancellingOrder(order); setCancelReason('Dish ingredients / Batter out of stock'); }}
                               className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 transition cursor-pointer border border-rose-200"

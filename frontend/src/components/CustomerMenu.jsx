@@ -438,11 +438,6 @@ export default function CustomerMenu({
       return false;
     }
 
-    // Orders from vacated tables with session_id: null can NEVER be active!
-    if (order.session_id === null && !order.current_session_id) {
-      return false;
-    }
-
     const st = String(order.status || '').toLowerCase().trim();
     const paySt = String(order.payment_status || '').toLowerCase().trim();
 
@@ -467,12 +462,6 @@ export default function CustomerMenu({
 
   // Active table order in the kitchen queue (Locks QR to table session)
   const activeTableOrder = React.useMemo(() => {
-    // If the table is marked vacant/available in restaurant tables, no active session!
-    const tableObj = (tables || []).find(t => isTableMatch(t.number, currentTable) || t.id === currentTable);
-    if (tableObj && (tableObj.status === 'available' || tableObj.status === 'vacant' || tableObj.is_occupied === false)) {
-      return null;
-    }
-
     const tableOrders = orders.filter(o => 
       isTableMatch(o.table_number, currentTable) && isOrderActive(o)
     );
@@ -483,7 +472,7 @@ export default function CustomerMenu({
     }
     tableOrders.sort((a, b) => new Date(b.placed_at || b.created_at || 0) - new Date(a.placed_at || a.created_at || 0));
     return tableOrders[0];
-  }, [orders, currentTable, placedOrderId, tables]);
+  }, [orders, currentTable, placedOrderId]);
 
   const activeOrderDisplayId = activeTableOrder?.id 
     ? (String(activeTableOrder.id).startsWith('#') ? activeTableOrder.id : `#${activeTableOrder.id}`)
@@ -566,17 +555,6 @@ export default function CustomerMenu({
     window.addEventListener('table_session_terminated', handleSessionTerminated);
     return () => window.removeEventListener('table_session_terminated', handleSessionTerminated);
   }, [currentTable, orders]);
-
-  // Auto-clean customer session when table is vacated or available in restaurant tables
-  React.useEffect(() => {
-    const tableObj = (tables || []).find(t => isTableMatch(t.number, currentTable) || t.id === currentTable);
-    if (tableObj && (tableObj.status === 'available' || tableObj.status === 'vacant' || tableObj.is_occupied === false)) {
-      if (placedOrderId) setPlacedOrderId('');
-      if (paidSuccessOrder) setPaidSuccessOrder(null);
-      if (orderSuccess) setOrderSuccess(false);
-      if (showOrderTracker) setShowOrderTracker(false);
-    }
-  }, [tables, currentTable, placedOrderId, paidSuccessOrder, orderSuccess, showOrderTracker]);
 
   // Auto-detect when user's running order was settled by cashier/waiter
   React.useEffect(() => {
