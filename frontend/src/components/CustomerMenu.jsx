@@ -41,7 +41,8 @@ import {
   Printer,
   Info,
   Download,
-  FileText
+  FileText,
+  Gift
 } from 'lucide-react';
 import { getTranslation, getCategoryLabel, getDishDisplayName } from '../lib/translations';
 import { playSound } from '../lib/sound';
@@ -51,6 +52,8 @@ import FoodShowcase3D from './customer/FoodShowcase3D';
 import CuisineSelector from './customer/CuisineSelector';
 import { MASTER_CUISINES, getDishCuisine, getCuisineDisplayName } from '../lib/cuisines';
 import { downloadSinglePageBillPdf, printSinglePageReceipt } from '../lib/generateBillPdf';
+import { isFancyDosaItem } from '../lib/authenticMenuData';
+export { isFancyDosaItem };
 
 // Artisanal Culinary Category Meta (Luxury Gastronomy Palette & Emblems)
 const getDishCulinaryMeta = (item, currentLang = 'en', t) => {
@@ -100,7 +103,10 @@ export const resolveCustomerOrderItems = (order, menuItems = []) => {
     items = order.items.map((it, idx) => {
       const menuItem = (menuItems || []).find(m => m.id === it.id || m.name === it.name);
       const qty = Number(it.qty || it.quantity || 1);
-      const unitPrice = parseFloat(it.price || it.unit_price || menuItem?.price || menuItem?.finalPrice || menuItem?.final_price || 0);
+      const isFreeOffer = Boolean(it.is_free_offer || it.id === 'free_mysore_offer' || String(it.name || '').toLowerCase().includes('offer - free'));
+      const unitPrice = isFreeOffer 
+        ? 0 
+        : parseFloat((it.price !== undefined && it.price !== null) ? it.price : (it.unit_price !== undefined && it.unit_price !== null ? it.unit_price : (menuItem?.price || menuItem?.finalPrice || menuItem?.final_price || 0)));
       return {
         id: it.id || `it_${idx}`,
         name: it.name || it.item_name || 'Dish Item',
@@ -108,6 +114,8 @@ export const resolveCustomerOrderItems = (order, menuItems = []) => {
         quantity: qty,
         price: unitPrice,
         total_price: parseFloat((unitPrice * qty).toFixed(2)),
+        is_free_offer: isFreeOffer,
+        offer_tag: it.offer_tag || (isFreeOffer ? 'Buy 2 Fancy Dosa Get 1 Free' : null),
         image_url: it.image_url || it.imageUrl || it.image || it.photo || menuItem?.image_url || null,
         cooking_note: it.cooking_note || it.note || it.customNote || it.customizations || null,
         is_served: Boolean(it.is_served || (order.status || '').toLowerCase() === 'served' || (order.status || '').toLowerCase() === 'completed'),
@@ -122,7 +130,10 @@ export const resolveCustomerOrderItems = (order, menuItems = []) => {
     items = order.order_items.map((oi, idx) => {
       const menuItem = (menuItems || []).find(m => m.id === oi.menu_item_id || m.id === oi.id || m.name === oi.item_name);
       const qty = Number(oi.quantity || oi.qty || 1);
-      const unitPrice = parseFloat(oi.unit_price || oi.price || menuItem?.price || menuItem?.finalPrice || menuItem?.final_price || 0);
+      const isFreeOffer = Boolean(oi.is_free_offer || oi.menu_item_id === 'free_mysore_offer' || String(oi.item_name || oi.name || '').toLowerCase().includes('offer - free'));
+      const unitPrice = isFreeOffer 
+        ? 0 
+        : parseFloat((oi.unit_price !== undefined && oi.unit_price !== null) ? oi.unit_price : (oi.price !== undefined && oi.price !== null ? oi.price : (menuItem?.price || menuItem?.finalPrice || menuItem?.final_price || 0)));
       const isServed = (oi.status || '').toLowerCase() === 'served' || (order.status || '').toLowerCase() === 'served' || (order.status || '').toLowerCase() === 'completed';
       const kitchenStatus = (oi.status || '').toLowerCase() === 'ready' ? 'ready' : ((oi.status || '').toLowerCase() === 'preparing' ? 'preparing' : 'placed');
       return {
@@ -132,6 +143,8 @@ export const resolveCustomerOrderItems = (order, menuItems = []) => {
         quantity: qty,
         price: unitPrice,
         total_price: parseFloat((unitPrice * qty).toFixed(2)),
+        is_free_offer: isFreeOffer,
+        offer_tag: oi.offer_tag || (isFreeOffer ? 'Buy 2 Fancy Dosa Get 1 Free' : null),
         image_url: oi.image_url || menuItem?.image_url || null,
         cooking_note: oi.cooking_note || null,
         is_served: isServed,
@@ -313,6 +326,9 @@ export default function CustomerMenu({
     }
   });
 
+  // Special Promotion Offer Modal: Buy 2 Fancy Dosas & Get 1 Mysore Dosa FREE
+  const [showOfferModal, setShowOfferModal] = useState(false);
+
   const handleSelectLanguage = (langCode) => {
     if (onLanguageChange) {
       onLanguageChange(langCode);
@@ -323,6 +339,8 @@ export default function CustomerMenu({
     } catch (e) {}
     playSound('click');
     setShowLanguageModal(false);
+    // Display Special Restaurant Promotion Offer Announcement upon selecting language
+    setShowOfferModal(true);
   };
 
   // Clean numeric table number for UI display (e.g. 'T10' -> '10', 'T04' -> '4')
@@ -567,6 +585,7 @@ export default function CustomerMenu({
   // ---------------------------------------------------------------------------
   // Live state reference so handlePopState always reads current open modals/stages without stale closures
   const stateRef = React.useRef({
+    showOfferModal,
     showUpiPaymentModal,
     showConciergeModal,
     customizingItem,
@@ -582,6 +601,7 @@ export default function CustomerMenu({
 
   React.useEffect(() => {
     stateRef.current = {
+      showOfferModal,
       showUpiPaymentModal,
       showConciergeModal,
       customizingItem,
@@ -606,6 +626,10 @@ export default function CustomerMenu({
     const s = stateRef.current;
 
     // 1. Topmost modals & dialogs
+    if (s.showOfferModal) {
+      setShowOfferModal(false);
+      return true;
+    }
     if (s.showUpiPaymentModal) {
       setShowUpiPaymentModal(false);
       return true;
@@ -682,6 +706,7 @@ export default function CustomerMenu({
 
   // Unique signature of the currently active layer
   const currentLayerKey = React.useMemo(() => {
+    if (showOfferModal) return 'modal_offer';
     if (showUpiPaymentModal) return 'modal_upi';
     if (showLanguageModal) return 'modal_language';
     if (orderSuccess) return 'modal_success';
@@ -695,6 +720,7 @@ export default function CustomerMenu({
     if (menuStage === 'cuisines') return 'stage_cuisines';
     return 'root_landing';
   }, [
+    showOfferModal,
     showUpiPaymentModal,
     showLanguageModal,
     orderSuccess,
@@ -924,12 +950,73 @@ export default function CustomerMenu({
   const handleRemoveFromCart = (cartItemId) => {
     const existing = cart.find(i => (i.cartItemId || i.id) === cartItemId);
     if (!existing) return;
+    // Promotional free item is automatically locked to qualifying Fancy Dosas
+    if (existing.is_free_offer || existing.id === 'free_mysore_offer') return;
     if (existing.qty === 1) {
       setCart(cart.filter(i => (i.cartItemId || i.id) !== cartItemId));
     } else {
       setCart(cart.map(i => (i.cartItemId || i.id) === cartItemId ? { ...i, qty: i.qty - 1 } : i));
     }
   };
+
+  // Auto-manage Buy 2 Fancy Dosas, Get 1 Mysore Dosa FREE Promotion in Cart
+  useEffect(() => {
+    // 1. Count total Fancy Dosas in cart (excluding promotional free items)
+    const fancyDosaTotalCount = cart
+      .filter(it => !it.is_free_offer && it.id !== 'free_mysore_offer' && isFancyDosaItem(it, categories))
+      .reduce((sum, it) => sum + (Number(it.qty) || 1), 0);
+
+    const expectedFreeQty = Math.floor(fancyDosaTotalCount / 2);
+    const existingFreeItem = cart.find(it => it.is_free_offer || it.id === 'free_mysore_offer');
+
+    if (expectedFreeQty > 0) {
+      // Find authentic Mysore Dosa photo / reference in menu items if available
+      const mysoreTemplate = (menuItems || []).find(m => 
+        m.id === 'ATM0066' || 
+        String(m.name || '').toLowerCase() === 'mysore masala' ||
+        String(m.category || '').toLowerCase() === 'mysore dosa'
+      );
+
+      const freeItemPayload = {
+        id: 'free_mysore_offer',
+        cartItemId: 'free_mysore_offer',
+        name: 'Mysore Dosa (Offer - Free)',
+        english_name: 'Mysore Dosa (Offer - Free)',
+        gujarati: 'માયસોર ઢોસા (ઓફર - ફ્રી)',
+        gujarati_name: 'માયસોર ઢોસા (ઓફર - ફ્રી)',
+        hindi: 'मैसूर डोसा (ऑफर - फ्री)',
+        hindi_name: 'मैसूर डोसा (ऑफर - फ्री)',
+        category: 'Mysore Dosa',
+        category_id: 'cat_05',
+        price: 0,
+        originalPrice: mysoreTemplate?.price || 130,
+        finalPrice: 0,
+        qty: expectedFreeQty,
+        quantity: expectedFreeQty,
+        is_free_offer: true,
+        offer_tag: 'Buy 2 Fancy Dosa Get 1 Free',
+        customizations: 'Special Offer: Buy 2 Fancy Dosas, Get 1 Free (₹0)',
+        cooking_note: 'Special Offer: Buy 2 Fancy Dosas, Get 1 Free (₹0)',
+        image_url: mysoreTemplate?.image_url || null,
+        imageUrl: mysoreTemplate?.image_url || null,
+        is_veg: true,
+        is_available: true
+      };
+
+      if (!existingFreeItem) {
+        setCart(prev => [...prev, freeItemPayload]);
+      } else if (existingFreeItem.qty !== expectedFreeQty || existingFreeItem.price !== 0) {
+        setCart(prev => prev.map(it => 
+          (it.is_free_offer || it.id === 'free_mysore_offer')
+            ? { ...it, ...freeItemPayload, qty: expectedFreeQty, quantity: expectedFreeQty }
+            : it
+        ));
+      }
+    } else if (existingFreeItem) {
+      // Fancy Dosa count dropped below 2: remove free offer item
+      setCart(prev => prev.filter(it => !it.is_free_offer && it.id !== 'free_mysore_offer'));
+    }
+  }, [cart, categories, menuItems]);
 
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
   const tax = 0; // GST removed per customer instruction
@@ -1094,7 +1181,9 @@ export default function CustomerMenu({
         kitchen_status: 'placed',
         is_served: false,
         is_addon: isAddon,
-        round: roundNum
+        round: roundNum,
+        is_free_offer: Boolean(i.is_free_offer),
+        offer_tag: i.offer_tag || null
       }))
     ];
 
@@ -1386,6 +1475,7 @@ export default function CustomerMenu({
                 try { sessionStorage.setItem('atmiya_lang_chosen', 'true'); } catch {}
                 playSound('click');
                 setShowLanguageModal(false);
+                setShowOfferModal(true);
               }}
               className="w-full py-3 px-4 rounded-xl bg-orange-600 hover:bg-orange-700 active:scale-98 text-white font-black text-xs uppercase tracking-wider shadow-md transition flex items-center justify-center space-x-2 cursor-pointer"
             >
@@ -1393,6 +1483,171 @@ export default function CustomerMenu({
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Special Offer Announcement Popup Modal (Buy 2 Fancy Dosas, Get 1 Mysore Dosa FREE!)
+  const renderOfferModal = () => {
+    if (!showOfferModal) return null;
+
+    const offerTexts = {
+      en: {
+        badge: 'SPECIAL RESTAURANT OFFER',
+        title: 'Buy 2 Fancy Dosas & Get 1 Mysore Dosa FREE! 🎉',
+        subtitle: 'Special celebration offer for all dining guests at Atmiya Dosa Hub',
+        step1Title: 'Order Any 2 Fancy Dosas',
+        step1Desc: 'Choose from Jini Roll, Frankie, Gotala, Dilkhush, Sweet Corn, Chinese & all Fancy items.',
+        step2Title: '1 Mysore Dosa Added FREE (₹0)',
+        step2Desc: 'Authentic Mysore Masala Dosa (worth ₹130) will be automatically added to your cart for ₹0 FREE!',
+        step3Title: 'Cooked Hot & Served to Table',
+        step3Desc: `Kitchen receives the live order and serves it hot directly to Table ${cleanTableNum}!`,
+        btnBrowse: '🍽️ View Fancy Dosas Now',
+        btnClose: 'Got it, explore menu'
+      },
+      gu: {
+        badge: 'ખાસ રેસ્ટોરન્ટ ઓફર',
+        title: '૨ ફેન્સી ઢોસા પર ૧ મૈસુર ઢોસા બિલકુલ ફ્રી! 🎉',
+        subtitle: 'આત્મિય ઢોસા હબ તરફથી અમારા ગ્રાહકો માટે ખાસ ઓફર',
+        step1Title: 'કોઈપણ ૨ ફેન્સી ઢોસા ઓર્ડર કરો',
+        step1Desc: 'જીની રોલ, ફ્રેન્કી, ગોટાળા, દિલખુશ, સ્વીટ કોર્ન વગેરે ફેન્સી ઢોસામાંથી કોઈપણ ૨ પસંદ કરો.',
+        step2Title: '૧ મૈસુર ઢોસા તદ્દન ફ્રી (₹0)',
+        step2Desc: 'અસલ ગરમા-ગરમ મૈસુર મસાલા ઢોસા (કિંમત ₹૧૩૦) તમારા ઓર્ડરમાં ₹0 સાથે આપોઆપ ઉમેરાઈ જશે!',
+        step3Title: 'ગરમા-ગરમ રસોઈ અને સીધું સર્વિંગ',
+        step3Desc: `રસોડામાં શેફને સીધો ઓર્ડર પહોંચશે અને ટેબલ ${cleanTableNum} પર પીરસાશે!`,
+        btnBrowse: '🍽️ ફેન્સી ઢોસા જુઓ',
+        btnClose: 'સમજાયું, મેનૂ જુઓ'
+      },
+      hi: {
+        badge: 'विशेष रेस्टोरेंट ऑफर',
+        title: '२ फैंसी डोसा पर १ मैसूर डोसा बिल्कुल फ्री! 🎉',
+        subtitle: 'आत्मिय डोसा हब की तरफ से खास पेशकश',
+        step1Title: 'कोई भी २ फैंसी डोसा चुनें',
+        step1Desc: 'जिनी रोल, फ्रैंकी, घोटाला, दिलखुश, स्वीट कॉर्न आदि सभी फैंसी डोसा में से २ चुनें।',
+        step2Title: '१ मैसूर डोसा बिल्कुल मुफ़्त (₹0)',
+        step2Desc: 'स्वादिष्ट गरमा-गरम मैसूर मसाला डोसा (मूल्य ₹१३૦) आपके कार्ट में ₹0 में अपने आप जुड़ जाएगा!',
+        step3Title: 'किचन में ताज़ा तैयार और टेबल पर सर्विस',
+        step3Desc: `सीधे किचन शेफ को भेजा जाएगा और टेबल ${cleanTableNum} पर सर्व होगा!`,
+        btnBrowse: '🍽️ फैंसी डोसा अभी देखें',
+        btnClose: 'ठीक है, मेन्यू देखें'
+      }
+    };
+
+    const tOffer = offerTexts[currentLang] || offerTexts.en;
+
+    const handleGoToFancyDosa = () => {
+      setShowOfferModal(false);
+      try { sessionStorage.setItem('atmiya_seen_landing', 'true'); } catch {}
+      setSelectedCuisine('all');
+      setSelectedCategory('Fancy Dosa');
+      setMenuStage('dishes');
+      playSound('click');
+    };
+
+    return (
+      <div 
+        onClick={(e) => { if (e.target === e.currentTarget) handleAppBack(); }}
+        className="fixed inset-0 z-[110] flex items-center justify-center p-3.5 sm:p-4 bg-black/70 backdrop-blur-sm animate-fadeIn"
+      >
+        <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-md w-full border-2 border-amber-300 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-slate-900 animate-scaleUp relative overflow-hidden">
+          
+          {/* Decorative glowing gradient accents */}
+          <div className="absolute -top-12 -right-12 w-32 h-32 bg-amber-400/20 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-orange-500/20 rounded-full blur-2xl pointer-events-none" />
+
+          {/* Close button */}
+          <button
+            type="button"
+            onClick={handleAppBack}
+            className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 cursor-pointer transition z-10"
+            title="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          {/* Header Banner */}
+          <div className="text-center space-y-2 pb-1 relative z-10">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-[10px] tracking-wider uppercase shadow-sm">
+              <Sparkles className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: '4s' }} />
+              <span>{tOffer.badge}</span>
+            </div>
+
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500 text-white flex items-center justify-center mx-auto shadow-lg shadow-orange-500/30 text-3xl">
+              🎁
+            </div>
+
+            <h3 className="text-xl font-black text-slate-900 font-heading leading-tight px-2">
+              {tOffer.title}
+            </h3>
+            
+            <p className="text-xs text-slate-600 font-medium">
+              {tOffer.subtitle}
+            </p>
+
+            <div className="inline-block px-3 py-0.5 rounded-full bg-slate-100 text-slate-700 font-bold font-mono text-[11px] border border-slate-200">
+              📍 Table {cleanTableNum}
+            </div>
+          </div>
+
+          {/* 3 Step Visual Explainer */}
+          <div className="space-y-2.5 pt-1 relative z-10">
+            <div className="p-3 rounded-2xl bg-amber-50/90 border border-amber-200 flex items-start gap-3">
+              <span className="w-7 h-7 rounded-xl bg-amber-500 text-white font-black font-mono text-xs flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                1
+              </span>
+              <div className="min-w-0 flex-1">
+                <h4 className="text-xs font-black text-amber-950">{tOffer.step1Title}</h4>
+                <p className="text-[11px] text-amber-800 leading-snug mt-0.5">{tOffer.step1Desc}</p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-emerald-50 border-2 border-emerald-400 flex items-start gap-3 shadow-2xs">
+              <span className="w-7 h-7 rounded-xl bg-emerald-600 text-white font-black font-mono text-xs flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                2
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <h4 className="text-xs font-black text-emerald-950">{tOffer.step2Title}</h4>
+                  <span className="px-1.5 py-0.2 rounded bg-emerald-600 text-white font-black text-[9px] uppercase">
+                    ₹0 FREE
+                  </span>
+                </div>
+                <p className="text-[11px] text-emerald-800 leading-snug mt-0.5">{tOffer.step2Desc}</p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-start gap-3">
+              <span className="w-7 h-7 rounded-xl bg-slate-800 text-white font-black font-mono text-xs flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                3
+              </span>
+              <div className="min-w-0 flex-1">
+                <h4 className="text-xs font-black text-slate-900">{tOffer.step3Title}</h4>
+                <p className="text-[11px] text-slate-600 leading-snug mt-0.5">{tOffer.step3Desc}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Action CTAs */}
+          <div className="space-y-2 pt-2 relative z-10">
+            <button
+              type="button"
+              onClick={handleGoToFancyDosa}
+              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-orange-600 via-amber-600 to-orange-600 hover:from-orange-700 hover:to-amber-700 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-orange-500/25 transition cursor-pointer"
+            >
+              <span>{tOffer.btnBrowse}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setShowOfferModal(false); playSound('click'); }}
+              className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+            >
+              {tOffer.btnClose}
+            </button>
+          </div>
+
         </div>
       </div>
     );
@@ -1436,6 +1691,7 @@ export default function CustomerMenu({
           onOpenLanguageModal={() => setShowLanguageModal(true)}
         />
         {renderLanguageModal()}
+        {renderOfferModal()}
       </>
     );
   }
@@ -1463,6 +1719,7 @@ export default function CustomerMenu({
           onOpenLanguageModal={() => setShowLanguageModal(true)}
         />
         {renderLanguageModal()}
+        {renderOfferModal()}
       </>
     );
   }
@@ -1748,6 +2005,42 @@ export default function CustomerMenu({
 
       {/* 2. MAIN CONTAINER */}
       <main className="max-w-4xl mx-auto px-3 sm:px-4 pt-3 pb-28 sm:pt-4 sm:pb-32 space-y-4">
+        
+        {/* Special Restaurant Promotion Banner: Buy 2 Fancy Dosas, Get 1 Mysore Dosa FREE! */}
+        <div 
+          onClick={() => { setShowOfferModal(true); playSound('click'); }}
+          className="rounded-2xl p-3 sm:p-3.5 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white shadow-md cursor-pointer hover:opacity-95 transition transform active:scale-[0.99] flex items-center justify-between gap-3 relative overflow-hidden group border border-amber-300/40"
+        >
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-xl shrink-0 shadow-inner group-hover:scale-110 transition">
+              🎁
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-black uppercase tracking-wider bg-white/25 px-2 py-0.5 rounded-full">
+                  Special Offer
+                </span>
+                <span className="text-[10px] font-bold text-amber-100 hidden sm:inline">
+                  Buy 2 Fancy Dosas, Get 1 Mysore Dosa FREE
+                </span>
+              </div>
+              <h4 className="text-xs sm:text-sm font-black font-heading leading-tight truncate mt-0.5">
+                {currentLang === 'gu'
+                  ? '૨ ફેન્સી ઢોસા ઓર્ડર કરો અને ૧ મૈસુર ઢોસા ફ્રી મેળવો! 🎉'
+                  : (currentLang === 'hi'
+                      ? '२ फैंसी डोसा पर १ मैसूर डोसा बिल्कुल फ्री! 🎉'
+                      : 'Buy 2 Fancy Dosas & Get 1 Mysore Dosa FREE! 🎉')}
+              </h4>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="px-3 py-1.5 rounded-xl bg-white text-orange-600 font-black text-xs shrink-0 shadow-xs group-hover:bg-amber-50 transition flex items-center gap-1 cursor-pointer"
+          >
+            <span>{currentLang === 'gu' ? 'ઓફર જુઓ' : (currentLang === 'hi' ? 'ऑफर देखें' : 'View Offer')}</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
         
         {/* Out-of-Stock / Cancellation Alert Banner */}
         {recentCancelledOrder && (
@@ -2285,12 +2578,78 @@ export default function CustomerMenu({
               </div>
             )}
 
+            {/* Special Offer Progress Banner in Cart Drawer */}
+            {(() => {
+              const cartFancyCount = cart
+                .filter(it => !it.is_free_offer && it.id !== 'free_mysore_offer' && isFancyDosaItem(it, categories))
+                .reduce((sum, it) => sum + (Number(it.qty) || 1), 0);
+              const freeMysoreQty = Math.floor(cartFancyCount / 2);
+              if (freeMysoreQty > 0) {
+                return (
+                  <div className="p-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 text-white flex items-center justify-between gap-2 shadow-xs">
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <span className="text-base">🎁</span>
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-black leading-tight">
+                          {currentLang === 'gu'
+                            ? `ઓફર લાગુ: ${freeMysoreQty} મૈસુર ઢોસા ફ્રી ઉમેરાયો!`
+                            : (currentLang === 'hi'
+                                ? `ऑफर लागू: ${freeMysoreQty} मैसूर डोसा बिल्कुल फ्री!`
+                                : `Offer Applied: ${freeMysoreQty} Mysore Dosa FREE!`)}
+                        </p>
+                        <p className="text-[9.5px] text-emerald-100">
+                          ₹{freeMysoreQty * 130} Savings • Buy 2 Fancy Dosas Deal
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-white text-emerald-800 text-[10px] font-black shrink-0">
+                      100% FREE
+                    </span>
+                  </div>
+                );
+              }
+              if (cartFancyCount === 1) {
+                return (
+                  <div className="p-2.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 flex items-center justify-between gap-2 shadow-2xs">
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <span className="text-base">💡</span>
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-black leading-tight">
+                          {currentLang === 'gu'
+                            ? 'હજુ ૧ ફેન્સી ઢોસા ઉમેરો અને ૧ મૈસુર ઢોસા ફ્રી મેળવો!'
+                            : (currentLang === 'hi'
+                                ? '१ और फैंसी डोसा जोड़ें और १ मैसूर डोसा फ्री पाएं!'
+                                : 'Add 1 more Fancy Dosa to get 1 FREE Mysore Dosa!')}
+                        </p>
+                        <p className="text-[9.5px] text-amber-800">
+                          Worth ₹130 • Special Restaurant Promotion
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCartDrawer(false);
+                        setSelectedCategory('Fancy Dosa');
+                        setMenuStage('dishes');
+                      }}
+                      className="px-2.5 py-1 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-black text-[10px] shrink-0 cursor-pointer shadow-xs"
+                    >
+                      + Add Dosa
+                    </button>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
             {/* Cart Items List */}
             <div className="space-y-3 divide-y divide-slate-100">
               {cart.map(item => {
                 const itemPhoto = item.image_url || item.imageUrl || item.image || item.photo;
+                const isFreeOffer = Boolean(item.is_free_offer || item.id === 'free_mysore_offer');
                 return (
-                  <div key={item.cartItemId || item.id} className="pt-2 flex items-center justify-between gap-2">
+                  <div key={item.cartItemId || item.id} className={`pt-2 flex items-center justify-between gap-2 ${isFreeOffer ? 'bg-emerald-50/70 p-2.5 rounded-2xl border border-emerald-300' : ''}`}>
                     <div className="flex items-center space-x-2.5 min-w-0 flex-1 pr-2">
                       {itemPhoto ? (
                         <img 
@@ -2300,33 +2659,55 @@ export default function CustomerMenu({
                           onError={(e) => { e.currentTarget.style.display = 'none'; }}
                         />
                       ) : (
-                        <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0 text-base shadow-2xs">
-                          🍽️
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-base shadow-2xs ${isFreeOffer ? 'bg-emerald-100 border border-emerald-300' : 'bg-amber-50 border border-amber-200'}`}>
+                          {isFreeOffer ? '🎁' : '🍽️'}
                         </div>
                       )}
                       <div className="min-w-0 flex-1">
-                        <h4 className="text-xs font-black text-slate-900 font-heading truncate">
-                          {getDishDisplayName(item, currentLang)}
-                        </h4>
-                        <span className="text-xs font-mono font-bold text-slate-500">₹{item.price} each</span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h4 className="text-xs font-black text-slate-900 font-heading truncate">
+                            {getDishDisplayName(item, currentLang)}
+                          </h4>
+                          {isFreeOffer && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-emerald-600 text-white shadow-2xs">
+                              100% Free
+                            </span>
+                          )}
+                        </div>
+                        {isFreeOffer ? (
+                          <div className="flex items-center gap-1.5 text-xs mt-0.5">
+                            <span className="line-through text-slate-400 font-mono text-[11px]">₹{item.originalPrice || 130}</span>
+                            <span className="font-mono font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded text-[11px]">FREE ₹0</span>
+                            <span className="text-[10px] text-emerald-800 font-bold hidden sm:inline">(Buy 2 Fancy Deal)</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs font-mono font-bold text-slate-500">₹{item.price} each</span>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-2 bg-slate-100 rounded-xl p-1 shrink-0">
-                      <button 
-                        onClick={() => handleRemoveFromCart(item.cartItemId || item.id)}
-                        className="p-1 hover:bg-slate-200 rounded-lg text-slate-700"
-                      >
-                        <Minus className="w-3 h-3" />
-                      </button>
-                      <span className="text-xs font-black px-1.5 font-mono">{item.qty}</span>
-                      <button 
-                        onClick={() => handleQuickAdd(item)}
-                        className="p-1 hover:bg-slate-200 rounded-lg text-slate-700"
-                      >
-                        <Plus className="w-3 h-3" />
-                      </button>
-                    </div>
+                    {isFreeOffer ? (
+                      <div className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-600 text-white font-mono font-black text-xs shadow-xs shrink-0" title="Free Promotional Offer">
+                        <span>🎁</span>
+                        <span>{item.qty} Free</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center space-x-2 bg-slate-100 rounded-xl p-1 shrink-0">
+                        <button 
+                          onClick={() => handleRemoveFromCart(item.cartItemId || item.id)}
+                          className="p-1 hover:bg-slate-200 rounded-lg text-slate-700"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="text-xs font-black px-1.5 font-mono">{item.qty}</span>
+                        <button 
+                          onClick={() => handleQuickAdd(item)}
+                          className="p-1 hover:bg-slate-200 rounded-lg text-slate-700"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -3847,6 +4228,9 @@ export default function CustomerMenu({
 
       {/* Language Preference Pop-up Modal */}
       {renderLanguageModal()}
+
+      {/* Special Offer Announcement Popup Modal */}
+      {renderOfferModal()}
 
     </div>
   );

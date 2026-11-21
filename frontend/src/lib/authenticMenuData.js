@@ -4094,3 +4094,45 @@ export const AUTHENTIC_MENU_CARD_ITEMS = [
     "notes": "Per person; child price 80."
   }
 ];
+
+/**
+ * Robust Category Checker for Fancy Dosa Promotion
+ * Validates whether a menu item belongs to the "Fancy Dosa" category
+ * Supports direct category name, category_id, category list lookup, and authentic dish IDs.
+ */
+export const isFancyDosaItem = (item, categories = []) => {
+  if (!item || item.is_free_offer || item.id === 'free_mysore_offer') return false;
+
+  // 1. Direct category name check
+  const catName = String(item.category || item.category_name || '').toLowerCase().trim();
+  if (catName === 'fancy dosa' || catName.includes('fancy')) return true;
+
+  // 2. Direct category_id check (cat_06 is authentic Fancy Dosa)
+  const catId = String(item.category_id || '').toLowerCase().trim();
+  if (catId === 'cat_06' || catId === 'd8101c10-608f-5411-bd47-401103c3d7c0') return true;
+
+  // 3. Lookup category in categories list
+  if (Array.isArray(categories) && categories.length > 0) {
+    const matched = categories.find(c =>
+      (c.id && String(c.id).toLowerCase() === catId) ||
+      (c._id && String(c._id).toLowerCase() === catId) ||
+      (c.name && String(c.name).toLowerCase().trim() === catName)
+    );
+    if (matched && String(matched.name || '').toLowerCase().includes('fancy')) return true;
+  }
+
+  // 4. Authentic ID range (ATM0080 to ATM0097 are Fancy Dosas in authenticMenuData)
+  const idStr = String(item.id || '').toUpperCase();
+  if (/^ATM00(8[0-9]|9[0-7])$/.test(idStr)) return true;
+
+  // 5. Keyword fallback in item name
+  const dishName = String(item.name || item.english_name || '').toLowerCase().trim();
+  const fancyKeywords = [
+    'bahubali', 'jini', 'matka dosa', 'frankie', 'open cheese', 'dilkhush',
+    'spring roll', 'spring dosa', 'gotala', 'rajwada', 'sweet corn dosa',
+    'cheese burst', 'mayur dosa', 'afghani', 'chocolate dosa', 'pasta dosa', 'chinese dosa'
+  ];
+  if (fancyKeywords.some(kw => dishName.includes(kw))) return true;
+
+  return false;
+};

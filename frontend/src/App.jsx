@@ -88,6 +88,7 @@ import { getDishCuisine } from './lib/cuisines';
 import { getTranslation } from './lib/translations';
 import { playSound } from './lib/sound';
 import { sanitizeOrderPayload } from './lib/sanitizer';
+import { isFancyDosaItem } from './lib/authenticMenuData';
 import { 
   validateTableAccess, 
   bindSessionTable, 
@@ -3259,6 +3260,47 @@ export default function App() {
     try {
       // Client-side XSS and injection sanitization
       const newOrder = sanitizeOrderPayload(rawOrder);
+
+      // Auto-validate Buy 2 Fancy Dosas, Get 1 Mysore Dosa FREE Promotion
+      const orderItemsList = Array.isArray(newOrder.items) && newOrder.items.length > 0
+        ? newOrder.items
+        : (Array.isArray(newOrder.order_items) && newOrder.order_items.length > 0 ? newOrder.order_items : []);
+      const qualifyingFancyCount = orderItemsList
+        .filter(it => !it.is_free_offer && it.id !== 'free_mysore_offer' && isFancyDosaItem(it, categories))
+        .reduce((sum, it) => sum + (Number(it.qty || it.quantity) || 1), 0);
+      const expectedFreeQty = Math.floor(qualifyingFancyCount / 2);
+      const existingOfferItem = orderItemsList.find(it => it.is_free_offer || it.id === 'free_mysore_offer' || String(it.name || '').toLowerCase().includes('offer - free'));
+
+      if (expectedFreeQty > 0) {
+        if (!existingOfferItem) {
+          const promoItem = {
+            id: 'free_mysore_offer',
+            name: 'Mysore Dosa (Offer - Free)',
+            english_name: 'Mysore Dosa (Offer - Free)',
+            gujarati: 'માયસોર ઢોસા (ઓફર - ફ્રી)',
+            price: 0,
+            unit_price: 0,
+            finalPrice: 0,
+            qty: expectedFreeQty,
+            quantity: expectedFreeQty,
+            is_free_offer: true,
+            offer_tag: 'Buy 2 Fancy Dosa Get 1 Free',
+            customizations: 'Special Offer: Buy 2 Fancy Dosas, Get 1 Free (₹0)',
+            kitchen_status: 'placed',
+            is_served: false,
+            round: newOrder.round || 1
+          };
+          if (Array.isArray(newOrder.items)) newOrder.items.push(promoItem);
+          if (Array.isArray(newOrder.order_items)) newOrder.order_items.push(promoItem);
+        } else {
+          existingOfferItem.qty = expectedFreeQty;
+          existingOfferItem.quantity = expectedFreeQty;
+          existingOfferItem.price = 0;
+          existingOfferItem.is_free_offer = true;
+        }
+        newOrder.items_summary = (newOrder.items || orderItemsList).map(i => `${i.qty || i.quantity || 1}x ${i.name || i.item_name}`).join(', ');
+      }
+
       const isCustomerScreen = viewMode === 'customer' || Boolean(scannedTable);
       const isStaffSession = Boolean(authUser) && !isCustomerScreen;
       const userRole = isStaffSession ? authUser?.role : 'customer';

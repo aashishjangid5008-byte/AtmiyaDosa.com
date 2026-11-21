@@ -43,6 +43,7 @@ import {
 import { playSound } from '../../lib/sound';
 import { speakTableCleanAlert, speakServiceAlert } from '../../lib/notifications';
 import { getTranslation, getDishDisplayName, getCategoryLabel } from '../../lib/translations';
+import { isFancyDosaItem } from '../../lib/authenticMenuData';
 
 export const OWNER_PIN = '2026';
 
@@ -754,6 +755,31 @@ export default function WaiterView({
       placed_at: Date.now(),
       customizations: customTags.join(', ') || null
     }));
+
+    // Auto-add Free Mysore Dosa Promotion (Buy 2 Fancy Dosas, Get 1 Mysore Dosa FREE)
+    const fancyDosaCount = formattedItems
+      .filter(it => isFancyDosaItem(it, categories))
+      .reduce((sum, it) => sum + (Number(it.qty || it.quantity) || 1), 0);
+    const expectedFreeQty = Math.floor(fancyDosaCount / 2);
+    if (expectedFreeQty > 0 && !formattedItems.some(it => it.is_free_offer || it.id === 'free_mysore_offer')) {
+      formattedItems.push({
+        id: 'free_mysore_offer',
+        name: 'Mysore Dosa (Offer - Free)',
+        english_name: 'Mysore Dosa (Offer - Free)',
+        gujarati: 'માયસોર ઢોસા (ઓફર - ફ્રી)',
+        quantity: expectedFreeQty,
+        qty: expectedFreeQty,
+        price: 0,
+        is_free_offer: true,
+        offer_tag: 'Buy 2 Fancy Dosa Get 1 Free',
+        is_served: false,
+        kitchen_status: 'placed',
+        is_addon: hasActiveOrder,
+        round: roundNumber,
+        placed_at: Date.now(),
+        customizations: 'Special Offer: Buy 2 Fancy Dosas, Get 1 Free (₹0)'
+      });
+    }
 
     const itemsSummary = formattedItems.map(i => `${i.qty}x ${i.name}`).join(', ');
 

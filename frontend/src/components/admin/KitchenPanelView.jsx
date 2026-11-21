@@ -47,6 +47,8 @@ const resolveTicketItems = (order) => {
       qty: oi.quantity || oi.qty || 1,
       quantity: oi.quantity || oi.qty || 1,
       price: oi.unit_price || oi.price || 0,
+      is_free_offer: Boolean(oi.is_free_offer || oi.menu_item_id === 'free_mysore_offer' || String(oi.item_name || oi.name || '').toLowerCase().includes('offer - free')),
+      offer_tag: oi.offer_tag || null,
       kitchen_status: String(oi.status || '').toLowerCase() === 'ready' ? 'ready' : (String(oi.status || '').toLowerCase() === 'served' ? 'served' : 'placed'),
       is_served: String(oi.status || '').toLowerCase() === 'served',
       cooking_note: oi.cooking_note || null,
@@ -66,6 +68,7 @@ const resolveTicketItems = (order) => {
         qty: qty,
         quantity: qty,
         price: 0,
+        is_free_offer: Boolean(/offer|free/i.test(name)),
         kitchen_status: 'placed',
         is_served: false,
         cooking_note: null,
@@ -1364,8 +1367,14 @@ export default function KitchenPanelView({
                     )
                   );
                   const isItemAddon = Boolean(item.is_addon || (item.round && item.round > 1));
+                  const isFreeOffer = Boolean(
+                    item.is_free_offer || 
+                    item.id === 'free_mysore_offer' || 
+                    String(item.name || '').toLowerCase().includes('offer - free') ||
+                    String(item.customizations || '').includes('Special Offer')
+                  );
                   const dishPhoto = item.image_url || item.imageUrl || item.image || item.photo || (menuItems.find(m => m.id === item.id || m.name === item.name)?.image_url);
-                  const gujaratiTitle = getDishDisplayName({ name: item.name }, 'gu');
+                  const gujaratiTitle = item.gujarati || item.gujarati_name || getDishDisplayName({ name: item.name }, 'gu');
                   const cuisineKey = getDishCuisine({ name: item.name, category: item.category });
                   const cuisineInfo = CUISINE_CONFIG[cuisineKey] || { label: 'Kitchen Station', gujaratiLabel: 'રસોઈ', icon: '🍳' };
 
@@ -1380,7 +1389,9 @@ export default function KitchenPanelView({
                             ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950 shadow-xs'
                             : isItemAddon
                               ? 'bg-purple-50/90 hover:bg-purple-100/90 border-purple-300 text-purple-950 ring-2 ring-purple-300/60 shadow-xs'
-                              : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-900 shadow-2xs'
+                              : isFreeOffer
+                                ? 'bg-emerald-50/80 hover:bg-emerald-100/80 border-emerald-300 text-emerald-950 ring-2 ring-emerald-300/50 shadow-xs'
+                                : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-900 shadow-2xs'
                       }`}
                     >
                       <div className="flex items-center space-x-3 min-w-0 flex-1">
@@ -1400,7 +1411,9 @@ export default function KitchenPanelView({
                               ? 'bg-emerald-600 text-white'
                               : isItemAddon 
                                 ? 'bg-purple-700 text-white ring-2 ring-purple-400/50' 
-                                : 'bg-slate-900 text-white'
+                                : isFreeOffer
+                                  ? 'bg-emerald-600 text-white ring-2 ring-emerald-400/50'
+                                  : 'bg-slate-900 text-white'
                           }`}>
                             {item.qty || item.quantity || 1}×
                           </span>
@@ -1415,12 +1428,12 @@ export default function KitchenPanelView({
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className={`text-xs font-bold block truncate ${
-                              isItemServed ? 'line-through text-slate-400' : isItemReady ? 'font-black text-emerald-950' : (isItemAddon ? 'font-black text-purple-950' : 'text-slate-900')
+                              isItemServed ? 'line-through text-slate-400' : isItemReady ? 'font-black text-emerald-950' : (isItemAddon ? 'font-black text-purple-950' : (isFreeOffer ? 'font-black text-emerald-950' : 'text-slate-900'))
                             }`}>
                               {item.name}
                             </span>
                             {gujaratiTitle && gujaratiTitle !== item.name && (
-                              <span className={`text-[11px] font-bold ${isItemServed ? 'text-slate-400 line-through' : (isItemAddon ? 'text-purple-700' : 'text-slate-600')}`}>
+                              <span className={`text-[11px] font-bold ${isItemServed ? 'text-slate-400 line-through' : (isItemAddon ? 'text-purple-700' : (isFreeOffer ? 'text-emerald-700' : 'text-slate-600'))}`}>
                                 ({gujaratiTitle})
                               </span>
                             )}
@@ -1432,6 +1445,13 @@ export default function KitchenPanelView({
                               <span>{cuisineInfo.icon}</span>
                               <span>{cuisineInfo.gujaratiLabel || cuisineInfo.label}</span>
                             </span>
+
+                            {isFreeOffer && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-100 text-emerald-950 border border-emerald-400 shadow-2xs">
+                                <span>🎁</span>
+                                <span>FREE OFFER (2 Fancy Dosa Deal)</span>
+                              </span>
+                            )}
 
                             {isItemAddon && (
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-purple-200 text-purple-950 border border-purple-400 shadow-2xs">
